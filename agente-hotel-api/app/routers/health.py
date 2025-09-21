@@ -42,16 +42,14 @@ async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redi
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
 
-    # Check PMS
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{settings.pms_base_url}/api/health",  # Asumiendo que QloApps tiene este endpoint
-                timeout=5.0,
-            )
-            checks["pms"] = response.status_code == 200
-    except Exception as e:
-        logger.error(f"PMS health check failed: {e}")
+    # Check PMS (opcional)
+    if getattr(settings, "check_pms_in_readiness", False):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(str(settings.pms_base_url), timeout=5.0)
+                checks["pms"] = response.status_code < 500
+        except Exception as e:
+            logger.error(f"PMS health check failed: {e}")
 
     all_healthy = all(checks.values())
     status_code = 200 if all_healthy else 503

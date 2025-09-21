@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     whatsapp_access_token: SecretStr = SecretStr("dev-whatsapp-token")
     whatsapp_phone_number_id: str = "000000000000"
     whatsapp_verify_token: SecretStr = SecretStr("dev-verify-token")
+    whatsapp_app_secret: SecretStr = SecretStr("dev-app-secret")
 
     # Gmail Configuration
     gmail_username: str = "dev@example.com"
@@ -59,6 +60,8 @@ class Settings(BaseSettings):
     audio_enabled: bool = True
     tts_engine: TTSEngine = TTSEngine.ESPEAK
     secret_key: SecretStr = SecretStr("generate_secure_key_here")
+    # Health/Readiness toggles
+    check_pms_in_readiness: bool = False
 
     # Auth
     jwt_algorithm: str = "HS256"
