@@ -1,0 +1,40 @@
+# [PROMPT 2.5] rasa_nlu/data/nlu.yml
+
+version: "3.1"
+
+nlu:
+  - intent: check_availability
+    examples: |
+      - ¿Hay disponibilidad para el 15 de diciembre?
+      - ¿Tenés algo libre para el finde que viene?
+      - ¿Hay lugar para 2 personas la semana que viene?
+      - consulto por disponibilidad
+      - tenes lugar para manana?
+      - hola, hay disponibilidad del 10 al 15 de enero?
+      - para el 5 de febrero, dos noches, hay algo?
+      - me gustaria saber si tienen habitaciones libres
+      - hay disponibilidad para 3 personas
+      - del 1 al 5 de marzo
+      - para el proximo finde largo tienen algo?
+      - busco habitacion para el 20
+      - hay algo para el 25 de diciembre?
+      - tienen disponibilidad para año nuevo?
+      - para el dia de los enamorados, tenes algo?
+
+  - intent: make_reservation
+    examples: |
+      - Quiero reservar del 1 al 3 de enero para 2 personas
+      - Dale, reservame la doble
+      - Si, quiero hacer la reserva
+      - confirmo la reserva
+      - haceme la reserva para esas fechas
+      - reservame una habitacion por favor
+      - quiero confirmar
+      - si, por favor, reservala
+      - dale, genial. la quiero
+      - ok, como sigo para reservar?
+      - quiero pagar la seña
+      - como hago para confirmar la reserva?
+      - me interesa, quiero avanzar
+      - reservamela
+      - dale, la quiero

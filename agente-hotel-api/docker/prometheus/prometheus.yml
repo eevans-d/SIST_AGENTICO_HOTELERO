@@ -1,0 +1,9 @@
+# [PROMPT GA-01 - CORRECCIÓN] Configuración de Prometheus
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "agente-api"
+    static_configs:
+      - targets: ["agente-api:8000"]

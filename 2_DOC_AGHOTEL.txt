@@ -1,0 +1,676 @@
+PARTE 3/5 — IMPLEMENTACIÓN TÉCNICA PROFUNDA (PMS-INTEGRADA Y EFICIENTE)
+3.1 Integración PMS (QloApps) como Núcleo Central
+Principio rector:
+El PMS (QloApps) es la única fuente de verdad administrativa. El agente solo consulta, verifica, bloquea y confirma reservas a través de la API del PMS, evitando duplicar lógica hotelera.
+Setup y Operación
+Instalación rápida con Docker Compose:
+version: '3.8'
+services:
+  qloapps:
+    image: webkul/qloapps:latest
+    environment:
+      DB_SERVER: mysql
+      DB_NAME: qloapps_hotel
+      DB_USER: qloapps_user
+      DB_PASSWD: ${MYSQL_PASSWORD}
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+    volumes:
+      - qloapps_data:/var/www/html
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: qloapps_hotel
+      MYSQL_USER: qloapps_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+volumes:
+  qloapps_data:
+  mysql_data:
+
+
+Configuración post-instalación:
+Setear API Key para integración agente (guardar en .env).
+Cargar habitaciones/clientes manualmente o migrar desde CSV (usando scripts automatizados).
+El agente nunca almacena datos administrativos completos: solo logs, locks y trazabilidad conversacional.
+Migración de datos existente (si aplica)
+Exportar habitaciones/clientes a CSV.
+Importar en QloApps mediante su interfaz o API.
+El agente hace bootstrap leyendo estos datos a través del Adapter, manteniendo solo caches efímeros.
+Mapeo de Endpoints Críticos
+GET /api/rooms
+GET /api/availability
+POST /api/reservations
+GET /api/reservations/{id}
+POST /api/customers
+Webhooks (si QloApps los soporta): para sincronización de eventos críticos.
+3.2 Modelo de Datos Mínimo del Agente
+Solo se almacena lo estrictamente necesario para operar y auditar la capa conversacional:
+clientes: ID local, nombre, teléfono/email, canal preferido (sin duplicar datos sensibles).
+consultas: log completo de mensajes (canal, user_id, texto, audio, transcripción, intent, entidades, tiempos).
+reservas: sombra mínima: id_local, código, pms_id, estado, checkin, checkout, huéspedes, total.
+locks_log: auditoría de locks temporales activos/expirados.
+recordatorios: scheduler para mensajes pre/post estancia.
+Políticas de retención:
+consultas: 60–90 días
+audio_files: 30 días
+reservas canceladas: 1 año
+reservas completadas: según política fiscal del PMS
+3.3 Sistema de Locks Distribuidos (Anti Double-Booking)
+Mecanismo: Redis como lock distribuido (TTL 20 min; extensible).
+Clave: lock:room:{habitacion_id}:{YYYY-MM-DD}:{YYYY-MM-DD}
+Valor: JSON con session_id, user_id, checkin, checkout, datos de pre-reserva, expiración.
+Flujo operativo:
+Al iniciar reserva, el agente consulta disponibilidad en PMS.
+Si el usuario confirma, se crea un lock en Redis si no hay conflicto.
+El lock bloquea temporalmente la habitación y es visible para todos los procesos.
+Si el usuario requiere más tiempo, se puede extender el lock (máx 1–2 veces).
+Al confirmar la reserva en PMS, se elimina el lock y se audita en locks_log.
+Prevención: El agente cruza locks activos y reservas confirmadas en PMS en cada intento de bloqueo.
+Auditoría: Todas las operaciones (creación, extensión, liberación, expiración) quedan registradas para trazabilidad.
+3.4 Motor NLP Hotelero Especializado
+Intents principales:
+check_availability
+get_prices
+make_reservation
+modify_reservation
+ask_services/policies
+Entidades clave:
+fechas (interpretación robusta DD/MM, DD/MM/AAAA, “mañana”, “finde”)
+cantidad de huéspedes (número + variantes)
+tipo_habitación (simple, doble, suite, departamento)
+código_reserva (para consultar/modificar)
+Implementación recomendada:
+Rasa (pipeline español) + spaCy para extracción de entidades y normalización.
+Entrenamiento personalizado con ejemplos reales de consultas hoteleras.
+Fallback numérico ("¿Querés: 1) Disponibilidad, 2) Precios, 3) Servicios?") y escalamiento automático a staff si la confianza es baja.
+Validación de datos:
+Validador para fechas, huéspedes y teléfono, con mensajes claros si el dato es inválido.
+3.5 Pipeline de Audio y Canales de Comunicación
+STT (Speech-to-Text)
+Descarga de audio WhatsApp (OGG/Opus).
+Conversión a WAV PCM 16kHz mono (FFmpeg).
+Transcripción con Whisper (modelo "base" español).
+Post-procesamiento para limpiar muletillas y expresiones mal transcriptas (ajuste para argentinismos si aplica).
+TTS (Text-to-Speech)
+eSpeak-NG como base (ligero), Coqui TTS si hay recursos y se requiere mayor calidad.
+Cache de respuestas recurrentes para acelerar envíos y reducir costos.
+Conversión a OGG/Opus para WhatsApp.
+Integración de canales
+WhatsApp: Webhook verificado; mensajes normalizados (texto/audio).
+Gmail: Polling IMAP seguro cada N segundos; mensajes normalizados al mismo formato que WhatsApp.
+Message Gateway: punto único de entrada para ambos canales, creando una estructura de mensaje unificada para procesamiento.
+3.6 Flujo de Reserva End-to-End Integrado al PMS
+Usuario consulta disponibilidad: NLP extrae fechas, huéspedes, tipo habitación.
+Agente consulta PMS: Adapter solicita disponibilidad real y precios actuales.
+Usuario confirma intención: Se crea lock temporal en Redis (20 min).
+Instrucción de seña (si aplica):
+Se envían datos bancarios y monto de seña.
+Usuario debe enviar comprobante (imagen/PDF) por WhatsApp/Gmail.
+Validación manual: Staff verifica comprobante en dashboard y confirma la reserva.
+Confirmación en PMS: Adapter crea reserva oficial, se invalida el cache de disponibilidad y se libera el lock.
+Envío de confirmación al huésped: WhatsApp y/o email con voucher generado por PMS.
+Recordatorios: Programados para cortesía pre check-in, bienvenida y agradecimiento post-estancia.
+Ejemplo de template de respuesta:
+"Para {checkin}-{checkout}, {tipo} para {huespedes}: ${precio_noche}/noche. Total ${total}. ¿Querés reservar?"
+"Seña 30%: ${monto}. Banco/CBU: {datos}. Enviame el comprobante acá por favor."
+"Listo, reserva confirmada. Código: {codigo}. Te envié el voucher por email."
+3.7 Seguridad Operativa, Recordatorios y Modo Degradado
+Seguridad:
+Webhooks autenticados (firma/token de Meta Cloud o Twilio).
+Rate limiting por endpoint/IP.
+Todo el tráfico bajo HTTPS/SSL (certificados válidos).
+No almacenar datos personales sensibles fuera del PMS.
+Logs y auditoría con mínimos datos necesarios.
+Backups diarios de la base de datos del agente y del PMS.
+Recordatorios automáticos:
+T-7 días (cortesía con datos prácticos)
+T-1 día (bienvenida previa)
+T+1 día (agradecimiento y pedido de feedback)
+Scheduler asíncrono respetando quiet hours (no enviar entre 21:00–08:00).
+Modo degradado:
+Si el PMS no responde o hay fallos críticos (audio, NLU), suspender creación de reservas automáticas.
+Responder con mensajes de contención y prometer seguimiento humano.
+Notificar al staff por email/WhatsApp con resumen y enlaces a la conversación.
+Salir del modo degradado solo tras health checks exitosos sostenidos.
+3.8 Criterios de Aceptación y Validación Técnica
+PMS Adapter:
+Responde disponibilidad exacta y consistente en al menos 20 casos de prueba.
+Creación de 10 reservas consecutivas sin errores ni duplicados gracias a idempotencia.
+Locks Redis:
+Prevención del 100% de solapamientos en pruebas concurrentes.
+Limpieza automática de locks expirados y liberación al confirmar.
+NLP:
+85% de clasificación correcta (en dataset de pruebas reales).
+Extracción robusta de fechas y huéspedes.
+Audio:
+80% de audios devuelven transcripción útil.
+Latencia total audio→respuesta <15s en promedio.
+Canales:
+WhatsApp: recepción/envío estable, adjuntos recibidos.
+Gmail: polling confiable, envíos con adjuntos.
+Seguridad:
+Webhooks protegidos, logs con trazabilidad y backups automáticos funcionales.
+PARTE 4/5 — OPERACIÓN SIMPLIFICADA Y USABILIDAD MÁXIMA
+4.1 PRINCIPIOS DE DISEÑO Y USABILIDAD (DESARROLLADOR ÚNICO)
+Filosofía Central: "Agente como Aliado Indispensable"
+El agente está diseñado para convertirse en un aliado indispensable que libera al recepcionista de tareas rutinarias, permitiéndole enfocarse en la hospitalidad genuina y situaciones que requieren toque humano.
+Principios Rectores:
+PMS como única "central": El dashboard del agente NO duplica funciones que ya resuelve el PMS.
+2-clics/10-segundos: Acciones críticas en máximo 2 clics y visibles en 10 segundos.
+1-2 mensajes al cliente: Respuestas completas y definitivas.
+Contexto mínimo, claridad máxima: Campos esenciales sin ruido. Enlace directo "Abrir en PMS".
+Estados evidentes: Colores y badges intuitivos.
+Enfoque "Zero Learning Curve": Intuitivo para operar en menos de 5 minutos.
+4.2 DASHBOARD STAFF ULTRA-INTUITIVO
+Interfaz Unificada WhatsApp + Gmail
+<!-- templates/dashboard.html - Layout principal optimizado -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agente Hotel - Dashboard Staff</title>
+    <link href="[https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css](https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css)" rel="stylesheet">
+    <link href="[https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css](https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css)" rel="stylesheet">
+    <script src="[https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js](https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js)" defer></script>
+    <style>
+        .conversation-card { border-left: 4px solid #0d6efd; margin-bottom: 1rem; transition: all 0.3s ease; }
+        .conversation-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .pending-reservation { border-left: 4px solid #ffc107; }
+        .urgent-flag { color: #dc3545; animation: pulse 2s infinite; }
+        .audio-indicator { color: #6f42c1; }
+        .metrics-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="bg-light" x-data="dashboard()" x-init="startPolling()">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <span class="navbar-brand">🏨 Agente Hotel</span>
+            <div class="navbar-nav ms-auto">
+                <span class="nav-link text-light">
+                    <i class="bi bi-person-circle"></i> Recepcionista
+                    <span class="badge bg-success ms-2" id="status-indicator">Online</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <!-- Panel Izquierdo: Conversaciones y Reservas -->
+            <div class="col-lg-4 col-md-6">
+                <!-- Conversaciones Activas -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Conversaciones Activas</h5>
+                        <span class="badge bg-primary" x-text="conversations.length">0</span>
+                    </div>
+                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                        <div x-show="conversations.length === 0" class="text-center text-muted">
+                            <i class="bi bi-chat"></i>
+                            <p>No hay conversaciones activas</p>
+                        </div>
+                        <template x-for="conv in conversations" :key="conv.id">
+                            <div class="conversation-card card card-body p-3" 
+                                 :class="{'border-danger': conv.urgent, 'border-warning': conv.status === 'escalated'}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">
+                                            <span x-text="conv.user_name || conv.user_id"></span>
+                                            <i x-show="conv.has_audio" class="bi bi-mic-fill audio-indicator ms-1"></i>
+                                            <i x-show="conv.urgent" class="bi bi-exclamation-triangle urgent-flag ms-1"></i>
+                                        </h6>
+                                        <p class="mb-1 small" x-text="conv.last_message.substring(0, 60) + (conv.last_message.length > 60 ? '...' : '')"></p>
+                                        <small class="text-muted">
+                                            <i :class="conv.canal === 'whatsapp' ? 'bi-whatsapp' : 'bi-envelope'"></i>
+                                            <span x-text="conv.intent || 'Sin clasificar'"></span> • <span x-text="conv.time_ago"></span>
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" @click="viewConversation(conv.session_id)">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Reservas Pendientes -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Reservas Pendientes</h5>
+                        <span class="badge bg-warning" x-text="pendingReservations.length">0</span>
+                    </div>
+                    <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                        <div x-show="pendingReservations.length === 0" class="text-center text-muted">
+                            <i class="bi bi-hourglass"></i>
+                            <p>No hay reservas pendientes</p>
+                        </div>
+                        <template x-for="res in pendingReservations" :key="res.id">
+                            <div class="pending-reservation card card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1" x-text="res.cliente_nombre"></h6>
+                                        <p class="mb-1 small">
+                                            <strong>Hab <span x-text="res.habitacion_numero"></span></strong> •
+                                            <span x-text="res.checkin"></span> al <span x-text="res.checkout"></span>
+                                        </p>
+                                        <p class="mb-1 small">
+                                            <strong>Total:</strong> $<span x-text="res.total.toLocaleString()"></span> •
+                                            <strong>Seña:</strong> $<span x-text="res.sena_monto.toLocaleString()"></span>
+                                        </p>
+                                        <small class="text-warning">
+                                            <i class="bi bi-clock"></i> Expira en <span x-text="res.tiempo_restante"></span>
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-sm btn-success" @click="confirmReservation(res.id)">
+                                        <i class="bi bi-check-circle"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Central: Mapa del Hotel -->
+            <div class="col-lg-5 col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-building"></i> Estado del Hotel
+                            <small class="text-muted">- Tiempo Real</small>
+                        </h5>
+                        <div class="btn-group btn-group-sm mt-2" role="group">
+                            <button class="btn btn-outline-primary active" onclick="filterRooms('all')">Todas</button>
+                            <button class="btn btn-outline-success" onclick="filterRooms('available')">Disponibles</button>
+                            <button class="btn btn-outline-warning" onclick="filterRooms('reserved')">Reservadas</button>
+                            <button class="btn btn-outline-primary" onclick="filterRooms('occupied')">Ocupadas</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Mapa simplificado como tabla/lista (más eficiente para desarrollo único) -->
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Hab.</th>
+                                        <th>Tipo</th>
+                                        <th>Estado</th>
+                                        <th>Cliente</th>
+                                        <th>Check-out</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rooms-table">
+                                    <!-- Contenido dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="d-flex flex-wrap gap-3 justify-content-center small">
+                                    <span><i class="bi bi-square-fill text-success"></i> Disponible</span>
+                                    <span><i class="bi bi-square-fill text-primary"></i> Ocupada</span>
+                                    <span><i class="bi bi-square-fill text-warning"></i> Reservada</span>
+                                    <span><i class="bi bi-square-fill text-danger"></i> Mantenimiento</span>
+                                    <span><i class="bi bi-square-fill text-secondary"></i> Bloqueada</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Derecho: Métricas y Acciones -->
+            <div class="col-lg-3 col-md-12">
+                <!-- Métricas del Día -->
+                <div class="card metrics-card mb-3">
+                    <div class="card-header border-0">
+                        <h5 class="mb-0 text-white"><i class="bi bi-graph-up"></i> Métricas Hoy</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6 mb-3">
+                                <div class="h4" x-text="metrics.messages_today || 0">0</div>
+                                <small>Mensajes</small>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="h4" x-text="metrics.reservations_today || 0">0</div>
+                                <small>Reservas</small>
+                            </div>
+                            <div class="col-6">
+                                <div class="h4" x-text="(metrics.occupancy_rate || 0) + '%'">0%</div>
+                                <small>Ocupación</small>
+                            </div>
+                            <div class="col-6">
+                                <div class="h4" x-text="(metrics.conversion_rate || 0) + '%'">0%</div>
+                                <small>Conversión</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Acciones Rápidas -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-tools"></i> Acciones Rápidas</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary btn-sm" @click="syncWithPMS()">
+                                <i class="bi bi-arrow-repeat"></i> Sincronizar PMS
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" @click="openPMS()">
+                                <i class="bi bi-box-arrow-up-right"></i> Abrir PMS
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" @click="exportReport()">
+                                <i class="bi bi-download"></i> Exportar Reporte
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" @click="viewLogs()">
+                                <i class="bi bi-journal-text"></i> Ver Logs
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @click="toggleManualMode()">
+                                <i class="bi bi-exclamation-triangle"></i> Modo Manual
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dashboard() {
+            return {
+                conversations: [],
+                pendingReservations: [],
+                metrics: {},
+                
+                async startPolling() {
+                    // Actualizar datos cada 30 segundos
+                    setInterval(() => {
+                        this.refreshData();
+                    }, 30000);
+                    
+                    // Carga inicial
+                    await this.refreshData();
+                },
+                
+                async refreshData() {
+                    try {
+                        const response = await fetch('/admin/dashboard-data');
+                        const data = await response.json();
+                        
+                        this.conversations = data.conversations || [];
+                        this.pendingReservations = data.pending_reservations || [];
+                        this.metrics = data.metrics || {};
+                        
+                        // Actualizar tabla de habitaciones
+                        this.updateRoomsTable(data.rooms || []);
+                    } catch (error) {
+                        console.error('Error refreshing data:', error);
+                    }
+                },
+                
+                async confirmReservation(reservationId) {
+                    if (confirm('¿Confirmar esta reserva en el PMS?')) {
+                        try {
+                            const response = await fetch(`/admin/confirm-reservation/${reservationId}`, {
+                                method: 'POST'
+                            });
+                            const result = await response.json();
+                            
+                            if (result.success) {
+                                alert('✅ Reserva confirmada exitosamente en PMS');
+                                await this.refreshData();
+                            } else {
+                                alert(`❌ Error: ${result.error}`);
+                            }
+                        } catch (error) {
+                            alert('❌ Error confirmando reserva');
+                        }
+                    }
+                },
+                
+                updateRoomsTable(rooms) {
+                    const tbody = document.getElementById('rooms-table');
+                    tbody.innerHTML = rooms.map(room => `
+                        <tr>
+                            <td><strong>${room.number}</strong></td>
+                            <td>${room.type}</td>
+                            <td>
+                                <span class="badge bg-${this.getStatusColor(room.status)}">
+                                    ${this.getStatusText(room.status)}
+                                </span>
+                            </td>
+                            <td>${room.guest_name || '-'}</td>
+                            <td>${room.checkout_date || '-'}</td>
+                        </tr>
+                    `).join('');
+                },
+                
+                getStatusColor(status) {
+                    const colors = {
+                        'available': 'success',
+                        'occupied': 'primary', 
+                        'reserved': 'warning',
+                        'maintenance': 'danger',
+                        'blocked': 'secondary'
+                    };
+                    return colors[status] || 'secondary';
+                },
+                
+                getStatusText(status) {
+                    const texts = {
+                        'available': 'Disponible',
+                        'occupied': 'Ocupada',
+                        'reserved': 'Reservada', 
+                        'maintenance': 'Mantenimiento',
+                        'blocked': 'Bloqueada'
+                    };
+                    return texts[status] || 'Desconocido';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+Implementación Backend Dashboard
+# app/routers/admin.py
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from ..services import pms_adapter, conversation_manager, lock_service
+
+router = APIRouter()
+templates = Jinja2Templates(directory="templates")
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Dashboard principal staff"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@router.get("/dashboard-data")
+async def dashboard_data():
+    """API para datos del dashboard en tiempo real"""
+    try:
+        # Métricas, conversaciones, reservas pendientes, estado de habitaciones...
+        pass
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/confirm-reservation/{reservation_id}")
+async def confirm_reservation(reservation_id: str):
+    """Confirmación de reserva con un clic"""
+    try:
+        # Obtener lock, crear reserva en PMS, liberar lock, enviar confirmación...
+        pass
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+async def get_daily_metrics():
+    """Métricas del día en tiempo real"""
+    pass
+
+
+4.3 FLUJOS OPERATIVOS ULTRA-SIMPLIFICADOS
+SOP 1: Gestión de Conversaciones Multimodales
+Priorización Automática Inteligente: Basada en confianza de NLP, intents complejos, keywords VIP, etc.
+Proceso de Intervención:
+Texto: Pedir datos faltantes en un solo mensaje.
+Audio: Transcribir; si confianza baja, pedir texto.
+Escalamiento: Conversación marcada en rojo → Staff toma control.
+SOP 2: Proceso de Reserva PMS-Integrado (3 Pasos Máximo)
+Consulta disponibilidad → Agente consulta PMS.
+Crear lock temporal (20 min) → Enviar instrucciones de seña.
+Staff confirma seña → Clic en dashboard → Reserva en PMS + Voucher enviado.
+SOP 3: Manejo de Incidentes y Modo Degradado
+Detección Automática: Verifica salud de PMS, WhatsApp, Gmail, etc.
+Respuesta: Activa modo degradado, notifica al staff, usa cache extendido y respuestas de fallback.
+4.4 RECORDATORIOS AUTOMÁTICOS INTELIGENTES
+Sistema de Recordatorios Proactivos
+T-1 día (pre check-in): Mensaje de bienvenida y datos útiles.
+Día del check-in (bienvenida): Notificación de habitación lista.
+T+1 día post check-out (agradecimiento): Agradecimiento y solicitud de feedback.
+4.5 OPERACIÓN DIARIA SIMPLIFICADA
+Rutinas Automatizadas
+Rutina Matutina (08:00 AM - 2 minutos): Resumen de salud del sistema, mensajes nocturnos, llegadas del día y acciones requeridas.
+Checklist Operativo Diario:
+Inicio (2 min): Verificar salud, revisar urgentes, confirmar sync.
+Durante el día (3 min): Confirmar señas, revisar escalados.
+Cierre (3 min): Reconciliación, verificar backup.
+4.6 CAPACITACIÓN EXPRESS (15 MINUTOS TOTAL)
+Módulo 1 (5 min): Navegación Dashboard.
+Módulo 2 (5 min): Confirmación de Reservas.
+Módulo 3 (5 min): Manejo de Escalamientos.
+PARTE 5/5 — DESPLIEGUE ACELERADO Y EVOLUCIÓN CONTROLADA
+5.1 PLAN DE IMPLEMENTACIÓN ACELERADA (7-14 DÍAS)
+Cronograma Optimizado
+DÍAS 1-2: INFRAESTRUCTURA Y PMS BASE
+Setup de servidor, Docker, dominio, SSL.
+Deploy de QloApps, carga de habitaciones, generación de API Key.
+DÍAS 3-5: BACKEND AGENTE CORE
+FastAPI base, PMS Adapter.
+Conexión a canales WhatsApp y Gmail.
+Implementación de NLP básico y pipeline de audio.
+DÍAS 6-8: INTEGRACIÓN COMPLETA Y LOCKS
+Sistema de locks con Redis.
+Dashboard básico para el staff.
+Configuración de NGINX y SSL en producción.
+DÍAS 9-14: TESTING Y ESTABILIZACIÓN
+Testing integral de todos los componentes.
+Ajustes de templates, performance y capacitación del staff.
+Go-Live controlado.
+5.2 TESTING Y VALIDACIÓN ESENCIAL
+Criterios de Aceptación Mínimos
+Integración PMS: test_pms_availability, test_reservation_flow.
+Canales: test_whatsapp_integration.
+Criterios GO/NO-GO:
+✅ Precisión NLU >85%
+✅ Precisión STT >80%
+✅ Latencia P95 <3s (texto), <15s (audio)
+✅ 0% Double-Booking
+✅ Uptime >99%
+✅ Sincronización PMS <1% discrepancias
+5.3 AUTOMATIZACIÓN DE DESPLIEGUE
+Script de Despliegue Completo
+#!/bin/bash
+# scripts/deploy_production.sh - Despliegue automatizado con rollback
+set -e
+
+PROJECT_DIR="/opt/agente-hotel-mvp"
+LOG_FILE="/var/log/agente-hotel-deploy.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
+}
+
+rollback() {
+    log "❌ Error detectado. Iniciando rollback..."
+    # Lógica de rollback...
+    exit 1
+}
+
+trap rollback ERR
+
+log "🚀 Iniciando despliegue a producción"
+# Backup, git pull, docker-compose build, verificación, tests...
+log "🎉 Despliegue completado exitosamente"
+
+
+Docker Compose Producción
+# docker-compose.prod.yml
+version: '3.8'
+services:
+  qloapps:
+    # ...
+  mysql:
+    # ...
+  agente-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    # ...
+  postgres:
+    # ...
+  redis:
+    # ...
+  nginx:
+    # ...
+volumes:
+  # ...
+
+
+5.4 TROUBLESHOOTING Y SOPORTE
+Diagnósticos Automatizados
+Endpoint de salud que verifica conectividad con PMS, WhatsApp, Gmail, DB y Redis.
+Runbooks para Problemas Comunes
+🔧 PROBLEMA: WhatsApp No Recibe Mensajes
+Diagnóstico: Verificar webhook, logs, test manual.
+Soluciones: Reconfigurar webhook, renovar SSL, ajustar rate limits.
+🔧 PROBLEMA: PMS No Responde
+Diagnóstico: curl, docker logs, verificar DB.
+Soluciones: docker-compose restart, verificar espacio/memoria.
+🔧 PROBLEMA: Audio No Se Transcribe
+Diagnóstico: Confirmar FFmpeg, verificar permisos, revisar logs de Whisper.
+Soluciones: Instalar FFmpeg, ajustar permisos, usar modelo más pequeño.
+5.5 ROADMAP DE EVOLUCIÓN POST-IMPLEMENTACIÓN
+Semanas 1-4: Optimización Basada en Datos Reales
+Monitoreo intensivo, refinamiento de NLP, optimización de flujos.
+Meses 2-3: Expansión Controlada
+Evaluación de Facturación AFIP.
+Funcionalidades: Recordatorios avanzados, integración de pagos, audio mejorado.
+Trimestre 2: Inteligencia y Personalización
+Modelo NLU entrenado, análisis de sentimiento, recomendaciones personalizadas.
+5.6 PAQUETE DE HANDOVER DEFINITIVO
+Checklist de Entrega Completa
+[ ] Código fuente completo
+[ ] Documentación integral (5 partes)
+[ ] Configuraciones de producción
+[ ] Scripts de automatización
+[ ] Manual operativo
+[ ] Accesos transferidos (VPS, PMS, WhatsApp, etc.)
+[ ] Métricas baseline establecidas
+[ ] Capacitación completada
+[ ] Procedimientos de emergencia
+[ ] Verificación final y conformidad de entrega
+Guía Rápida Operativa (1 página)
+Un resumen conciso para el staff sobre cómo usar el dashboard, confirmar reservas y manejar problemas comunes.
+5.7 CRITERIOS DE ÉXITO Y EVOLUCIÓN
+Métricas de Éxito (Primeros 30 días)
+KPIs Operativos: Automatización >70%, Tiempo respuesta <2 min, Uptime >99%.
+KPIs de Negocio: Conversión >25%, Satisfacción >8/10, Reducción carga staff >70%.
+Factores Críticos de Éxito
+Adopción del Staff: Sistema percibido como un aliado.
+Calidad Integración PMS: Single source of truth es fundamental.
+Expectativas Realistas: La mejora es continua y basada en datos.
+🎉 DOCUMENTACIÓN COMPLETA FINALIZADA

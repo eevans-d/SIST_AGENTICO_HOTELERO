@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "agente-hotel-api"
+version = "0.1.0"
+description = "Agente recepcionista hotelero con IA"
+authors = ["Tu Nombre <tu@correo.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.30.1"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.31"}
+asyncpg = "^0.29.0"
+redis = "^5.0.7"
+pydantic = "^2.8.2"
+pydantic-settings = "^2.3.4"
+structlog = "^24.3.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+httpx = "^0.27.0"
+prometheus-client = "^0.20.0"
+slowapi = "^0.1.9"
+bleach = "^6.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.2"
+pytest-asyncio = "^0.23.7"
+ruff = "^0.5.0"
+pre-commit = "^3.7.1"
+gitleaks = "^8.18.4"
+prettier = "^3.3.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120

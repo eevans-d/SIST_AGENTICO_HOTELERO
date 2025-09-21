@@ -1,0 +1,55 @@
+# General
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+.history/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.benchmarks/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Node (por si se usa para tooling)
+node_modules/
+
+# FastAPI/UVicorn
+*.log
+
+# Entornos y secretos
+.env
+.env.*
+*.secret
+secrets/*.json
+
+# Docker
+*.tar
+*.gz
+*.zip
+docker-compose.override.yml
+
+# Certificados/keys de desarrollo
+agente-hotel-api/docker/nginx/ssl/*.key
+agente-hotel-api/docker/nginx/ssl/*.pem
+
+# Datos temporales del proyecto
+tmp/
+temp/
+agente-hotel-api/.cache/
+
+# Rasa (si existieran artefactos)
+**/rasa_nlu/models/

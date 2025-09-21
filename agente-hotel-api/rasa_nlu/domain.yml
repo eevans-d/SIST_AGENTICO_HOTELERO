@@ -1,0 +1,18 @@
+# [PROMPT 2.5] rasa_nlu/domain.yml
+
+intents:
+  - check_availability
+  - get_prices
+  - make_reservation
+  - modify_reservation
+  - ask_services
+  - ask_policies
+  - greet
+  - goodbye
+
+entities:
+  - check_in_date
+  - check_out_date
+  - num_guests
+  - room_type
+  - reservation_code

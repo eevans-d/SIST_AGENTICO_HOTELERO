@@ -1,0 +1,10 @@
+# [PROMPT GA-01 - CORRECCIÓN] Configuración de Alertmanager (base)
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "null"
+
+receivers:
+  - name: "null"

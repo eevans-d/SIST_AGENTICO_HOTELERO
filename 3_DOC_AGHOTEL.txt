@@ -1,0 +1,222 @@
+Documentación Complementaria Unificada: Agente Hotelero MVP
+1. RESUMEN EJECUTIVO Y META-ANÁLISIS
+Diagnóstico
+La documentación base del proyecto (Partes 1-5) presenta una arquitectura sólida y pragmática, viable para un desarrollador único y centrada en el PMS como única fuente de verdad. Sin embargo, un análisis profundo mediante ingeniería inversa revela "silencios elocuentes": áreas críticas que, aunque implícitas, requieren documentación explícita para garantizar la robustez, sostenibilidad y adopción exitosa del sistema a largo plazo.
+Brechas Estratégicas Identificadas
+Este documento complementario aborda las siguientes brechas críticas:
+Técnicas: Falta de contratos de API formales, planes de contingencia específicos y observabilidad avanzada (SLI/SLO).
+Operativas: Ausencia de un sistema formal para la toma de decisiones del staff y de guías de debugging para un único desarrollador.
+Culturales: La adaptación al contexto argentino debe ir más allá del vocabulario, abarcando expectativas y matices culturales en la comunicación.
+De Sostenibilidad: Inexistencia de un plan para la transferencia de conocimiento (handover) y para la actualización continua de la propia documentación.
+Propuesta de Valor
+La siguiente documentación no expande el alcance funcional del agente, sino que fortalece significativamente su implementación, operación y evolución. Transforma el proyecto de una "solución viable" a un "sistema empresarial confiable y resiliente", manteniendo la filosofía de simplicidad y desarrollo individual.
+2. ROBUSTEZ TÉCNICA Y SOSTENIBILIDAD DEL SISTEMA
+2.1. Especificación de Contratos e Interfaces
+Propósito: Eliminar ambigüedades entre módulos y con el PMS, acelerando el debugging y el mantenimiento futuro.
+## CONTRATO DE MENSAJE UNIFICADO (WhatsApp/Gmail)
+**Estructura Canónica:**
+{
+  "message_id": "string (requerido)",
+  "canal": "whatsapp|gmail",
+  "user_id": "string (teléfono/email)",
+  "timestamp_iso": "2024-09-01T10:30:00Z",
+  "tipo": "text|audio|image",
+  "texto": "string (vacío si no aplica)",
+  "media_url": "string|null",
+  "metadata": {
+    "confidence_stt": "float|null",
+    "duration_sec": "integer|null"
+  }
+}
+
+## MAPEO Y POLÍTICAS DEL PMS ADAPTER (QloApps)
+**Endpoints Críticos y Políticas:**
+- **GET /api/availability:**
+  - Timeout: 8s
+  - Retries: 3 (con backoff exponencial: 1s, 2s, 4s)
+- **POST /api/reservations:**
+  - Idempotencia: Utilizar un `reservation_uuid` único por intento.
+- **Manejo de Errores Esperados:**
+  - **401 Unauthorized:** Token de API inválido. Notificar a admin.
+  - **429 Too Many Requests:** Límite de QloApps alcanzado. Reintentar con backoff.
+  - **5xx Server Error:** Falla en el PMS. Activar modo degradado.
+
+
+2.2. SLI/SLO y Sistema de Alertas
+Propósito: Convertir el estado "funciona/no funciona" en métricas operables con alertas automáticas para una detección proactiva de problemas.
+## INDICADORES DE NIVEL DE SERVICIO (SLI)
+- **Latencia Texto P95:** Tiempo desde que se recibe hasta que se responde.
+- **Latencia Audio P95:** Tiempo desde que se recibe audio hasta que se responde.
+- **Tasa de Error del Servidor (5xx):** % de requests al agente que fallan.
+- **Disponibilidad del PMS:** % de éxito en las llamadas a `/api/health` del PMS.
+
+## OBJETIVOS DE NIVEL DE SERVICIO (SLO) Y ALERTAS
+| SLI | Objetivo | Alerta (Warning) | Alerta (Critical) |
+|---|---|---|---|
+| Latencia Texto P95 | < 3s | > 4s | > 6s (por 5 min) |
+| Latencia Audio P95 | < 15s | > 20s | > 30s (por 5 min) |
+| Tasa de Error 5xx | < 1% | > 3% | > 5% (por 5 min) |
+| Disponibilidad PMS | > 99.5%| < 99.5%| < 98% (por 10 min)|
+
+**Canales de Alerta:**
+- **Warning:** Email a administrador / Webhook a Slack/Discord.
+- **Critical:** SMS a administrador + Email.
+
+
+2.3. Manual de Transición y Sostenibilidad (Handover)
+Propósito: Documentar el conocimiento tácito, las decisiones críticas y los puntos frágiles del sistema para asegurar una transición suave a futuros desarrolladores y garantizar la continuidad del proyecto.
+## 📜 MANUAL DE TRANSICIÓN DE PROPIEDAD
+
+### 1. REGISTRO DE DECISIONES ARQUITECTÓNICAS (ADR Log)
+**ADR-001: Selección de QloApps como PMS**
+- **Decisión:** Usar QloApps en lugar de HotelDruid o desarrollo propio.
+- **Razones:** API REST completa, comunidad activa, reduce 60-80% el desarrollo.
+- **Consecuencias:** Dependencia externa crítica, curva de aprendizaje inicial.
+
+**ADR-002: Elección de WhatsApp Meta Cloud API sobre Twilio**
+- **Decisión:** Utilizar la API nativa de Meta.
+- **Razones:** Menor costo por mensaje, funcionalidades nativas completas.
+- **Consecuencias:** Proceso de verificación de Meta Business (1-3 días), menor flexibilidad que Twilio.
+
+### 2. MAPA MENTAL DEL SISTEMA
+
+```mermaid
+graph TD
+    A[Entradas: WhatsApp/Gmail] --> E[Procesamiento Central]
+    E --> F{Tipo Mensaje: Texto/Audio}
+    F -->|Texto| G[Normalización]
+    F -->|Audio| H[STT con Whisper]
+    G --> I[Motor NLU]
+    H --> I
+    I --> J{Intent Reconocido?}
+    J -->|Sí| K[Generación de Respuesta]
+    J -->|No| L[Fallback -> Matriz de Decisión Humana]
+    K --> M{Acción Requerida?}
+    M -->|Sí| N[Integración PMS: Disponibilidad/Reserva]
+    M -->|No| O[Envío Directo de Respuesta]
+    N --> O
+
+
+3. PUNTOS CRÍTICOS DE FRAGILIDAD
+Procesamiento de Audio (STT): El modelo "base" de Whisper puede tener dificultades con acentos regionales marcados. Solución: Si la confianza de transcripción es < 0.6, pedir al usuario que escriba.
+Locks en Redis: Si Redis cae, existe un riesgo teórico de doble-booking. Solución: El sistema entra en modo degradado, requiriendo confirmación manual doble.
+Cambios en la API del PMS: La API de QloApps puede cambiar. Solución: Pruebas de integración automatizadas deben correr diariamente para detectar cambios.
+4. PROTOCOLO DE TRANSFERENCIA DE CONOCIMIENTO
+Checklist del Saliente: Documentar "puntos ciegos", grabar sesiones de troubleshooting, explicar decisiones de diseño no obvias.
+Checklist del Entrante: Realizar cambios menores supervisado, diagnosticar problemas reales, proponer una mejora.
+Transferencia Exitosa: El nuevo desarrollador puede resolver el 80% de las incidencias comunes y explicar las decisiones de diseño clave.
+### 2.4. Sistema de Actualización Automática de Documentación
+**Propósito:** Convertir los logs operativos en mejoras concretas, creando un ciclo de mejora continua que mantiene la documentación sincronizada con la realidad operativa.
+
+```python
+# app/documentation/auto_updater.py - Concepto
+class DocumentationAutoUpdater:
+    def __init__(self, redis_client):
+        self.redis = redis_client
+
+    async def run_weekly_update(self):
+        """Ejecuta la actualización semanal de la documentación."""
+        # 1. Analizar logs para encontrar términos no reconocidos frecuentes.
+        new_terms = await self._find_new_argentinian_terms()
+        if new_terms:
+            await self._propose_dictionary_update(new_terms)
+
+        # 2. Identificar intents que más derivan a fallback.
+        problematic_intents = await self._analyze_fallback_patterns()
+        if problematic_intents:
+            await self._suggest_nlu_improvements(problematic_intents)
+
+    async def _propose_dictionary_update(self, terms):
+        # Genera una propuesta en el dashboard para que el staff
+        # valide y agregue los nuevos términos al glosario.
+        pass
+
+
+3. RESILIENCIA OPERATIVA Y ADAPTACIÓN CULTURAL (CONTEXTO ARGENTINO)
+3.1. Matriz de Riesgos y Decisión para Intervenciones
+Propósito: Sistematizar tanto la respuesta a fallos técnicos como la priorización de intervenciones humanas, reduciendo la carga cognitiva del staff.
+Contingencia Técnica
+Riesgo (Falla del Sistema)
+Probabilidad
+Impacto
+Detección
+Respuesta Automática
+Caída de API de WhatsApp
+Media
+Crítico
+Health checks fallan > 5 min
+Activar "Modo Solo Email y PMS", notificar a admin.
+Corrupción DB de QloApps
+Baja
+Crítico
+Queries al PMS retornan SQL errors
+Freeze de nuevas reservas, activar modo read-only, notificar para restore.
+
+Decisión Operativa Humana
+Urgencia (Huésped)
+Complejidad
+Prioridad
+Tiempo de Resp.
+Acción Requerida
+5 (Crítica)
+3-5 (Compleja)
+URGENTE
+< 2 min
+Derivación inmediata + Llamada al staff de turno.
+4 (Alta)
+1-2 (Simple)
+ALTA
+< 15 min
+Derivar a dashboard con notificación prioritaria.
+2 (Baja)
+1-4 (Simple)
+BAJA
+< 24h
+Registrar en dashboard para seguimiento al día siguiente.
+
+Factores Moduladores (Ajustan la Urgencia):
+Temporada Alta: +1 Urgencia
+Huésped en Estadía: +1 Urgencia
+Huésped VIP/Frecuente: +1 Urgencia
+3.2. Guía de Localización Cultural Profunda
+Propósito: Ir más allá de la traducción de términos, abordando las expectativas culturales de los huéspedes argentinos para ofrecer una comunicación auténtica y efectiva.
+## 🌎 GUÍA DE LOCALIZACIÓN CULTURAL ARGENTINA
+
+### 1. Relación con el Tiempo (La "Hora Argentina")
+- **Expectativa:** Flexibilidad en horarios de check-in/out.
+- **Aplicación:** Evitar rigidez. Usar frases como "El check-in es a partir de las 14:00, pero si llegás antes, avisame y vemos qué se puede hacer".
+
+### 2. Manejo de Conflictos (Directo con Tacto)
+- **Expectativa:** Reconocimiento del problema antes de ofrecer una solución.
+- **Aplicación:** Validar la queja primero. Usar "Tenés razón..."
+- **❌ Incorrecto:** "El wifi funciona bien, debe ser tu dispositivo".
+- **✅ Correcto:** "Tenés razón, el wifi debería funcionar mejor. Ya mismo envío a alguien a revisarlo".
+
+### 3. El "No" Argentino
+- **Expectativa:** Se evita el "no" directo.
+- **Señales:** Respuestas como "vamos a ver", "tal vez", "depende".
+- **Aplicación:** Si el sistema no puede cumplir un pedido, ofrecer alternativas claras en lugar de un "no" rotundo.
+
+### 4. Glosario Dinámico de Interacción (Ejemplos)
+| Término | Definición | Nivel Formalidad | Riesgo Malentendido | Recomendación |
+|---|---|---|---|---|
+| **"Finde"** | Fin de semana | Informal | Bajo | Aceptable en chat inicial, usar "fin de semana" en confirmaciones formales. |
+| **"Seña"** | Anticipo de reserva| Neutral | Medio (Extranjeros) | Acompañar siempre de una explicación: "una seña (anticipo del 30%)". |
+| **"Cochera"** | Estacionamiento | Neutral | Alto (Regiones) | Usar ambos términos: "cochera/garage" o el genérico "estacionamiento". |
+
+
+3.3. Consideraciones Legales y Privacidad (Ley 25.326)
+Propósito: Establecer una referencia básica sobre las implicaciones de la Ley de Protección de Datos Personales de Argentina.
+Principios Aplicados: Consentimiento (implícito al contactar), Finalidad (solo gestión hotelera), Seguridad (HTTPS, backups).
+Políticas de Retención Clave:
+Conversaciones no convertidas: 60 días → Anonimización.
+Datos de reservas completadas: 7 años (requisito fiscal).
+Archivos de audio: 30 días → Eliminación automática.
+Disclaimer: Esto no constituye asesoría legal. Se recomienda consultar a un abogado para un compliance completo.
+4. PLAN DE IMPLEMENTACIÓN Y RECOMENDACIONES
+Roadmap Sugerido
+Días 1-5 (Críticos Pre-Producción): Implementar Contratos de Interfaces (2.1), SLI/SLO (2.2) y la Matriz de Riesgos (3.1).
+Semanas 2-4 (Operativos): Desarrollar la Guía Cultural y Glosario (3.2), Manual de Transición (2.3) y Consideraciones Legales (3.3).
+Mes 2-3 (Evolución): Implementar el sistema de Actualización Automática de Documentación (2.4).
+Recomendación Final
+La implementación de esta documentación complementaria convierte un proyecto funcional en un activo estratégico, reduciendo drásticamente el riesgo operativo y técnico y mejorando la capacidad de mantenimiento y evolución del sistema por parte de un desarrollador único. Se recomienda priorizar los documentos de la categoría Críticos Pre-Producción antes del lanzamiento final.
