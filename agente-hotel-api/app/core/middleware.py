@@ -36,19 +36,20 @@ async def logging_and_metrics_middleware(request: Request, call_next):
     duration = time.time() - start_time
 
     # Logging
+    client_ip = request.client.host if request.client else None
     logger.info(
         "http_request",
-        correlation_id=request.state.correlation_id,
+        correlation_id=getattr(request.state, "correlation_id", None),
         method=request.method,
         path=request.url.path,
         status_code=response.status_code,
         duration_ms=duration * 1000,
-        client_ip=request.client.host,
+        client_ip=client_ip,
     )
 
     # Metrics
     metrics_service.record_request_latency(
-        endpoint=request.url.path, latency=duration, status_code=response.status_code
+        method=request.method, endpoint=request.url.path, latency=duration, status_code=response.status_code
     )
 
     return response

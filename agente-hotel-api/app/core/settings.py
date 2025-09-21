@@ -1,5 +1,8 @@
 from enum import Enum
-from pydantic import BaseSettings, PostgresDsn, RedisDsn, HttpUrl, EmailStr, SecretStr, validator
+from typing import Optional
+
+from pydantic import PostgresDsn, RedisDsn, HttpUrl, EmailStr, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(str, Enum):
@@ -20,6 +23,14 @@ class TTSEngine(str, Enum):
 
 
 class Settings(BaseSettings):
+    # Config base (Pydantic v2)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
+    # App metadata
+    app_name: str = "Agente Hotel API"
+    version: str = "0.1.0"
+    debug: bool = True
+
     # PMS Configuration
     pms_base_url: HttpUrl
     pms_api_key: SecretStr
@@ -36,8 +47,11 @@ class Settings(BaseSettings):
 
     # Database & Cache
     postgres_url: PostgresDsn
+    postgres_pool_size: int = 10
+    postgres_max_overflow: int = 10
     redis_url: RedisDsn
-    database_pool_size: int = 10
+    redis_pool_size: int = 20
+    redis_password: Optional[SecretStr] = None
 
     # Operational Settings
     environment: Environment = Environment.DEV
@@ -46,9 +60,15 @@ class Settings(BaseSettings):
     tts_engine: TTSEngine = TTSEngine.ESPEAK
     secret_key: SecretStr
 
-    @validator("pms_api_key", "whatsapp_access_token", "whatsapp_verify_token", "gmail_app_password", "secret_key")
-    def validate_secrets_in_prod(cls, v, values):
-        if values.get("environment") == Environment.PROD and v.get_secret_value() in [
+    # Auth
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_minutes: int = 60
+
+    @field_validator("pms_api_key", "whatsapp_access_token", "whatsapp_verify_token", "gmail_app_password", "secret_key")
+    @classmethod
+    def validate_secrets_in_prod(cls, v: SecretStr, info):
+        env = info.data.get("environment") if hasattr(info, "data") else None
+        if env == Environment.PROD and v and v.get_secret_value() in [
             None,
             "",
             "your_token_here",
@@ -56,10 +76,6 @@ class Settings(BaseSettings):
         ]:
             raise ValueError("Critical secret is not set for production environment")
         return v
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 settings = Settings()
