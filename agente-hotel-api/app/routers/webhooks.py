@@ -3,10 +3,11 @@
 import hmac
 import hashlib
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
+from fastapi.responses import PlainTextResponse
 
 from ..core.settings import settings
 
-router = APIRouter(tags=["Webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
 
 async def get_body(request: Request):
@@ -30,10 +31,10 @@ def verify_webhook_signature(
 
 
 @router.get("/whatsapp")
-async def verify_whatsapp_webhook(mode: str = Query(None), token: str = Query(None, alias="hub.verify_token"), challenge: str = Query(None, alias="hub.challenge")):
+async def verify_whatsapp_webhook(mode: str = Query(None, alias="hub.mode"), token: str = Query(None, alias="hub.verify_token"), challenge: str = Query(None, alias="hub.challenge")):
     """Handshake de verificación de WhatsApp (GET)."""
     if mode == "subscribe" and token == settings.whatsapp_verify_token.get_secret_value():
-        return challenge
+        return PlainTextResponse(challenge)
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
