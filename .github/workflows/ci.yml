@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (uv)
+        working-directory: agente-hotel-api
+        run: |
+          uv pip install --system --no-cache --all-extras -r pyproject.toml || pip install -r <(python - <<'PY'
+          import tomllib, sys
+          with open('pyproject.toml','rb') as f:
+              data = tomllib.load(f)
+          reqs = []
+          for k,v in data.get('tool',{}).get('poetry',{}).get('dependencies',{}).items():
+              if k == 'python':
+                  continue
+              if isinstance(v, dict):
+                  version = v.get('version', '')
+              else:
+                  version = v
+              reqs.append(f"{k}{version and '==' + version}")
+          print('\n'.join(reqs))
+          PY) || true
+
+      - name: Lint (ruff)
+        working-directory: agente-hotel-api
+        run: |
+          pip install ruff
+          ruff format --check .
+          ruff check .
+
+      - name: Import smoke test
+        working-directory: agente-hotel-api
+        run: |
+          python - <<'PY'
+          import importlib
+          m = importlib.import_module('app.main')
+          assert hasattr(m, 'app')
+          print('Import OK, app present')
+          PY
