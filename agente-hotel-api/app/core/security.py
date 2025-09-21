@@ -14,9 +14,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/admin/token")
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expiration_minutes)
+    jwt_exp_minutes = int(getattr(settings, "jwt_expiration_minutes", 60))
+    jwt_alg = getattr(settings, "jwt_algorithm", "HS256")
+    secret = settings.secret_key.get_secret_value()
+    expire = datetime.utcnow() + timedelta(minutes=jwt_exp_minutes)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.secret_key.get_secret_value(), algorithm=settings.jwt_algorithm)
+    return jwt.encode(to_encode, secret, algorithm=jwt_alg)
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
@@ -27,7 +30,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     )
 
     try:
-        payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[settings.jwt_algorithm])
+        jwt_alg = getattr(settings, "jwt_algorithm", "HS256")
+        payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[jwt_alg])
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception

@@ -5,12 +5,17 @@ from sqlalchemy.orm import sessionmaker
 
 from .settings import settings
 
+POSTGRES_URL = getattr(settings, "postgres_url")
+POOL_SIZE = getattr(settings, "postgres_pool_size", 5)
+MAX_OVERFLOW = getattr(settings, "postgres_max_overflow", 10)
+DEBUG_SQL = bool(getattr(settings, "debug", False))
+
 engine = create_async_engine(
-    settings.postgres_url,
-    pool_size=settings.postgres_pool_size,
-    max_overflow=settings.postgres_max_overflow,
+    POSTGRES_URL,
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
     pool_recycle=3600,
-    echo=settings.debug,
+    echo=DEBUG_SQL,
 )
 
 AsyncSessionFactory = sessionmaker(
