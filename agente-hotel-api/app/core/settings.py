@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import PostgresDsn, RedisDsn, HttpUrl, EmailStr, SecretStr, field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,24 +32,24 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # PMS Configuration
-    pms_base_url: HttpUrl
-    pms_api_key: SecretStr
+    pms_base_url: str = "http://localhost:8080"
+    pms_api_key: SecretStr = SecretStr("dev-pms-key")
     pms_timeout: int = 30
 
     # WhatsApp Meta Cloud
-    whatsapp_access_token: SecretStr
-    whatsapp_phone_number_id: str
-    whatsapp_verify_token: SecretStr
+    whatsapp_access_token: SecretStr = SecretStr("dev-whatsapp-token")
+    whatsapp_phone_number_id: str = "000000000000"
+    whatsapp_verify_token: SecretStr = SecretStr("dev-verify-token")
 
     # Gmail Configuration
-    gmail_username: EmailStr
-    gmail_app_password: SecretStr
+    gmail_username: str = "dev@example.com"
+    gmail_app_password: SecretStr = SecretStr("dev-gmail-pass")
 
     # Database & Cache
-    postgres_url: PostgresDsn
+    postgres_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
     postgres_pool_size: int = 10
     postgres_max_overflow: int = 10
-    redis_url: RedisDsn
+    redis_url: str = "redis://localhost:6379/0"
     redis_pool_size: int = 20
     redis_password: Optional[SecretStr] = None
 
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
     audio_enabled: bool = True
     tts_engine: TTSEngine = TTSEngine.ESPEAK
-    secret_key: SecretStr
+    secret_key: SecretStr = SecretStr("generate_secure_key_here")
 
     # Auth
     jwt_algorithm: str = "HS256"
