@@ -37,3 +37,15 @@ groups:
         annotations:
           summary: "Circuit Breaker abierto"
           description: "El estado del Circuit Breaker del PMS > 0 por más de 2m."
+
+      # ----------------------------------------------------------------------
+      # Prueba rápida (comentada por defecto)
+      # Descomentar para probar pipeline de alertas; recuerda volver a comentar.
+      # - alert: AlwaysFiring
+      #   expr: vector(1)
+      #   for: 1m
+      #   labels:
+      #     severity: critical
+      #   annotations:
+      #     summary: "Alerta de prueba (AlwaysFiring)"
+      #     description: "Alerta sintética para validar receivers y ruteo."

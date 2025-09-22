@@ -84,5 +84,9 @@ alertmanager-logs: ## Muestra logs de Alertmanager
 alertmanager-config: ## Muestra el config generado por entrypoint
 	@docker exec -it agente_alertmanager sh -c 'cat /etc/alertmanager/generated.yml || echo "generated.yml no disponible aún"'
 
+test-alert-429: ## Genera tráfico para provocar 429 en /webhooks/whatsapp
+	@chmod +x scripts/generate_429.sh
+	@HOST=localhost PORT=8000 REQUESTS=90 DELAY_MS=30 bash scripts/generate_429.sh
+
 
 .DEFAULT_GOAL := help
