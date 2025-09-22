@@ -131,5 +131,14 @@ alerts-disable-test: ## Desactiva alerta AlwaysFiring y reinicia Prometheus
 	@docker compose restart prometheus alertmanager
 	@echo "✅ AlwaysFiring desactivada."
 
+prometheus-rules-status: ## Muestra estado de reglas cargadas en Prometheus
+	@docker exec -it agente_prometheus sh -c 'wget -q -O - http://localhost:9090/api/v1/rules | jq . || curl -s http://localhost:9090/api/v1/rules | jq . || echo "Instala jq en el contenedor o usa curl sin jq"'
+
+alertmanager-alerts: ## Lista alertas activas en Alertmanager
+	@docker exec -it agente_alertmanager sh -c 'wget -q -O - http://localhost:9093/api/v2/alerts | jq . || curl -s http://localhost:9093/api/v2/alerts | jq . || echo "Instala jq en el contenedor o usa curl sin jq"'
+
+help: ## Muestra esta ayuda
+	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
 
 .DEFAULT_GOAL := help

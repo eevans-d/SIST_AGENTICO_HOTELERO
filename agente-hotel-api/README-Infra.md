@@ -143,8 +143,12 @@ Pruebas de alertas (opcional):
 - 429 en Webhook (dispara `HighWebhook429Rate`):
   - Ejecuta: `make test-alert-429`
   - Nota: la alerta usa ventana de 5m; espera a que la tasa sostenga el umbral.
-- Alerta sintética crítica (rapidez):
-  - Edita `docker/prometheus/alerts.yml` y descomenta el bloque `AlwaysFiring`.
-  - Reinicia Prometheus: `docker compose restart prometheus`.
-  - Verifica en Alertmanager y en tu receiver (Slack si está configurado).
-  - Vuelve a comentar el bloque para no dejar alertas permanentes.
+- Alerta sintética crítica (rápida y reversible):
+  - Usa archivo adicional `docker/prometheus/alerts-extra.yml` (se carga automáticamente por Prometheus).
+  - Activar: `make alerts-enable-test` (crea regla AlwaysFiring y reinicia Prometheus/Alertmanager).
+  - Verificar: `make alertmanager-alerts` (lista alertas activas) y/o revisa tu receiver (Slack/Email).
+  - Desactivar: `make alerts-disable-test` (vacía alerts-extra.yml y reinicia servicios).
+
+Inspección rápida:
+- Reglas cargadas en Prometheus: `make prometheus-rules-status`
+- Config generado de Alertmanager: `make alertmanager-config`
