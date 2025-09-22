@@ -1,0 +1,39 @@
+groups:
+  - name: agente-general
+    interval: 30s
+    rules:
+      - alert: HighHttp5xxRate
+        expr: sum by (endpoint) (rate(http_requests_total{status_code=~"5.."}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta tasa de 5xx en {{ $labels.endpoint }}"
+          description: "La tasa de respuestas 5xx supera 0.1 rps en {{ $labels.endpoint }} durante 5m."
+
+      - alert: HighWebhook429Rate
+        expr: sum(rate(http_requests_total{endpoint="/webhooks/whatsapp",status_code="429"}[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate limit alcanzado en webhook"
+          description: "Se detecta tasa de 429 > 0.2 rps en /webhooks/whatsapp."
+
+      - alert: HighPmsLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(pms_api_latency_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Latencia p95 alta contra PMS"
+          description: "p95 de latencia de PMS > 1s por más de 10m."
+
+      - alert: CircuitBreakerOpen
+        expr: max_over_time(pms_circuit_breaker_state[1m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit Breaker abierto"
+          description: "El estado del Circuit Breaker del PMS > 0 por más de 2m."

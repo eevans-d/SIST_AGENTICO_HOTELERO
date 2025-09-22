@@ -18,6 +18,7 @@ from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError
 # Métricas Prometheus
 pms_latency = Histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
 pms_operations = Counter("pms_operations_total", "PMS operations", ["operation", "status"])
+pms_errors = Counter("pms_errors_total", "PMS errors by type", ["operation", "error_type"])
 cache_hits = Counter("pms_cache_hits_total", "Cache hits")
 cache_misses = Counter("pms_cache_misses_total", "Cache misses")
 circuit_breaker_state = Gauge("pms_circuit_breaker_state", "Circuit breaker state (0=closed, 1=open, 2=half-open)")
@@ -43,6 +44,8 @@ class QloAppsAdapter:
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=5, recovery_timeout=30, expected_exception=httpx.HTTPError
         )
+        # Inicializar estado del CB
+        circuit_breaker_state.set(0)
 
     async def _get_from_cache(self, key: str) -> Optional[dict]:
         try:
@@ -58,7 +61,7 @@ class QloAppsAdapter:
             logger.error(f"Cache get error: {e}")
             return None
 
-    async def _set_cache(self, key: str, value: dict, ttl: int = 300):
+    async def _set_cache(self, key: str, value, ttl: int = 300):
         try:
             await self.redis.setex(key, ttl, json.dumps(value, default=str))
             logger.debug(f"Cached key: {key} with TTL: {ttl}")
@@ -67,12 +70,14 @@ class QloAppsAdapter:
 
     async def _invalidate_cache_pattern(self, pattern: str):
         try:
-            cursor = b"0"
-            while cursor:
-                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+            cursor: int = 0
+            while True:
+                cursor, keys = await self.redis.scan(cursor=cursor, match=pattern, count=100)
                 if keys:
                     await self.redis.delete(*keys)
                     logger.info(f"Invalidated {len(keys)} cache keys matching: {pattern}")
+                if cursor == 0:
+                    break
         except Exception as e:
             logger.error(f"Cache invalidation error: {e}")
 
@@ -81,7 +86,7 @@ class QloAppsAdapter:
     ) -> List[dict]:
         cache_key = f"availability:{check_in}:{check_out}:{guests}:{room_type or 'any'}"
         cached_data = await self._get_from_cache(cache_key)
-        if cached_data:
+        if isinstance(cached_data, list):
             return cached_data
 
         async def fetch_availability():
@@ -99,14 +104,20 @@ class QloAppsAdapter:
 
         try:
             with pms_latency.labels(endpoint="/api/availability", method="GET").time():
-                data = await self.circuit_breaker.call(retry_with_backoff, fetch_availability)
-            await self._set_cache(cache_key, data, ttl=300)
-            return self._normalize_availability(data)
+                data = await self.circuit_breaker.call(
+                    retry_with_backoff, fetch_availability, operation_label="check_availability"
+                )
+            normalized = self._normalize_availability(data)
+            await self._set_cache(cache_key, normalized, ttl=300)
+            circuit_breaker_state.set(0)
+            return normalized
         except CircuitBreakerOpenError:
             logger.error("Circuit breaker is open, returning fallback")
+            circuit_breaker_state.set(1)
             return []  # Fallback a respuesta vacía
         except Exception as e:
             logger.error(f"Failed to fetch availability: {e}")
+            pms_errors.labels(operation="check_availability", error_type=e.__class__.__name__).inc()
             raise PMSError(f"Unable to check availability: {str(e)}")
 
     async def create_reservation(self, reservation_data: dict) -> dict:
@@ -120,13 +131,16 @@ class QloAppsAdapter:
 
         try:
             with pms_latency.labels(endpoint="/api/reservations", method="POST").time():
-                result = await self.circuit_breaker.call(retry_with_backoff, post_reservation)
+                result = await self.circuit_breaker.call(
+                    retry_with_backoff, post_reservation, operation_label="create_reservation"
+                )
             await self._invalidate_cache_pattern("availability:*")
             pms_operations.labels(operation="create_reservation", status="success").inc()
             return result
         except Exception as e:
             pms_operations.labels(operation="create_reservation", status="failure").inc()
             logger.error(f"Failed to create reservation: {e}")
+            pms_errors.labels(operation="create_reservation", error_type=e.__class__.__name__).inc()
             raise PMSError(f"Unable to create reservation: {str(e)}")
 
     def _normalize_availability(self, data: dict) -> List[dict]:

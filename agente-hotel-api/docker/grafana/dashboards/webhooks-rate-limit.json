@@ -1,0 +1,17 @@
+{
+  "annotations": {"list": [{"builtIn": 1, "datasource": "-- Grafana --", "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+  "editable": true,
+  "panels": [
+    {"datasource": "Prometheus", "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}, "id": 1, "targets": [{"expr": "sum by (method) (rate(http_requests_total{endpoint=\"/webhooks/whatsapp\"}[5m]))", "legendFormat": "{{method}}", "refId": "A"}], "title": "Requests /webhooks/whatsapp por método (5m)", "type": "timeseries"},
+    {"datasource": "Prometheus", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}, "id": 2, "targets": [{"expr": "sum(rate(http_requests_total{endpoint=\"/webhooks/whatsapp\",status_code=\"429\"}[5m]))", "legendFormat": "429 rate", "refId": "A"}], "title": "Rate de 429 (5m)", "type": "timeseries"},
+    {"datasource": "Prometheus", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "id": 3, "targets": [{"expr": "sum by (status_code) (rate(http_requests_total{endpoint=\"/webhooks/whatsapp\"}[5m]))", "legendFormat": "{{status_code}}", "refId": "A"}], "title": "Distribución por status (5m)", "type": "timeseries"}
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["agente", "webhooks"],
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "Webhooks & Rate Limit",
+  "uid": "webhooks-rl",
+  "version": 1
+}

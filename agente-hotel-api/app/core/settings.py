@@ -67,7 +67,14 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: int = 60
 
-    @field_validator("pms_api_key", "whatsapp_access_token", "whatsapp_verify_token", "gmail_app_password", "secret_key")
+    @field_validator(
+        "pms_api_key",
+        "whatsapp_access_token",
+        "whatsapp_verify_token",
+        "whatsapp_app_secret",
+        "gmail_app_password",
+        "secret_key",
+    )
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
         env = info.data.get("environment") if hasattr(info, "data") else None
