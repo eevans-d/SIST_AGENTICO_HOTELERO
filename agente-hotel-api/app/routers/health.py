@@ -1,6 +1,6 @@
 # [PROMPT GA-02] app/routers/health.py
 
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -20,7 +20,7 @@ router = APIRouter(tags=["Health"])
 @router.get("/health", response_model=HealthCheck)
 async def health_check():
     """Health check básico"""
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/health/ready", response_model=ReadinessCheck)
@@ -56,11 +56,11 @@ async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redi
 
     return JSONResponse(
         status_code=status_code,
-        content={"ready": all_healthy, "checks": checks, "timestamp": datetime.utcnow().isoformat()},
+        content={"ready": all_healthy, "checks": checks, "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
 
 @router.get("/health/live", response_model=LivenessCheck)
 async def liveness_check():
     """Verifica que la aplicación esté viva"""
-    return {"alive": True, "timestamp": datetime.utcnow().isoformat()}
+    return {"alive": True, "timestamp": datetime.now(timezone.utc).isoformat()}

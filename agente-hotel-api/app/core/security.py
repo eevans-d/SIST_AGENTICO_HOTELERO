@@ -1,6 +1,6 @@
 # [PROMPT GA-02] app/core/security.py
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -17,7 +17,7 @@ def create_access_token(data: dict) -> str:
     jwt_exp_minutes = int(getattr(settings, "jwt_expiration_minutes", 60))
     jwt_alg = getattr(settings, "jwt_algorithm", "HS256")
     secret = settings.secret_key.get_secret_value()
-    expire = datetime.utcnow() + timedelta(minutes=jwt_exp_minutes)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=jwt_exp_minutes)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, secret, algorithm=jwt_alg)
 
