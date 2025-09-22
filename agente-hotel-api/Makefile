@@ -70,5 +70,19 @@ health: ## Ejecuta el script de health-check
 	@echo "Verificando salud de los servicios..."
 	bash scripts/health-check.sh
 
+# ==============================================================================
+# Utilidades de Monitorización
+# ==============================================================================
+
+monitoring-restart: ## Reinicia Prometheus, Grafana y Alertmanager
+	@echo "Reiniciando stack de monitorización..."
+	docker compose restart prometheus grafana alertmanager
+
+alertmanager-logs: ## Muestra logs de Alertmanager
+	@docker compose logs -f alertmanager
+
+alertmanager-config: ## Muestra el config generado por entrypoint
+	@docker exec -it agente_alertmanager sh -c 'cat /etc/alertmanager/generated.yml || echo "generated.yml no disponible aún"'
+
 
 .DEFAULT_GOAL := help
