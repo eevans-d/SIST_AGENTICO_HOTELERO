@@ -152,3 +152,12 @@ Pruebas de alertas (opcional):
 Inspección rápida:
 - Reglas cargadas en Prometheus: `make prometheus-rules-status`
 - Config generado de Alertmanager: `make alertmanager-config`
+
+## Dashboards Grafana
+
+- Carpeta: "Agente Hotel" (provisionada automáticamente).
+- Dashboards:
+  - `Alertas - Overview` (`docker/grafana/dashboards/alerts-overview.json`):
+    - KPIs de alertas activas (total, críticas, warning).
+    - Distribución por severidad.
+    - Detalle de alertas firing y tiempo reciente en estado firing por regla.
