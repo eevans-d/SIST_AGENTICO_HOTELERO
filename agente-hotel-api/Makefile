@@ -43,6 +43,13 @@ lint: ## Ejecutar linters y static analysis
 		command -v gitleaks >/dev/null 2>&1 && gitleaks detect -v || echo "(gitleaks no instalado)"; \
 	fi
 
+test: ## Ejecutar tests con pytest (usa Poetry si está disponible)
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest -q
+else
+	pytest -q
+endif
+
 
 
 # ==============================================================================
