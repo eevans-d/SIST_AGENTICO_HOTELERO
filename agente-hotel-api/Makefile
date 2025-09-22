@@ -106,5 +106,8 @@ test-alert-429: ## Genera tráfico para provocar 429 en /webhooks/whatsapp
 	@chmod +x scripts/generate_429.sh
 	@HOST=localhost PORT=8000 REQUESTS=90 DELAY_MS=30 bash scripts/generate_429.sh
 
+help: ## Muestra esta ayuda
+	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
 
 .DEFAULT_GOAL := help
