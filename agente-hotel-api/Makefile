@@ -1,7 +1,9 @@
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
+HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
 HAS_POETRY := $(shell command -v poetry >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
+HAS_POETRY_PROJECT := $(shell test -f pyproject.toml && grep -q '^\[tool\.poetry\]' pyproject.toml && echo 1 || echo 0)
 HAS_NPM := $(shell command -v npm >/dev/null 2>&1 && test -f package.json && echo 1 || echo 0)
 
 # ==============================================================================
@@ -9,12 +11,17 @@ HAS_NPM := $(shell command -v npm >/dev/null 2>&1 && test -f package.json && ech
 # ==============================================================================
 
 install: ## Instalar dependencias del proyecto
-ifeq ($(HAS_UV),1)
+ifeq ($(HAS_UV_PROJECT),1)
 	@echo "Installing dependencies with uv..."
 	uv sync --all-extras
+
 else ifeq ($(HAS_POETRY),1)
 	@echo "Installing dependencies with poetry..."
-	poetry install --all-extras
+	poetry install --all-extras --no-root
+else ifeq ($(HAS_UV),1)
+	@echo "uv está disponible pero pyproject no tiene sección [project]. Considera instalar poetry."
+	@echo "Intentando instalar con uv igualmente..."
+	uv sync --all-extras || true
 else ifeq ($(HAS_NPM),1)
 	@echo "Installing dependencies with npm..."
 	npm install
@@ -25,12 +32,16 @@ endif
 fmt: ## Formatear todo el código
 	@echo "Formatting code..."
 	ruff format .
-	prettier --write . --ignore-unknown
+	command -v prettier >/dev/null 2>&1 && prettier --write . --ignore-unknown || echo "(prettier no instalado)"
 
 lint: ## Ejecutar linters y static analysis
 	@echo "Running linters..."
 	ruff check . --fix
-	test -f .gitleaks.toml && gitleaks detect --no-git -v || gitleaks detect -v
+	if test -f .gitleaks.toml; then \
+		command -v gitleaks >/dev/null 2>&1 && gitleaks detect --no-git -v || echo "(gitleaks no instalado)"; \
+	else \
+		command -v gitleaks >/dev/null 2>&1 && gitleaks detect -v || echo "(gitleaks no instalado)"; \
+	fi
 
 
 

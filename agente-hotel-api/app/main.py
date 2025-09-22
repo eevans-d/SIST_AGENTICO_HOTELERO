@@ -7,7 +7,6 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from fastapi import Request
 from starlette.responses import Response
-from typing import Any
 
 from app.core.settings import settings
 from app.core.logging import setup_logging, logger
