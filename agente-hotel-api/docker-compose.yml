@@ -175,12 +175,9 @@ services:
       - backend_network
     volumes:
       - ./docker/alertmanager/config.yml:/etc/alertmanager/config.yml:ro
+      - ./docker/alertmanager/entrypoint.sh:/entrypoint.sh:ro
       - alertmanager_data:/alertmanager
-    command:
-      - "--config.file=/etc/alertmanager/config.yml"
-      - "--storage.path=/alertmanager"
-      - "--log.level=info"
-      - "--config.expand-env=true"
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9093/-/healthy"]
       interval: 15s
