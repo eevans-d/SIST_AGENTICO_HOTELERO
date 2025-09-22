@@ -106,5 +106,30 @@ test-alert-429: ## Genera tráfico para provocar 429 en /webhooks/whatsapp
 	@chmod +x scripts/generate_429.sh
 	@HOST=localhost PORT=8000 REQUESTS=90 DELAY_MS=30 bash scripts/generate_429.sh
 
+alerts-enable-test: ## Activa alerta AlwaysFiring (critica) y reinicia Prometheus
+	@echo "Activando alerta AlwaysFiring..."
+	@cat > docker/prometheus/alerts-extra.yml << 'EOF'
+groups:
+	- name: agente-tests
+		interval: 15s
+		rules:
+			- alert: AlwaysFiring
+				expr: vector(1)
+				for: 1m
+				labels:
+					severity: critical
+				annotations:
+					summary: "Alerta de prueba (AlwaysFiring)"
+					description: "Alerta sintética para validar receivers y ruteo."
+EOF
+	@docker compose restart prometheus alertmanager
+	@echo "✅ AlwaysFiring activada. Observa Alertmanager/Grafana."
+
+alerts-disable-test: ## Desactiva alerta AlwaysFiring y reinicia Prometheus
+	@echo "Desactivando alerta AlwaysFiring..."
+	@echo 'groups: []' > docker/prometheus/alerts-extra.yml
+	@docker compose restart prometheus alertmanager
+	@echo "✅ AlwaysFiring desactivada."
+
 
 .DEFAULT_GOAL := help
