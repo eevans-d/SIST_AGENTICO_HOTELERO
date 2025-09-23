@@ -1,0 +1,18 @@
+groups:
+  - name: agente-recording
+    interval: 30s
+    rules:
+      - record: orchestrator_error_percentage
+        expr: 100 * (sum by (intent) (rate(orchestrator_errors_total[5m])) / sum by (intent) (rate(orchestrator_messages_total[5m])))
+
+      - record: orchestrator_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le, intent) (rate(orchestrator_latency_seconds_bucket[5m])))
+
+      - record: pms_api_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(pms_api_latency_seconds_bucket[5m])))
+
+      - record: http_5xx_rate_by_endpoint
+        expr: sum by (endpoint) (rate(http_requests_total{status_code=~"5.."}[5m]))
+
+      - record: orchestrator_message_rate_by_intent_status
+        expr: sum by (intent, status) (rate(orchestrator_messages_total[5m]))
