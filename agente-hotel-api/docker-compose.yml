@@ -1,7 +1,5 @@
 # [PROMPT GA-01] Stack de Docker Compose para Agente Hotelero v2.1
 
-version: "3.8"
-
 services:
   # ----------------------------------------------------------------------------
   # SERVICIOS DEL PMS (QLOAPPS)
