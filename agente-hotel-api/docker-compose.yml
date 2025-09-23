@@ -184,6 +184,24 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # ----------------------------------------------------------------------------
+  # HEALTH PINGER (mantiene frescas métricas de readiness)
+  # ----------------------------------------------------------------------------
+  health-pinger:
+    image: busybox:latest
+    container_name: agente_health_pinger
+    depends_on:
+      - agente-api
+    networks:
+      - backend_network
+    environment:
+      - HEALTH_URL=http://agente-api:8000/health/ready
+      - INTERVAL=30
+    volumes:
+      - ./scripts/health-pinger.sh:/health-pinger.sh:ro
+    command: ["/bin/sh", "/health-pinger.sh"]
+    restart: unless-stopped
+
 # ==============================================================================
 # REDES Y VOLÚMENES
 # ==============================================================================

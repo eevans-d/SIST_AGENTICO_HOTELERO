@@ -6,6 +6,13 @@
       "title": "Dependencies Up",
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ {"color": "red", "value": null}, {"color": "green", "value": 1} ] },
+          "mappings": []
+        },
+        "overrides": []
+      },
       "targets": [
         { "expr": "dependency_up", "refId": "A" }
       ]
@@ -15,6 +22,12 @@
       "title": "Overall Readiness",
       "gridPos": {"h": 4, "w": 12, "x": 0, "y": 8},
       "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ {"color": "red", "value": null}, {"color": "green", "value": 1} ] }
+        },
+        "overrides": []
+      },
       "targets": [
         { "expr": "readiness_up", "refId": "A" }
       ]
