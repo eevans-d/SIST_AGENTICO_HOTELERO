@@ -41,6 +41,18 @@
 1. Verificar comprobante en dashboard.
 2. Click en "Confirmar Reserva".
 3. Verificar voucher enviado al cliente.
+ 
+ ### 📘 RUNBOOK: Alerta DependencyDown
+ - Síntoma: Alertmanager muestra "Alguna dependencia está caída".
+ - Diagnóstico rápido:
+	 1) Abrir Grafana → Dashboard "Readiness & Dependencies".
+	 2) Ver `dependency_up` para identificar cuál (database, redis, pms) está en 0.
+	 3) Revisar `/health/ready` para obtener detalles.
+ - Acciones sugeridas:
+	 - Database: verificar contenedor `postgres`, logs y conectividad; credenciales en `.env`.
+	 - Redis: verificar contenedor `redis`, salud y puertos.
+	 - PMS: si `pms_type=mock`, es esperado que esté en 1; si real, validar `PMS_BASE_URL` y disponibilidad del PMS.
+ - Notas: la alerta solo dispara si hubo checks de readiness recientes (<5m) para evitar falsos positivos.
 
 ---
 

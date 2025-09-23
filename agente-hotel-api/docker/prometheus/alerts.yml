@@ -39,13 +39,13 @@ groups:
           description: "El estado del Circuit Breaker del PMS > 0 por más de 2m."
 
       - alert: DependencyDown
-        expr: min_over_time(readiness_up[2m]) < 1
+        expr: (min_over_time(readiness_up[2m]) < 1) and (time() - readiness_last_check_timestamp < 300)
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Alguna dependencia está caída"
-          description: "El readiness general está en 0 durante más de 2m. Revisar /health/ready y métricas dependency_up."
+          description: "El readiness general está en 0 durante más de 2m y hubo checks recientes (<5m). Revisar /health/ready y métricas dependency_up."
 
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)

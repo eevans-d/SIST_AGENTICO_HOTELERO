@@ -77,6 +77,27 @@
       ],
       "title": "Circuit Breaker state",
       "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 6,
+      "targets": [
+        { "expr": "rate(pms_cache_hits_total[5m])", "legendFormat": "hits", "refId": "A" },
+        { "expr": "rate(pms_cache_misses_total[5m])", "legendFormat": "misses", "refId": "B" }
+      ],
+      "title": "PMS Cache hits/misses (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 7,
+      "targets": [
+        { "expr": "sum by (error_type) (rate(pms_errors_total[10m]))", "legendFormat": "{{error_type}}", "refId": "A" }
+      ],
+      "title": "PMS Errors by type (10m)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
