@@ -1,0 +1,65 @@
+{
+  "project": {
+    "repo": "local",
+    "branch": "main",
+    "root": "/home/eevan/ProyectosIA/SIST_AGENTICO_HOTELERO/agente-hotel-api/"
+  },
+  "analysis_date": "2025-09-23T18:00:00Z",
+  "scores": {
+    "security": 75,
+    "quality": 90,
+    "infra": 85,
+    "docs": 95,
+    "overall": 86
+  },
+  "findings": [
+    {
+      "id": "SEC-001",
+      "severity": "ALTA",
+      "category": "Seguridad",
+      "file": "app/core/settings.py",
+      "evidence": "pms_api_key: SecretStr = SecretStr(\"dev-pms-key\")",
+      "remediation": "Eliminar los valores por defecto para secretos. Forzar su carga desde el entorno.",
+      "estimate_hours": 1
+    },
+    {
+      "id": "INF-001",
+      "severity": "MEDIA",
+      "category": "Infraestructura",
+      "file": "docker-compose.production.yml",
+      "evidence": "dockerfile: Dockerfile.production",
+      "remediation": "Crear el archivo Dockerfile.production o corregir la referencia para que apunte al Dockerfile principal si es el mismo.",
+      "estimate_hours": 0.5
+    },
+    {
+      "id": "TEST-001",
+      "severity": "MEDIA",
+      "category": "Tests",
+      "file": "N/A",
+      "evidence": "Error al ejecutar 'poetry run pytest' en el entorno de auditoría.",
+      "remediation": "Asegurar que el entorno de CI/auditoría esté configurado para poder ejecutar la suite de tests, posiblemente resolviendo problemas de path o workspaces.",
+      "estimate_hours": 2
+    },
+    {
+      "id": "INF-002",
+      "severity": "BAJA",
+      "category": "Infraestructura",
+      "file": "scripts/deploy.sh",
+      "evidence": "Script es un placeholder sin lógica de despliegue real.",
+      "remediation": "Implementar la lógica de despliegue real en el script, incluyendo pasos para pull, build, migración y reinicio de servicios.",
+      "estimate_hours": 4
+    }
+  ],
+  "commands_ran": [
+    "glob",
+    "read_file",
+    "search_file_content",
+    "run_shell_command (mkdir)",
+    "run_shell_command (poetry run pytest -q) [FALLIDO]"
+  ],
+  "artifacts": [
+    "audit-report.md",
+    "audit-metadata.json",
+    "scripts/run-audit.sh"
+  ]
+}
