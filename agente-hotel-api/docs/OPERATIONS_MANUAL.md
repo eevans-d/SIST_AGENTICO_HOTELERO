@@ -76,6 +76,17 @@
 	 - Revisar latencia y errores del PMS; aplicar circuit breaker/reintentos si no estuvieran activos.
 	 - Verificar Redis y Postgres (locks/sesiones/DB) en `/health/ready`.
 
+	 ### 📘 RUNBOOK: Orchestrator SLO Degradation
+	 - Síntoma: Alertmanager muestra "SLO del Orchestrator en degradación" (warning/critical).
+	 - Diagnóstico rápido:
+		 1) Grafana → "Agente - Overview" → panel "Orchestrator success rate (global, %)" y "by intent".
+		 2) Identificar intents con peor success rate y correlacionar con paneles de error% y p95.
+		 3) Revisar dependencia PMS/Redis si los intents involucrados llaman servicios externos.
+	 - Acciones sugeridas:
+		 - Mitigar intents problemáticos: degradación controlada, respuestas de fallback.
+		 - Abrir incidente si el success rate <97% por más de 10m.
+		 - Ajustar umbrales tras análisis de tráfico real.
+
 	 ### 📘 RUNBOOK: HighHttp5xxRate
 	 - Síntoma: Alertmanager muestra "Alta tasa de 5xx" en un endpoint.
 	 - Diagnóstico rápido:

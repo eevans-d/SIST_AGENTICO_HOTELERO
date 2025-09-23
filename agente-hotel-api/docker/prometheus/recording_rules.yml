@@ -16,3 +16,10 @@ groups:
 
       - record: orchestrator_message_rate_by_intent_status
         expr: sum by (intent, status) (rate(orchestrator_messages_total[5m]))
+
+      # SLO: success rate del Orchestrator
+      - record: orchestrator_success_rate
+        expr: 100 * (sum by (intent) (rate(orchestrator_messages_total{status="ok"}[5m])) / sum by (intent) (rate(orchestrator_messages_total[5m])))
+
+      - record: orchestrator_success_rate_all
+        expr: 100 * (sum(rate(orchestrator_messages_total{status="ok"}[5m])) / sum(rate(orchestrator_messages_total[5m])))

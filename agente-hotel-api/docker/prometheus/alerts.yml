@@ -88,6 +88,28 @@ groups:
           runbook_url: "https://grafana.local/runbooks#orchestratorhighlatencyp95"
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=8"
 
+      - alert: OrchestratorSLODegradationWarning
+        expr: orchestrator_success_rate_all < 99
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLO del Orchestrator en degradación (warning)"
+          description: "El success rate global del orquestador está por debajo de 99% durante 30m. Revisar intents con mayor error% y dependencias."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=12"
+
+      - alert: OrchestratorSLODegradationCritical
+        expr: orchestrator_success_rate_all < 97
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO del Orchestrator en degradación (critical)"
+          description: "El success rate global del orquestador está por debajo de 97% durante 10m. Atender de inmediato; revisar intents top-k por error% y latencia."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=12"
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.
