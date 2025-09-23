@@ -76,6 +76,39 @@
 	 - Revisar latencia y errores del PMS; aplicar circuit breaker/reintentos si no estuvieran activos.
 	 - Verificar Redis y Postgres (locks/sesiones/DB) en `/health/ready`.
 
+	 ### 📘 RUNBOOK: HighHttp5xxRate
+	 - Síntoma: Alertmanager muestra "Alta tasa de 5xx" en un endpoint.
+	 - Diagnóstico rápido:
+		 1) Grafana → "Agente - Overview" → panel "HTTP 5xx rate (5m)".
+		 2) Revisar logs de `agente-api` y NGINX para ese endpoint.
+		 3) Correlacionar con "Orchestrator error percentage" si aplica.
+	 - Acciones sugeridas:
+		 - Identificar excepciones frecuentes en logs y abrir issue.
+		 - Validar payloads de entrada (sanitización/validación) y dependencias externas.
+		 - Implementar manejo de errores y tests si faltan.
+
+	 ### 📘 RUNBOOK: HighPmsLatencyP95
+	 - Síntoma: p95 de PMS > umbral sostenido.
+	 - Diagnóstico rápido:
+		 1) Grafana → panel "PMS API latency p95".
+		 2) Verificar estado del PMS (servicios `qloapps`/`mysql`).
+		 3) Revisar circuit breaker y reintentos.
+	 - Acciones sugeridas:
+		 - Aumentar caching en el adapter; validar Redis.
+		 - Ajustar timeouts/backoff del adapter.
+		 - Coordinar con el equipo del PMS.
+
+	 ### 📘 RUNBOOK: CircuitBreakerOpen
+	 - Síntoma: Circuit Breaker abierto por más de 2m.
+	 - Diagnóstico rápido:
+		 1) Grafana → panel "Circuit Breaker state" (rojo cuando >0).
+		 2) Correlacionar con latencia/errores del PMS.
+		 3) Logs del adapter para ver causas (rate limit, timeouts, 5xx).
+	 - Acciones sugeridas:
+		 - Verificar credenciales/endpoints del PMS.
+		 - Incrementar límites/retrys temporalmente si corresponde.
+		 - Desplegar mitigaciones (cache warmup, degradación controlada).
+
 ---
 
 ## Mantenimiento

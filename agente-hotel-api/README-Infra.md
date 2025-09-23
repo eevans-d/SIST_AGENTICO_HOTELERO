@@ -119,6 +119,10 @@ Notas:
   - `HighWebhook429Rate` (tasa de 429 en `/webhooks/whatsapp` > 0.2 rps, 5m)
   - `HighPmsLatencyP95` (p95 PMS > 1s, 10m)
   - `CircuitBreakerOpen` (CB > 0 por 2m)
+  - `DependencyDown` (readiness_up < 1 con checks recientes, 2m, warning)
+  - `OrchestratorHighErrorRateWarning` (error rate por intent > 5% con piso de tráfico > 0.2 rps, 10m)
+  - `OrchestratorHighErrorRateCritical` (error rate por intent > 20% con piso de tráfico > 0.5 rps, 5m)
+  - `OrchestratorHighLatencyP95` (p95 del orquestador > 2s por 10m)
 
 Ajustes:
   - Editar umbrales/ventanas en `alerts.yml` según tráfico real.
@@ -163,6 +167,7 @@ Inspección rápida:
     - Detalle de alertas firing y tiempo reciente en estado firing por regla.
   - `Agente - Overview` (`docker/grafana/dashboards/agente-overview.json`):
     - Latencias de PMS (p95), requests HTTP y otras métricas generales.
+    - Paneles del Orchestrator: p95 por intent, tasa/porcentaje de errores por intent, volumen de mensajes y estado del Circuit Breaker.
   - `Webhooks - Rate Limit` (`docker/grafana/dashboards/webhooks-rate-limit.json`):
     - Enfoque en métricas de `/webhooks/whatsapp` y códigos 429.
   - `Readiness & Dependencies` (`docker/grafana/dashboards/readiness-overview.json`):

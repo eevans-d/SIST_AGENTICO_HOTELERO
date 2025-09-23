@@ -10,6 +10,8 @@ groups:
         annotations:
           summary: "Alta tasa de 5xx en {{ $labels.endpoint }}"
           description: "La tasa de respuestas 5xx supera 0.1 rps en {{ $labels.endpoint }} durante 5m."
+          runbook_url: "https://grafana.local/runbooks#highhttp5xxrate"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=2"
 
       - alert: HighWebhook429Rate
         expr: sum(rate(http_requests_total{endpoint="/webhooks/whatsapp",status_code="429"}[5m])) > 0.2
@@ -28,6 +30,8 @@ groups:
         annotations:
           summary: "Latencia p95 alta contra PMS"
           description: "p95 de latencia de PMS > 1s por más de 10m."
+          runbook_url: "https://grafana.local/runbooks#highpmslatencyp95"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=3"
 
       - alert: CircuitBreakerOpen
         expr: max_over_time(pms_circuit_breaker_state[1m]) > 0
@@ -37,6 +41,8 @@ groups:
         annotations:
           summary: "Circuit Breaker abierto"
           description: "El estado del Circuit Breaker del PMS > 0 por más de 2m."
+          runbook_url: "https://grafana.local/runbooks#circuitbreakeropen"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=5"
 
       - alert: DependencyDown
         expr: (min_over_time(readiness_up[2m]) < 1) and (time() - readiness_last_check_timestamp < 300)
@@ -46,15 +52,30 @@ groups:
         annotations:
           summary: "Alguna dependencia está caída"
           description: "El readiness general está en 0 durante más de 2m y hubo checks recientes (<5m). Revisar /health/ready y métricas dependency_up."
+          runbook_url: "https://grafana.local/runbooks#dependencydown"
+          dashboard: "grafana:/d/readiness-overview/Readiness%20%26%20Dependencies"
 
-      - alert: OrchestratorHighErrorRate
-        expr: sum by (intent) (rate(orchestrator_errors_total[5m])) > 0.05
-        for: 5m
+      - alert: OrchestratorHighErrorRateWarning
+        expr: (sum by (intent) (rate(orchestrator_errors_total[5m])) / sum by (intent) (rate(orchestrator_messages_total[5m]))) > 0.05 and sum by (intent) (rate(orchestrator_messages_total[5m])) > 0.2
+        for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Alta tasa de errores en Orchestrator"
-          description: "La tasa de errores del orquestador por intent supera 0.05 rps durante 5m. Revisar logs e integraciones (PMS, NLP)."
+          summary: "Alta tasa de errores en Orchestrator (warning)"
+          description: "El error rate del orquestador por intent > 5% durante 10m con tráfico > 0.2 rps. Revisar logs e integraciones (PMS, NLP)."
+          runbook_url: "https://grafana.local/runbooks#orchestratorhigherrorrate"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=11"
+
+      - alert: OrchestratorHighErrorRateCritical
+        expr: (sum by (intent) (rate(orchestrator_errors_total[5m])) / sum by (intent) (rate(orchestrator_messages_total[5m]))) > 0.2 and sum by (intent) (rate(orchestrator_messages_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alta tasa de errores en Orchestrator (critical)"
+          description: "El error rate del orquestador por intent > 20% durante 5m con tráfico > 0.5 rps. Priorizar investigación."
+          runbook_url: "https://grafana.local/runbooks#orchestratorhigherrorrate"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=11"
 
       - alert: OrchestratorHighLatencyP95
         expr: max by (intent) (histogram_quantile(0.95, sum by (le, intent) (rate(orchestrator_latency_seconds_bucket[5m])))) > 2
@@ -64,6 +85,8 @@ groups:
         annotations:
           summary: "Latencia p95 alta en Orchestrator"
           description: "El p95 de latencia del orquestador supera 2s durante 10m para algún intent. Revisar dependencias (PMS, Redis) y carga."
+          runbook_url: "https://grafana.local/runbooks#orchestratorhighlatencyp95"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=8"
 
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
