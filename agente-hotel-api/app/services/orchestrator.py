@@ -1,5 +1,7 @@
 # [PROMPT 2.7] app/services/orchestrator.py
 
+import time
+from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
 from .audio_processor import AudioProcessor
@@ -21,17 +23,31 @@ class Orchestrator:
         self.template_service = TemplateService()
 
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
+        start = time.time()
+        intent_name = "unknown"
+        status = "ok"
         if message.tipo == "audio":
+            if not message.media_url:
+                raise ValueError("Missing media_url for audio message")
             stt_result = await self.audio_processor.transcribe_whatsapp_audio(message.media_url)
             message.texto = stt_result["text"]
             message.metadata["confidence_stt"] = stt_result["confidence"]
 
-        nlp_result = await self.nlp_engine.process_message(message.texto)
-        session = await self.session_manager.get_or_create_session(message.user_id, message.canal)
-
-        response_text = await self.handle_intent(nlp_result, session, message)
-
-        return {"response": response_text}
+        try:
+            text = message.texto or ""
+            nlp_result = await self.nlp_engine.process_message(text)
+            intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+            session = await self.session_manager.get_or_create_session(message.user_id, message.canal)
+            response_text = await self.handle_intent(nlp_result, session, message)
+            return {"response": response_text}
+        except Exception as e:
+            status = "error"
+            orchestrator_errors_total.labels(intent=intent_name, error_type=type(e).__name__).inc()
+            raise
+        finally:
+            duration = time.time() - start
+            orchestrator_latency.labels(intent=intent_name, status=status).observe(duration)
+            orchestrator_messages_total.labels(intent=intent_name, status=status).inc()
 
     async def handle_intent(self, nlp_result: dict, session: dict, message: UnifiedMessage) -> str:
         intent = nlp_result.get("intent", {}).get("name")
@@ -58,3 +74,17 @@ class Orchestrator:
 
         else:
             return "No entendí tu consulta. ¿Podrías reformularla?"
+
+
+# Prometheus metrics (module-level)
+orchestrator_latency = Histogram(
+    "orchestrator_latency_seconds",
+    "Tiempo para procesar un mensaje unificado por intent y estado",
+    ["intent", "status"],
+)
+orchestrator_messages_total = Counter(
+    "orchestrator_messages_total", "Mensajes procesados por intent y estado", ["intent", "status"]
+)
+orchestrator_errors_total = Counter(
+    "orchestrator_errors_total", "Errores no controlados por intent y tipo", ["intent", "error_type"]
+)

@@ -98,6 +98,48 @@
       ],
       "title": "PMS Errors by type (10m)",
       "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, intent) (rate(orchestrator_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{intent}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Orchestrator latency p95 by intent (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "sum by (intent, status) (rate(orchestrator_messages_total[5m]))",
+          "legendFormat": "{{intent}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Orchestrator message rate by intent/status (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "sum by (intent) (rate(orchestrator_errors_total[5m]))",
+          "legendFormat": "{{intent}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Orchestrator error rate by intent (5m)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

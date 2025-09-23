@@ -1,19 +1,22 @@
 # [PROMPT 2.9] app/services/metrics_service.py
 
-from prometheus_client import Histogram, Counter
+from prometheus_client import Histogram, Counter, Gauge
 
 
 class MetricsService:
     def __init__(self) -> None:
-        # Histograma de latencia por método y endpoint
+        # Histograma de latencia por método y endpoint (nombre alineado a dashboards)
         self.request_latency = Histogram(
-            "http_request_duration_seconds",
+            "request_duration_seconds",
             "Request duration in seconds",
             ["method", "endpoint", "status_code"],
         )
+        # Contador total de requests (nombre alineado a dashboards/alertas)
         self.requests_total = Counter(
-            "http_requests_total_labeled", "HTTP requests total", ["method", "endpoint", "status_code"]
+            "http_requests_total", "HTTP requests total", ["method", "endpoint", "status_code"]
         )
+        # Gauge de conexiones activas (opcional)
+        self.active_connections = Gauge("active_connections", "Active connections")
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
         labels = {

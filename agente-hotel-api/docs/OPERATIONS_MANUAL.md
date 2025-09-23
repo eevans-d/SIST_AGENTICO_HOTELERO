@@ -54,6 +54,17 @@
 	 - PMS: si `pms_type=mock`, es esperado que esté en 1; si real, validar `PMS_BASE_URL` y disponibilidad del PMS.
  - Notas: la alerta solo dispara si hubo checks de readiness recientes (<5m) para evitar falsos positivos.
 
+ ### 📘 RUNBOOK: OrchestratorHighErrorRate
+ - Síntoma: Alertmanager muestra "Alta tasa de errores en Orchestrator".
+ - Diagnóstico rápido:
+	 1) Abrir Grafana → Dashboard "Agente - Overview".
+	 2) Revisar panel "Orchestrator error rate by intent (5m)" para identificar el intent afectado.
+	 3) Ver panel "Orchestrator latency p95 by intent" y "PMS API latency p95" para correlacionar con problemas externos.
+ - Acciones sugeridas:
+	 - Chequear logs de la API (docker compose logs agente-api) filtrando por el intent y correlations IDs.
+	 - Validar la salud del PMS (/health/ready, paneles de PMS) si el intent involucra llamadas al PMS.
+	 - Si el error aparece en intents de audio, revisar el flujo de STT/TTS.
+
 ---
 
 ## Mantenimiento

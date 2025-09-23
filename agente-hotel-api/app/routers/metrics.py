@@ -1,16 +1,9 @@
 # [PROMPT GA-02] app/routers/metrics.py
 
 from fastapi import APIRouter, Response
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from prometheus_client import Gauge, generate_latest
 
 router = APIRouter(tags=["Metrics"])
-
-# Definir métricas
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status_code"])
-
-request_duration_seconds = Histogram("request_duration_seconds", "Request duration", ["method", "endpoint"])
-
-active_connections = Gauge("active_connections", "Active connections")
 
 # Readiness/Dependencies metrics
 # - dependency_up{name}: 1 si la dependencia está OK en el último readiness check, 0 si no

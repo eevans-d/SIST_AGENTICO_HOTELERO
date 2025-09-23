@@ -47,6 +47,15 @@ groups:
           summary: "Alguna dependencia está caída"
           description: "El readiness general está en 0 durante más de 2m y hubo checks recientes (<5m). Revisar /health/ready y métricas dependency_up."
 
+      - alert: OrchestratorHighErrorRate
+        expr: sum by (intent) (rate(orchestrator_errors_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta tasa de errores en Orchestrator"
+          description: "La tasa de errores del orquestador por intent supera 0.05 rps durante 5m. Revisar logs e integraciones (PMS, NLP)."
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.
