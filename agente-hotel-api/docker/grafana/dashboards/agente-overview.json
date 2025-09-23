@@ -72,6 +72,15 @@
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ]
+          }
+        },
+        "overrides": []
+      },
       "targets": [
         { "expr": "max_over_time(pms_circuit_breaker_state[1m])", "legendFormat": "CB state", "refId": "A" }
       ],

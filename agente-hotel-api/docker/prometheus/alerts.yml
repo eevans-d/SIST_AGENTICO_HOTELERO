@@ -56,6 +56,15 @@ groups:
           summary: "Alta tasa de errores en Orchestrator"
           description: "La tasa de errores del orquestador por intent supera 0.05 rps durante 5m. Revisar logs e integraciones (PMS, NLP)."
 
+      - alert: OrchestratorHighLatencyP95
+        expr: max by (intent) (histogram_quantile(0.95, sum by (le, intent) (rate(orchestrator_latency_seconds_bucket[5m])))) > 2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Latencia p95 alta en Orchestrator"
+          description: "El p95 de latencia del orquestador supera 2s durante 10m para algún intent. Revisar dependencias (PMS, Redis) y carga."
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.

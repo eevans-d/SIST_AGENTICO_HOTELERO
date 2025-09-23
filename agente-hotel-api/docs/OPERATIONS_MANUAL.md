@@ -65,6 +65,17 @@
 	 - Validar la salud del PMS (/health/ready, paneles de PMS) si el intent involucra llamadas al PMS.
 	 - Si el error aparece en intents de audio, revisar el flujo de STT/TTS.
 
+ ### 📘 RUNBOOK: OrchestratorHighLatencyP95
+ - Síntoma: Alertmanager muestra "Latencia p95 alta en Orchestrator".
+ - Diagnóstico rápido:
+	 1) Grafana → "Agente - Overview" → panel "Orchestrator latency p95 by intent".
+	 2) Correlacionar con "PMS API latency p95" y estado del Circuit Breaker.
+	 3) Verificar tasa de requests (carga) y reintentos.
+ - Acciones sugeridas:
+	 - Escalar horizontalmente `agente-api` si la carga es sostenida.
+	 - Revisar latencia y errores del PMS; aplicar circuit breaker/reintentos si no estuvieran activos.
+	 - Verificar Redis y Postgres (locks/sesiones/DB) en `/health/ready`.
+
 ---
 
 ## Mantenimiento
