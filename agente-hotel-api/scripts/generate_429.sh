@@ -1,6 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Genera tráfico concurrente al endpoint /webhooks/whatsapp para provocar 429
+
+HOST=${HOST:-localhost}
+PORT=${PORT:-8000}
+REQUESTS=${REQUESTS:-60}
+DELAY_MS=${DELAY_MS:-50}
+
+URL="http://$HOST:$PORT/webhooks/whatsapp"
+
+echo "Enviando $REQUESTS requests a $URL con delay ${DELAY_MS}ms"
+
+for i in $(seq 1 "$REQUESTS"); do
+  (
+    # Cuerpo mínimo válido para el webhook; ajustar si hay validación estricta
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST "$URL" \
+      -H 'Content-Type: application/json' \
+      -d '{"entry": [{"changes": [{"value": {"messages": [{"from": "123", "id": "abc", "timestamp": "0", "type": "text", "text": {"body": "ping"}}]}}]}]}' \
+      || true
+    sleep $(awk "BEGIN {print $DELAY_MS/1000}")
+  ) &
+done
+
+wait || true
+echo "Listo. Revisa Prometheus/Alertas."
+#!/usr/bin/env bash
+set -euo pipefail
+
 HOST="${HOST:-localhost}"
 PORT="${PORT:-8000}"
 REQUESTS="${REQUESTS:-80}"
