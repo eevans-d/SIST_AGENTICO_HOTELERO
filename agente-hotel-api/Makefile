@@ -100,13 +100,16 @@ alertmanager-logs: ## Muestra logs de Alertmanager
 	@docker compose logs -f alertmanager
 
 alertmanager-config: ## Muestra el config generado por entrypoint
-	@docker exec -it agente_alertmanager sh -c 'cat /etc/alertmanager/generated.yml || echo "generated.yml no disponible aún"'
+	@docker exec -it agente_alertmanager sh -c 'cat /tmp/generated.yml || echo "generated.yml no disponible aún"'
 
 prometheus-rules-status: ## Muestra el estado de reglas cargadas en Prometheus (JSON)
 	@docker exec -it agente_prometheus sh -c 'wget -qO- http://localhost:9090/api/v1/rules || echo "Prometheus no accesible"'
 
 alertmanager-alerts: ## Lista alertas activas en Alertmanager (JSON)
 	@docker exec -it agente_alertmanager sh -c 'wget -qO- http://localhost:9093/api/v2/alerts || echo "Alertmanager no accesible"'
+
+prometheus-reload: ## Solicita recarga de configuración de Prometheus (HTTP POST /-/reload)
+	@docker exec -it agente_prometheus sh -c 'wget --spider --post-data="" -q http://localhost:9090/-/reload 2>/dev/null && echo "(reload enviado)" || echo "Prometheus no accesible"'
 
 test-alert-429: ## Genera tráfico para provocar 429 en /webhooks/whatsapp
 	@chmod +x scripts/generate_429.sh

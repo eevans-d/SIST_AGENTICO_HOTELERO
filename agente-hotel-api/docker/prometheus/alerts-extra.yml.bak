@@ -1,0 +1,5 @@
+# Archivo de reglas adicional para pruebas locales.
+# Deja este archivo vacío por defecto. Usa Makefile para activar/desactivar
+# una alerta sintética AlwaysFiring sin modificar alerts.yml principal.
+
+groups: []

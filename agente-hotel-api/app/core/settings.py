@@ -24,7 +24,11 @@ class TTSEngine(str, Enum):
 
 class Settings(BaseSettings):
     # Config base (Pydantic v2)
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore",  # Ignora variables extra de .env usadas por infraestructura/monitorización
+    )
 
     # App metadata
     app_name: str = "Agente Hotel API"
