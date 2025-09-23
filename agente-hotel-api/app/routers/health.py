@@ -13,6 +13,7 @@ from ..core.redis_client import get_redis
 from ..core.settings import settings
 from ..core.logging import logger
 from ..models.schemas import HealthCheck, ReadinessCheck, LivenessCheck
+from .metrics import dependency_up, readiness_up, readiness_last_check_timestamp
 
 router = APIRouter(tags=["Health"])
 
@@ -25,8 +26,12 @@ async def health_check():
 
 @router.get("/health/ready", response_model=ReadinessCheck)
 async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redis.Redis = Depends(get_redis)):
-    """Verifica que todas las dependencias estén listas"""
-    checks = {"database": False, "redis": False, "pms": False}
+    """Verifica que todas las dependencias estén listas.
+
+    - DB y Redis son siempre requeridos.
+    - PMS es opcional: solo se chequea si `check_pms_in_readiness` es True y `pms_type` no es `mock`.
+    """
+    checks = {"database": False, "redis": False}
 
     # Check PostgreSQL
     try:
@@ -42,16 +47,31 @@ async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redi
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
 
-    # Check PMS (opcional)
-    if getattr(settings, "check_pms_in_readiness", False):
+    # PMS: opcional por configuración y no bloquea si es tipo MOCK
+    pms_required = bool(getattr(settings, "check_pms_in_readiness", False))
+    pms_type = str(getattr(settings, "pms_type", "qloapps")).lower()
+    if not pms_required or pms_type == "mock":
+        checks["pms"] = True
+    else:
+        checks["pms"] = False
         try:
             async with httpx.AsyncClient() as client:
+                # Intento simple al base_url del PMS; podría reemplazarse por un endpoint /health propio del PMS
                 response = await client.get(str(settings.pms_base_url), timeout=5.0)
                 checks["pms"] = response.status_code < 500
         except Exception as e:
             logger.error(f"PMS health check failed: {e}")
 
     all_healthy = all(checks.values())
+
+    # Actualizar métricas de readiness/dependencias
+    try:
+        for dep, ok in checks.items():
+            dependency_up.labels(name=dep).set(1 if ok else 0)
+        readiness_up.set(1 if all_healthy else 0)
+        readiness_last_check_timestamp.set(int(datetime.now(timezone.utc).timestamp()))
+    except Exception as e:
+        logger.error(f"Failed to update readiness metrics: {e}")
     status_code = 200 if all_healthy else 503
 
     return JSONResponse(

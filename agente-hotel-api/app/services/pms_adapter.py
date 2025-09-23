@@ -155,3 +155,44 @@ class QloAppsAdapter:
                 }
             )
         return normalized
+
+
+class MockPMSAdapter:
+    """Adaptador de prueba que emula respuestas del PMS sin llamadas HTTP.
+
+    Útil para entornos de desarrollo y tests de integración donde no hay PMS real.
+    Implementa el mismo contrato público que QloAppsAdapter: check_availability y create_reservation.
+    """
+
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+
+    async def check_availability(
+        self, check_in: date, check_out: date, guests: int = 1, room_type: Optional[str] = None
+    ) -> List[dict]:
+        # Respuesta determinística de ejemplo; se podría enriquecer con params si es necesario
+        return [
+            {
+                "room_id": "MOCK-101",
+                "room_type": room_type or "Doble",
+                "price_per_night": 12345.0,
+                "currency": "ARS",
+            }
+        ]
+
+    async def create_reservation(self, reservation_data: dict) -> dict:
+        # Devuelve una reserva simulada con un UUID
+        rid = reservation_data.get("reservation_uuid") or str(uuid4())
+        return {
+            "reservation_uuid": rid,
+            "status": "confirmed",
+        }
+
+
+def get_pms_adapter(redis_client: redis.Redis):
+    """Fábrica de adaptadores PMS según settings.pms_type."""
+    from ..core.settings import settings as app_settings
+
+    if str(app_settings.pms_type).lower() == "mock":
+        return MockPMSAdapter(redis_client)
+    return QloAppsAdapter(redis_client)

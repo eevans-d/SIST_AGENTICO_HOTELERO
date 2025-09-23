@@ -161,3 +161,23 @@ Inspección rápida:
     - KPIs de alertas activas (total, críticas, warning).
     - Distribución por severidad.
     - Detalle de alertas firing y tiempo reciente en estado firing por regla.
+  - `Agente - Overview` (`docker/grafana/dashboards/agente-overview.json`):
+    - Latencias de PMS (p95), requests HTTP y otras métricas generales.
+  - `Webhooks - Rate Limit` (`docker/grafana/dashboards/webhooks-rate-limit.json`):
+    - Enfoque en métricas de `/webhooks/whatsapp` y códigos 429.
+  - `Readiness & Dependencies` (`docker/grafana/dashboards/readiness-overview.json`):
+    - Gauge por dependencia (`dependency_up{name}`)
+    - Estado global (`readiness_up`)
+    - Serie temporal de readiness
+
+## Métricas de Readiness
+
+La ruta `/health/ready` ahora actualiza métricas Prometheus para facilitar observabilidad:
+
+- `dependency_up{name}` (Gauge): 1 si la dependencia está OK (database, redis, pms), 0 si falla.
+- `readiness_up` (Gauge): 1 si todas las dependencias están OK, 0 si alguna falla.
+- `readiness_last_check_timestamp` (Gauge): timestamp epoch del último check.
+
+Alerta relacionada:
+
+- `DependencyDown` (warning): `readiness_up < 1` durante más de 2m. Revisar `/health/ready` y los `dependency_up` para diagnóstico rápido.

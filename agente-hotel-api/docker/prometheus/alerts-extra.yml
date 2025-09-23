@@ -1,12 +1,5 @@
-groups:
-  - name: agente-test
-    interval: 15s
-    rules:
-      - alert: AlwaysFiring
-        expr: vector(1)
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Alerta de prueba (AlwaysFiring)"
-          description: "Alerta sintética para validar receivers y ruteo."
+# Archivo de reglas adicional para pruebas locales.
+# Deja este archivo vacío por defecto. Usa Makefile para activar/desactivar
+# una alerta sintética AlwaysFiring sin modificar alerts.yml principal.
+
+groups: []

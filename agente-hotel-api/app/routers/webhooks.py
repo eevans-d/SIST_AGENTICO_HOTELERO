@@ -12,7 +12,7 @@ from ..core.settings import settings
 from ..core.redis_client import get_redis
 from ..core.ratelimit import limit
 from ..services.orchestrator import Orchestrator
-from ..services.pms_adapter import QloAppsAdapter
+from ..services.pms_adapter import get_pms_adapter
 from ..services.session_manager import SessionManager
 from ..services.lock_service import LockService
 from ..services.message_gateway import MessageGateway
@@ -98,7 +98,7 @@ async def handle_whatsapp_webhook(request: Request):
     # Asegurar tipado para servicios que esperan redis.Redis
     redis_typed: redis.Redis = cast(redis.Redis, redis_client)
     orchestrator = Orchestrator(
-        pms_adapter=QloAppsAdapter(redis_typed),
+        pms_adapter=get_pms_adapter(redis_typed),
         session_manager=SessionManager(redis_typed),
         lock_service=LockService(redis_typed),
     )

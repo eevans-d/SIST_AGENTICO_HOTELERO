@@ -11,7 +11,7 @@ from ..models.unified_message import UnifiedMessage
 
 
 class Orchestrator:
-    def __init__(self, pms_adapter: QloAppsAdapter, session_manager: SessionManager, lock_service: LockService):
+    def __init__(self, pms_adapter, session_manager: SessionManager, lock_service: LockService):
         self.pms_adapter = pms_adapter
         self.session_manager = session_manager
         self.lock_service = lock_service

@@ -22,6 +22,11 @@ class TTSEngine(str, Enum):
     COQUI = "coqui"
 
 
+class PMSType(str, Enum):
+    QLOAPPS = "qloapps"
+    MOCK = "mock"
+
+
 class Settings(BaseSettings):
     # Config base (Pydantic v2)
     model_config = SettingsConfigDict(
@@ -36,6 +41,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # PMS Configuration
+    pms_type: PMSType = PMSType.QLOAPPS
     pms_base_url: str = "http://localhost:8080"
     pms_api_key: SecretStr = SecretStr("dev-pms-key")
     pms_timeout: int = 30
@@ -51,7 +57,13 @@ class Settings(BaseSettings):
     gmail_app_password: SecretStr = SecretStr("dev-gmail-pass")
 
     # Database & Cache
+    # Si existen variables POSTGRES_* se usará para construir postgres_url automáticamente
     postgres_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    postgres_host: Optional[str] = None
+    postgres_port: Optional[int] = None
+    postgres_db: Optional[str] = None
+    postgres_user: Optional[str] = None
+    postgres_password: Optional[SecretStr] = None
     postgres_pool_size: int = 10
     postgres_max_overflow: int = 10
     redis_url: str = "redis://localhost:6379/0"
@@ -90,6 +102,24 @@ class Settings(BaseSettings):
         ]:
             raise ValueError("Critical secret is not set for production environment")
         return v
+
+    # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo
+    @field_validator("postgres_url", mode="before")
+    @classmethod
+    def build_postgres_url(cls, v, info):
+        data = getattr(info, "data", {}) or {}
+        host = data.get("postgres_host") or None
+        port = data.get("postgres_port") or None
+        db = data.get("postgres_db") or None
+        user = data.get("postgres_user") or None
+        pwd = data.get("postgres_password")
+        pwd_val = pwd.get_secret_value() if isinstance(pwd, SecretStr) else (pwd or None)
+
+        # Si no hay suficientes datos, mantener el valor existente (por defecto o proporcionado)
+        if not (host and port and db and user and pwd_val):
+            return v
+
+        return f"postgresql+asyncpg://{user}:{pwd_val}@{host}:{port}/{db}"
 
 
 settings = Settings()

@@ -1,0 +1,32 @@
+{
+  "title": "Readiness & Dependencies",
+  "panels": [
+    {
+      "type": "bargauge",
+      "title": "Dependencies Up",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "dependency_up", "refId": "A" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Overall Readiness",
+      "gridPos": {"h": 4, "w": 12, "x": 0, "y": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "readiness_up", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Readiness over time",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "readiness_up", "refId": "A" }
+      ]
+    }
+  ]
+}
