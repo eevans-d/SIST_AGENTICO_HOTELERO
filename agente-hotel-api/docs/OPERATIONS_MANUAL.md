@@ -87,6 +87,16 @@
 		 - Abrir incidente si el success rate <97% por más de 10m.
 		 - Ajustar umbrales tras análisis de tráfico real.
 
+	 ### 📘 RUNBOOK: Orchestrator SLO Burn Rate
+	 - Síntoma: Alertmanager muestra "SLO burn rate alto/crítico".
+	 - Diagnóstico rápido:
+		 1) Grafana → paneles de success rate global y por intent, y Top intents por error %.
+		 2) Confirmar si el burn rate fast y slow superan umbrales (ver anotaciones de la alerta).
+	 - Acciones sugeridas:
+		 - Aplicar mitigaciones inmediatas en intents top-k con alto error%.
+		 - Si crítico, considerar revertir despliegues recientes relacionados.
+		 - Documentar impacto y consumo de error budget en el incidente.
+
 	 ### 📘 RUNBOOK: HighHttp5xxRate
 	 - Síntoma: Alertmanager muestra "Alta tasa de 5xx" en un endpoint.
 	 - Diagnóstico rápido:

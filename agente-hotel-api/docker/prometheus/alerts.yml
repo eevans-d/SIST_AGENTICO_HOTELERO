@@ -110,6 +110,29 @@ groups:
           runbook_url: "https://grafana.local/runbooks#orchestratorslo"
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=12"
 
+      # Burn rate SLO 99% (error budget 1%) - multi-ventana
+      - alert: OrchestratorSLOBurnRateWarning
+        expr: (orchestrator_burn_rate_fast > 2) and (orchestrator_burn_rate_slow > 1)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLO burn rate alto (warning)"
+          description: "Consumo acelerado del error budget: fast>2 y slow>1. Chequear intents con mayor error% y latencia."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=14"
+
+      - alert: OrchestratorSLOBurnRateCritical
+        expr: (orchestrator_burn_rate_fast2 > 14.4) and (orchestrator_burn_rate_slow2 > 6)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO burn rate crítico"
+          description: "Consumo muy alto del error budget: fast2>14.4 y slow2>6. Atender de inmediato."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=14"
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.

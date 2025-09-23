@@ -140,7 +140,9 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - ./docker/prometheus/alerts-extra.yml:/etc/prometheus/alerts-extra.yml:ro
-      - ./docker/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
+      - ./docker/prometheus/recording_rules.tmpl.yml:/etc/prometheus/recording_rules.tmpl.yml:ro
+      - ./docker/prometheus/prom-entrypoint.sh:/etc/prometheus/prom-entrypoint.sh:ro
+      - prometheus_gen:/etc/prometheus/generated
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -148,6 +150,11 @@ services:
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
       - "--web.enable-lifecycle"
+    entrypoint: ["/bin/sh", "/etc/prometheus/prom-entrypoint.sh"]
+    env_file:
+      - .env
+    environment:
+      - SLO_TARGET=${SLO_TARGET}
     restart: unless-stopped
 
   grafana:
@@ -218,5 +225,6 @@ volumes:
   postgres_data:
   redis_data:
   prometheus_data:
+  prometheus_gen:
   grafana_data:
   alertmanager_data:

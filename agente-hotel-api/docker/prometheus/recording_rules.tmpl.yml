@@ -17,14 +17,13 @@ groups:
       - record: orchestrator_message_rate_by_intent_status
         expr: sum by (intent, status) (rate(orchestrator_messages_total[5m]))
 
-      # SLO: success rate del Orchestrator
       - record: orchestrator_success_rate
         expr: 100 * (sum by (intent) (rate(orchestrator_messages_total{status="ok"}[5m])) / sum by (intent) (rate(orchestrator_messages_total[5m])))
 
       - record: orchestrator_success_rate_all
         expr: 100 * (sum(rate(orchestrator_messages_total{status="ok"}[5m])) / sum(rate(orchestrator_messages_total[5m])))
 
-      # Error ratio (global) y burn rate para SLO 99% (error budget 1%)
+      # Error ratio (global) y burn rate basado en SLO_TARGET (error budget fraction)
       - record: orchestrator_error_ratio_5m
         expr: (sum(rate(orchestrator_messages_total{status!="ok"}[5m])) / sum(rate(orchestrator_messages_total[5m])))
 
@@ -38,13 +37,13 @@ groups:
         expr: (sum(rate(orchestrator_messages_total{status!="ok"}[6h])) / sum(rate(orchestrator_messages_total[6h])))
 
       - record: orchestrator_burn_rate_fast
-        expr: orchestrator_error_ratio_5m / 0.01
+        expr: orchestrator_error_ratio_5m / BUDGET_FRACTION
 
       - record: orchestrator_burn_rate_slow
-        expr: orchestrator_error_ratio_1h / 0.01
+        expr: orchestrator_error_ratio_1h / BUDGET_FRACTION
 
       - record: orchestrator_burn_rate_fast2
-        expr: orchestrator_error_ratio_30m / 0.01
+        expr: orchestrator_error_ratio_30m / BUDGET_FRACTION
 
       - record: orchestrator_burn_rate_slow2
-        expr: orchestrator_error_ratio_6h / 0.01
+        expr: orchestrator_error_ratio_6h / BUDGET_FRACTION
