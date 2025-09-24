@@ -18,6 +18,13 @@
 - **Revisar logs de errores:** `docker logs agente-api --since="8h" | grep ERROR`
 - **Verificar backups:** `ls -la /backups/agente-hotel/daily/`
 
+### Parámetros SLO
+
+- `SLO_TARGET` (default 99.0) controla el objetivo global de éxito del orquestador.
+- El error budget = 1 - (SLO_TARGET/100) se inserta dinámicamente en las recording rules al iniciar Prometheus.
+- Para cambiarlo: editar `.env`, reiniciar servicio `prometheus` y validar reglas regeneradas.
+- Pisos de tráfico: las alertas SLO requieren `orchestrator_message_rate_all > 0.5` para evitar falsos positivos en horas valle.
+
 ---
 
 ## Troubleshooting
@@ -86,6 +93,7 @@
 		 - Mitigar intents problemáticos: degradación controlada, respuestas de fallback.
 		 - Abrir incidente si el success rate <97% por más de 10m.
 		 - Ajustar umbrales tras análisis de tráfico real.
+		 - Ajustar piso de tráfico (`orchestrator_message_rate_all`) si la alerta no dispara pese a fallos en alto volumen o dispara con volumen muy bajo.
 
 	 ### 📘 RUNBOOK: Orchestrator SLO Burn Rate
 	 - Síntoma: Alertmanager muestra "SLO burn rate alto/crítico".
@@ -96,6 +104,7 @@
 		 - Aplicar mitigaciones inmediatas en intents top-k con alto error%.
 		 - Si crítico, considerar revertir despliegues recientes relacionados.
 		 - Documentar impacto y consumo de error budget en el incidente.
+		 - Ajustar `SLO_TARGET` (y por ende error budget) sólo tras análisis post-mortem, nunca durante un incidente activo.
 
 	 ### 📘 RUNBOOK: HighHttp5xxRate
 	 - Síntoma: Alertmanager muestra "Alta tasa de 5xx" en un endpoint.

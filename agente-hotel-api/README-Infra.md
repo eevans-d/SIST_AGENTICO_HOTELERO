@@ -123,9 +123,14 @@ Notas:
   - `OrchestratorHighErrorRateWarning` (error rate por intent > 5% con piso de tráfico > 0.2 rps, 10m)
   - `OrchestratorHighErrorRateCritical` (error rate por intent > 20% con piso de tráfico > 0.5 rps, 5m)
   - `OrchestratorHighLatencyP95` (p95 del orquestador > 2s por 10m)
+  - `OrchestratorSLODegradationWarning` (success rate global < 99% por 30m con tráfico global > 0.5 rps)
+  - `OrchestratorSLODegradationCritical` (success rate global < 97% por 10m con tráfico global > 0.5 rps)
+  - `OrchestratorSLOBurnRateWarning` (burn rate fast>2 & slow>1 con tráfico global > 0.5 rps)
+  - `OrchestratorSLOBurnRateCritical` (burn rate fast2>14.4 & slow2>6 con tráfico global > 0.5 rps)
 
 Ajustes:
   - Editar umbrales/ventanas en `alerts.yml` según tráfico real.
+  - Ajustar los pisos de tráfico (`orchestrator_message_rate_all > 0.5`) si la volumetría real es menor o mayor.
   - Añadir `receivers` en Alertmanager para email/Slack/PagerDuty.
 
 Receivers de ejemplo:
@@ -156,6 +161,25 @@ Pruebas de alertas (opcional):
 Inspección rápida:
 - Reglas cargadas en Prometheus: `make prometheus-rules-status`
 - Config generado de Alertmanager: `make alertmanager-config`
+
+## Parametrización de SLO
+
+El objetivo SLO (por defecto 99%) se controla con la variable de entorno `SLO_TARGET` (por ejemplo `SLO_TARGET=99.5`). En el entrypoint `prom-entrypoint.sh` se calcula el error budget fraction (`BUDGET_FRACTION = 1 - SLO_TARGET/100`) y se sustituye en la plantilla `recording_rules.tmpl.yml` generando `generated/recording_rules.yml`.
+
+Variables relevantes:
+ - `SLO_TARGET`: Porcentaje de éxito deseado (float). Default: 99.0
+ - `ERROR_BUDGET_FRACTION`: (Opcional) Override manual del error budget (si se define, ignora `SLO_TARGET`).
+
+Cambiar SLO:
+1. Editar `.env` y setear `SLO_TARGET=99.2` (ejemplo).
+2. Reiniciar solo Prometheus: `docker compose restart prometheus` (el entrypoint regenerará reglas).
+3. Verificar: `make prometheus-rules-status | grep orchestrator_burn_rate_fast` muestra reglas regeneradas.
+
+Pisos de tráfico SLO:
+- Las alertas de degradación y burn rate añaden `orchestrator_message_rate_all > 0.5` para evitar ruido en bajo volumen. Ajustar si el tráfico normal es menor.
+
+Métrica auxiliar añadida:
+- `orchestrator_message_rate_all`: suma global de `rate(orchestrator_messages_total[5m])`, usada en alertas SLO.
 
 ## Dashboards Grafana
 

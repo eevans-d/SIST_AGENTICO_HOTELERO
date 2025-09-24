@@ -23,6 +23,10 @@ groups:
       - record: orchestrator_success_rate_all
         expr: 100 * (sum(rate(orchestrator_messages_total{status="ok"}[5m])) / sum(rate(orchestrator_messages_total[5m])))
 
+      # Tasa global de mensajes del orquestador (para aplicar pisos de tráfico en alertas SLO)
+      - record: orchestrator_message_rate_all
+        expr: sum(rate(orchestrator_messages_total[5m]))
+
       # Error ratio (global) y burn rate basado en SLO_TARGET (error budget fraction)
       - record: orchestrator_error_ratio_5m
         expr: (sum(rate(orchestrator_messages_total{status!="ok"}[5m])) / sum(rate(orchestrator_messages_total[5m])))
