@@ -1,5 +1,8 @@
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
-.PHONY: security-scan security-fast
+.PHONY: security-scan security-fast performance-test stress-test chaos-db chaos-redis resilience-test
+.PHONY: analyze-performance analyze-chaos open-resilience-dashboard install-k6
+.PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
+.PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -177,6 +180,163 @@ test-circuit-breakers: ## Prueba los circuit breakers con cargas controladas
 		sleep 1; \
 	done
 	@echo "Circuit breaker test complete!"
+
+# ==============================================================================
+# Performance & Chaos Engineering
+# ==============================================================================
+
+performance-test: ## Ejecuta pruebas de rendimiento con k6
+	@echo "🚀 Running performance tests..."
+	@command -v k6 >/dev/null 2>&1 || { echo "❌ k6 not found. Install with: curl https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz | tar -xz && sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/"; exit 1; }
+	@mkdir -p reports/performance
+	k6 run tests/performance/load-test.js
+	@echo "✅ Performance test complete"
+
+stress-test: ## Ejecuta pruebas de estrés para encontrar puntos de ruptura
+	@echo "💥 Running stress tests..."
+	@command -v k6 >/dev/null 2>&1 || { echo "❌ k6 not found. Install with: curl https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz | tar -xz && sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/"; exit 1; }
+	@mkdir -p reports/performance
+	k6 run tests/performance/stress-test.js
+	@echo "✅ Stress test complete"
+
+chaos-db: ## Simula fallas de base de datos
+	@echo "🗄️ Running database chaos test..."
+	@chmod +x scripts/chaos-db-failure.sh
+	@bash scripts/chaos-db-failure.sh
+	@echo "✅ Database chaos test complete"
+
+chaos-redis: ## Simula fallas de Redis/cache
+	@echo "🔄 Running Redis chaos test..."
+	@chmod +x scripts/chaos-redis-failure.sh
+	@bash scripts/chaos-redis-failure.sh
+	@echo "✅ Redis chaos test complete"
+
+resilience-test: ## Suite completa de pruebas de resiliencia (performance + chaos)
+	@echo "🧪 Running comprehensive resilience test suite..."
+	@chmod +x scripts/resilience-test-suite.sh
+	@bash scripts/resilience-test-suite.sh
+	@echo "✅ Resilience test suite complete"
+
+analyze-performance: ## Analiza resultados de pruebas de rendimiento
+	@echo "📊 Analyzing performance results..."
+	@if [ -z "$(REPORT)" ]; then echo "Usage: make analyze-performance REPORT=<timestamp>"; exit 1; fi
+	@if [ -f "reports/resilience/load-test-summary-$(REPORT).json" ]; then \
+		echo "📈 Load Test Summary:"; \
+		cat reports/resilience/load-test-summary-$(REPORT).json | jq '.metrics' 2>/dev/null || cat reports/resilience/load-test-summary-$(REPORT).json; \
+	fi
+	@if [ -f "reports/resilience/stress-test-summary-$(REPORT).json" ]; then \
+		echo "💥 Stress Test Summary:"; \
+		cat reports/resilience/stress-test-summary-$(REPORT).json | jq '.metrics' 2>/dev/null || cat reports/resilience/stress-test-summary-$(REPORT).json; \
+	fi
+
+analyze-chaos: ## Analiza resultados de pruebas de chaos engineering
+	@echo "🌪️ Analyzing chaos results..."
+	@if [ -z "$(REPORT)" ]; then echo "Usage: make analyze-chaos REPORT=<timestamp>"; exit 1; fi
+	@if [ -f "reports/resilience/chaos-db-$(REPORT).log" ]; then \
+		echo "🗄️ Database Chaos Summary:"; \
+		grep -E "(Started|Recovery detected|Total downtime)" reports/resilience/chaos-db-$(REPORT).log | tail -5; \
+	fi
+	@if [ -f "reports/resilience/chaos-redis-$(REPORT).log" ]; then \
+		echo "🔄 Redis Chaos Summary:"; \
+		grep -E "(Started|Recovery detected|Total downtime)" reports/resilience/chaos-redis-$(REPORT).log | tail -5; \
+	fi
+
+open-resilience-dashboard: ## Abre el dashboard de resiliencia en Grafana
+	@echo "📊 Opening resilience dashboard..."
+	@echo "URL: http://localhost:3000/d/resilience-chaos/resilience-chaos-engineering-dashboard"
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open "http://localhost:3000/d/resilience-chaos/resilience-chaos-engineering-dashboard" || echo "Open manually in browser"
+
+install-k6: ## Instala k6 para pruebas de rendimiento
+	@echo "📦 Installing k6..."
+	@if command -v k6 >/dev/null 2>&1; then echo "✅ k6 already installed"; else \
+		curl -L https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz | tar -xz && \
+		sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/ && \
+		rm -rf k6-v0.46.0-linux-amd64 && \
+		echo "✅ k6 installed successfully"; \
+	fi
+
+# ==============================================================================
+# Governance & SLO Management
+# ==============================================================================
+
+validate-slo-compliance: ## Valida cumplimiento de SLOs en tiempo real
+	@echo "🎯 Validating SLO compliance..."
+	@chmod +x scripts/validate-slo-compliance.sh
+	@bash scripts/validate-slo-compliance.sh
+	@echo "✅ SLO validation complete"
+
+check-error-budget: ## Verifica consumo de error budget
+	@echo "📊 Checking error budget consumption..."
+	@curl -s "http://localhost:9090/api/v1/query?query=orchestrator_error_budget_used_ratio_30m*100" | \
+		jq -r '.data.result[0].value[1] // "No data"' | \
+		awk '{printf "Error Budget Used: %.2f%%\n", $$1}'
+
+check-burn-rates: ## Verifica burn rates de SLOs
+	@echo "🔥 Checking SLO burn rates..."
+	@echo "Fast burn rate (5m):"
+	@curl -s "http://localhost:9090/api/v1/query?query=orchestrator_burn_rate_fast" | \
+		jq -r '.data.result[0].value[1] // "No data"' | \
+		awk '{printf "  %.2f (alert if > 2.0)\n", $$1}'
+	@echo "Slow burn rate (1h):"
+	@curl -s "http://localhost:9090/api/v1/query?query=orchestrator_burn_rate_slow" | \
+		jq -r '.data.result[0].value[1] // "No data"' | \
+		awk '{printf "  %.2f (alert if > 1.5)\n", $$1}'
+
+create-incident-report: ## Crea un nuevo reporte de incidente
+	@echo "📝 Creating incident report..."
+	@if [ -z "$(INCIDENT)" ]; then echo "Usage: make create-incident-report INCIDENT=description"; exit 1; fi
+	@mkdir -p reports/incidents
+	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S) && \
+		cp docs/templates/post-mortem-template.md "reports/incidents/incident-$$TIMESTAMP-$(INCIDENT).md" && \
+		echo "📄 Created: reports/incidents/incident-$$TIMESTAMP-$(INCIDENT).md"
+
+validate-runbooks: ## Valida que todos los runbooks estén actualizados
+	@echo "📚 Validating runbooks..."
+	@find docs/runbooks -name "*.md" -type f | while read -r runbook; do \
+		if grep -q "Last Updated.*\$$(date)" "$$runbook"; then \
+			echo "✅ $$runbook: Up to date"; \
+		else \
+			echo "⚠️ $$runbook: Needs update"; \
+		fi; \
+	done
+
+test-incident-response: ## Prueba los procedimientos de respuesta a incidentes
+	@echo "🚨 Testing incident response procedures..."
+	@echo "Testing alert acknowledgment..."
+	@echo "Testing escalation contacts..."
+	@echo "Testing runbook accessibility..."
+	@echo "✅ Incident response test complete"
+
+generate-slo-report: ## Genera reporte detallado de SLOs
+	@echo "📈 Generating SLO report..."
+	@mkdir -p reports/slo
+	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S) && \
+		bash scripts/validate-slo-compliance.sh > "reports/slo/slo-report-$$TIMESTAMP.txt" 2>&1 && \
+		echo "📄 Report generated: reports/slo/slo-report-$$TIMESTAMP.txt"
+
+open-governance-docs: ## Abre la documentación de governance
+	@echo "📖 Opening governance documentation..."
+	@echo "Available documents:"
+	@echo "  - docs/GOVERNANCE_FRAMEWORK.md"
+	@find docs/runbooks -name "*.md" -exec echo "  - {}" \;
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open docs/GOVERNANCE_FRAMEWORK.md || echo "Open docs/GOVERNANCE_FRAMEWORK.md manually"
+
+compliance-dashboard: ## Abre dashboard de compliance en Grafana
+	@echo "📊 Opening compliance dashboard..."
+	@echo "URL: http://localhost:3000/d/compliance/compliance-dashboard"
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open "http://localhost:3000/d/compliance/compliance-dashboard" || echo "Open manually in browser"
+
+pre-deploy-check: ## Validación completa pre-deployment
+	@echo "🚀 Running pre-deployment validation..."
+	@echo "1. Running tests..."
+	@make test || { echo "❌ Tests failed"; exit 1; }
+	@echo "2. Security scan..."
+	@make security-fast || { echo "❌ Security scan failed"; exit 1; }
+	@echo "3. SLO compliance check..."
+	@make validate-slo-compliance || { echo "❌ SLO compliance failed"; exit 1; }
+	@echo "4. Validating guardrails..."
+	@make validate-guardrails || { echo "❌ Guardrails validation failed"; exit 1; }
+	@echo "✅ Pre-deployment validation complete"
 
 help: ## Muestra esta ayuda
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)

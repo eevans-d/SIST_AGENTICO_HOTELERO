@@ -13,7 +13,7 @@ jobs:
   lint-test-security:
     name: Lint + Tests + Security Fast
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15  # GUARDRAIL: Reducido de 20 a 15 min
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,15 +58,19 @@ jobs:
 
       - name: Scan Docker image vulnerabilities
         working-directory: agente-hotel-api
+        timeout-minutes: 5  # GUARDRAIL: Trivy scan timeout
         run: |
-          trivy image --severity HIGH,CRITICAL --exit-code 1 agente-hotel-api:ci || {
+          # GUARDRAIL: Limitar output de trivy para evitar logs gigantes
+          trivy image --severity HIGH,CRITICAL --quiet --exit-code 1 agente-hotel-api:ci || {
             echo "::warning::High/Critical vulnerabilities found in Docker image"
+            echo "::warning::Check full scan in nightly workflow for details"
             exit 0
           }
 
   build-only:
     name: Build Only (post quality gates)
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # GUARDRAIL: Build simple no debería tomar >10min
     needs: [lint-test-security]
     steps:
       - uses: actions/checkout@v4

@@ -9,7 +9,7 @@ on:
       generate_sbom:
         description: 'Generate SBOM (Software Bill of Materials)'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 permissions:
@@ -20,6 +20,7 @@ jobs:
   security-deep-scan:
     name: Deep Security Scan & SBOM
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # GUARDRAIL: Timeout máximo para evitar workflows infinitos
     steps:
       - name: Checkout
         uses: actions/checkout@v4

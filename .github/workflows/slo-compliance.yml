@@ -1,0 +1,155 @@
+name: SLO Compliance Check
+
+on:
+  schedule:
+    # Run every 2 hours during business hours (UTC)
+    - cron: '0 8-20/2 * * *'
+  workflow_dispatch:
+    inputs:
+      alert_on_failure:
+        description: 'Send alerts on SLO failures'
+        type: boolean
+        default: true
+      severity_threshold:
+        description: 'Minimum compliance % to avoid alert'
+        type: string
+        default: '80'
+
+env:
+  PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL || 'http://localhost:9090' }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  
+jobs:
+  slo-compliance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc jq curl
+          
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for Prometheus to be available..."
+          timeout 60 bash -c 'until curl -sf ${{ env.PROMETHEUS_URL }}/api/v1/label/__name__/values; do sleep 5; done'
+          
+      - name: Run SLO compliance check
+        id: slo_check
+        run: |
+          cd agente-hotel-api
+          chmod +x scripts/validate-slo-compliance.sh
+          
+          # Run the SLO validation
+          if ./scripts/validate-slo-compliance.sh; then
+            echo "slo_status=success" >> $GITHUB_OUTPUT
+            echo "compliance_level=high" >> $GITHUB_OUTPUT
+          else
+            exit_code=$?
+            if [ $exit_code -eq 1 ]; then
+              echo "slo_status=warning" >> $GITHUB_OUTPUT  
+              echo "compliance_level=partial" >> $GITHUB_OUTPUT
+            else
+              echo "slo_status=failure" >> $GITHUB_OUTPUT
+              echo "compliance_level=critical" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+      - name: Upload SLO report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: slo-compliance-report-${{ github.run_number }}
+          path: agente-hotel-api/reports/slo/
+          retention-days: 30
+          
+      - name: Create summary
+        if: always()
+        run: |
+          cd agente-hotel-api
+          latest_report=$(ls -t reports/slo/slo-compliance-*.md | head -1)
+          
+          if [ -f "$latest_report" ]; then
+            echo "## 🎯 SLO Compliance Report" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract key metrics from report
+            compliance=$(grep "Compliance:" "$latest_report" | awk '{print $2}')
+            passed=$(grep "Passed:" "$latest_report" | awk '{print $2}')
+            failed=$(grep "Failed:" "$latest_report" | awk '{print $2}')
+            
+            case "${{ steps.slo_check.outputs.slo_status }}" in
+              "success")
+                echo "✅ **Status**: All SLOs compliant" >> $GITHUB_STEP_SUMMARY
+                ;;
+              "warning") 
+                echo "⚠️ **Status**: Partial compliance" >> $GITHUB_STEP_SUMMARY
+                ;;
+              "failure")
+                echo "❌ **Status**: SLO breach detected" >> $GITHUB_STEP_SUMMARY
+                ;;
+            esac
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Compliance**: $compliance" >> $GITHUB_STEP_SUMMARY
+            echo "- **Checks Passed**: $passed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Checks Failed**: $failed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Report**: [Download artifact](../actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+      - name: Send Slack notification on failure
+        if: |
+          always() && 
+          (steps.slo_check.outputs.slo_status == 'failure' || 
+           steps.slo_check.outputs.slo_status == 'warning') &&
+          github.event.inputs.alert_on_failure != 'false' &&
+          env.SLACK_WEBHOOK_URL != ''
+        run: |
+          cd agente-hotel-api
+          latest_report=$(ls -t reports/slo/slo-compliance-*.md | head -1)
+          
+          # Extract metrics
+          compliance=$(grep "Compliance:" "$latest_report" | awk '{print $2}' || echo "Unknown")
+          failed=$(grep "Failed:" "$latest_report" | awk '{print $2}' || echo "Unknown")
+          
+          # Determine severity
+          if [ "${{ steps.slo_check.outputs.slo_status }}" = "failure" ]; then
+            emoji="🚨"
+            color="danger"
+            urgency="CRITICAL"
+          else
+            emoji="⚠️"
+            color="warning" 
+            urgency="WARNING"
+          fi
+          
+          # Send Slack notification
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"attachments\": [{
+                \"color\": \"$color\",
+                \"title\": \"$emoji SLO Compliance Check - $urgency\",
+                \"fields\": [
+                  {\"title\": \"Compliance\", \"value\": \"$compliance\", \"short\": true},
+                  {\"title\": \"Failed Checks\", \"value\": \"$failed\", \"short\": true},
+                  {\"title\": \"Repository\", \"value\": \"${{ github.repository }}\", \"short\": true},
+                  {\"title\": \"Run ID\", \"value\": \"${{ github.run_id }}\", \"short\": true}
+                ],
+                \"actions\": [{
+                  \"type\": \"button\",
+                  \"text\": \"View Report\",
+                  \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                }]
+              }]
+            }" \
+            "${{ env.SLACK_WEBHOOK_URL }}"
+            
+      - name: Fail job if critical SLO breach
+        if: steps.slo_check.outputs.slo_status == 'failure'
+        run: |
+          echo "❌ Critical SLO breach detected - failing job"
+          exit 1
