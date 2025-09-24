@@ -1,4 +1,5 @@
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
+.PHONY: security-scan security-fast
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -42,6 +43,15 @@ lint: ## Ejecutar linters y static analysis
 	else \
 		command -v gitleaks >/dev/null 2>&1 && gitleaks detect -v || echo "(gitleaks no instalado)"; \
 	fi
+
+security-fast: ## Escaneo rápido (solo HIGH/CRITICAL) con trivy fs (vuln + secrets)
+	@echo "Security fast scan (HIGH/CRITICAL, vuln+secret)..."
+	@if ! command -v trivy >/dev/null 2>&1; then echo "trivy no instalado"; exit 1; fi
+	trivy fs --severity HIGH,CRITICAL --security-checks vuln,secret --quiet . || true
+
+security-scan: ## Escaneo completo (deps, config, secretos, imagen) -> scripts/security-scan.sh
+	@echo "Security full scan..."
+	@bash scripts/security-scan.sh
 
 test: ## Ejecutar tests con pytest (usa Poetry si está disponible)
 ifeq ($(HAS_POETRY),1)

@@ -296,3 +296,29 @@ La ruta `/health/ready` ahora actualiza métricas Prometheus para facilitar obse
 Alerta relacionada:
 
 - `DependencyDown` (warning): `readiness_up < 1` durante más de 2m. Revisar `/health/ready` y los `dependency_up` para diagnóstico rápido.
+
+## Escaneo de Seguridad (Continuous Security)
+
+Herramientas integradas:
+- `gitleaks`: detección de secretos (invocado en `make lint`).
+- `trivy`: vulnerabilidades, configuración e identificación de secretos en FS / imagen Docker.
+- `pip-audit` (opcional si instalado): vulnerabilidades de dependencias Python.
+
+Targets Makefile:
+- `make security-fast`: escaneo rápido HIGH/CRITICAL (filesystem). Útil en desarrollo.
+- `make security-scan`: agrega reportes JSON en `audit_results/` (deps, config, secrets y opcional imagen Docker `agente-hotel-api:latest`).
+
+Script principal: `scripts/security-scan.sh`.
+Variables:
+- `IMAGE_TAG`: override de la imagen a escanear (default `agente-hotel-api:latest`).
+
+Integración CI (sugerido):
+1. Instalar trivy en job CI.
+2. Ejecutar `make security-fast` en push/PR.
+3. Ejecutar `make security-scan` en nightly y subir artefactos (carpeta `audit_results`).
+4. Falla de pipeline opcional si se detectan CVEs CRITICAL no ignorados.
+
+Buenas prácticas:
+- Revisar periódicamente dependencias indirectas (lockfile) tras cada actualización de FastAPI / httpx.
+- Definir política de severidad: bloquear merge CRITICAL y HIGH explotables; WARN para MEDIUM.
+- Mantener `.gitignore` actualizado para evitar subir reportes temporales con info sensible.
