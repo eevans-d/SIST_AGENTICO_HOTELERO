@@ -14,3 +14,5 @@ class UnifiedMessage:
     texto: Optional[str]
     media_url: Optional[str] = None
     metadata: dict = field(default_factory=dict)  # confidence_stt, duration_sec
+    # Groundwork multi-tenant (opcional, no obligatorio en fase actual)
+    tenant_id: Optional[str] = None
