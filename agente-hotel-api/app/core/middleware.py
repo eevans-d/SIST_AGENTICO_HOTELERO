@@ -9,16 +9,42 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .logging import logger
 from ..services.metrics_service import metrics_service
+from .settings import settings
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    """Aplica cabeceras de seguridad estándar.
+
+    Ajustable vía settings (permitir orígenes extra para CSP, habilitar/deshabilitar HSTS en entornos no prod).
+    """
+
+    def build_csp(self) -> str:
+        default_sources = ["'self'"]
+        raw = getattr(settings, "csp_extra_sources", None)
+        extra_list = raw.split() if isinstance(raw, str) and raw else []
+        merged = default_sources + list(dict.fromkeys(extra_list))
+        return f"default-src {' '.join(merged)}"
+
+    async def dispatch(self, request, call_next):  # type: ignore[override]
         response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        # Seguridad básica
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        if settings.environment == "production":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        # CSP
+        response.headers.setdefault("Content-Security-Policy", self.build_csp())
+        # API responses: evitar cacheo inadvertido (excepto métricas estáticas si se decide luego)
+        if request.url.path.startswith("/health") or request.url.path.startswith("/metrics"):
+            # health puede cachearse unos segundos si se quiere; por ahora no-cache
+            response.headers.setdefault("Cache-Control", "no-store")
+        elif request.method != "GET":
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
 

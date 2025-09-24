@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     # Health/Readiness toggles
     check_pms_in_readiness: bool = False
 
+    # Seguridad / CSP
+    csp_extra_sources: Optional[str] = None  # Ej: "https://cdn.example.com https://fonts.gstatic.com"
+
     # Auth
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: int = 60
@@ -123,3 +126,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Helper para exponer lista normalizada (evita repetir split en middleware)
+if settings.csp_extra_sources:
+    try:
+        settings.csp_extra_sources = " ".join(sorted(set(settings.csp_extra_sources.split())))  # type: ignore[assignment]
+    except Exception:  # pragma: no cover - robustez
+        pass
