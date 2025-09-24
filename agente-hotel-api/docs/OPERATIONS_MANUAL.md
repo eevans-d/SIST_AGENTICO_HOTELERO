@@ -86,7 +86,7 @@
 	 ### 📘 RUNBOOK: Orchestrator SLO Degradation
 	 - Síntoma: Alertmanager muestra "SLO del Orchestrator en degradación" (warning/critical).
 	 - Diagnóstico rápido:
-		 1) Grafana → "Agente - Overview" → panel "Orchestrator success rate (global, %)" y "by intent".
+		 1) Grafana → "SLO Health" → paneles "Success Rate Global" y "Top 5 Intents by Error %".
 		 2) Identificar intents con peor success rate y correlacionar con paneles de error% y p95.
 		 3) Revisar dependencia PMS/Redis si los intents involucrados llaman servicios externos.
 	 - Acciones sugeridas:
@@ -98,7 +98,7 @@
 	 ### 📘 RUNBOOK: Orchestrator SLO Burn Rate
 	 - Síntoma: Alertmanager muestra "SLO burn rate alto/crítico".
 	 - Diagnóstico rápido:
-		 1) Grafana → paneles de success rate global y por intent, y Top intents por error %.
+		 1) Grafana → "SLO Health" → paneles de burn rate (fast/slow) y budget usado/restante.
 		 2) Confirmar si el burn rate fast y slow superan umbrales (ver anotaciones de la alerta).
 	 - Acciones sugeridas:
 		 - Aplicar mitigaciones inmediatas en intents top-k con alto error%.

@@ -207,6 +207,11 @@ Métricas SLO / Error Budget adicionales:
     - Gauge por dependencia (`dependency_up{name}`)
     - Estado global (`readiness_up`)
     - Serie temporal de readiness
+  - `SLO Health` (`docker/grafana/dashboards/slo-health.json`):
+    - SLO target, success rate, budget usado/restante.
+    - Burn rates multi ventana.
+    - Horas hasta agotar presupuesto.
+    - Top intents por error% y p95, tasa global.
 
 ## Métricas de Readiness
 
