@@ -139,6 +139,28 @@
 		 - Ajustar timeouts/backoff del adapter.
 		 - Coordinar con el equipo del PMS.
 
+	 ### 📘 RUNBOOK: PmsCircuitBreakerImminentOpen
+	 - Síntoma: Alertas `PmsCircuitBreakerImminentOpenWarning` o `PmsCircuitBreakerImminentOpenCritical` indicando riesgo de apertura.
+	 - Diagnóstico rápido:
+		 1) Grafana → panel "Circuit Breaker state" y añadir paneles derivados (failure ratios, streak) si no existen.
+		 2) Ver panel "PMS API latency p95" y "PMS Errors by type" para correlacionar naturaleza (timeouts vs 5xx).
+		 3) Consultar métricas: `pms_cb_failure_streak_fraction`, `pms_cb_failure_ratio_1m`, `pms_cb_minutes_to_open_estimate`.
+	 - Posibles causas:
+		 - Degradación real del PMS (timeouts incrementales).
+		 - Cambios recientes en timeouts o thresholds del adapter.
+		 - Pico de tráfico con patrones no cacheados (incrementa presión y fallos).
+	 - Acciones sugeridas (orden):
+		 1) Confirmar que los fallos son legítimos revisando logs (buscar patrones repetidos).
+		 2) Si los fallos son timeouts → aumentar temporalmente `read` timeout (ej. +50%) y monitorear efecto.
+		 3) Activar rutas de degradación: limitar intents que disparan llamadas PMS no críticas.
+		 4) Incrementar TTL de cache de disponibilidad para reducir presión sobre PMS.
+		 5) Coordinar con equipo PMS si latencia/errores se originan upstream.
+	 - Mitigación preventiva:
+		 - Si `pms_cb_minutes_to_open_estimate < 2` y la racha sigue subiendo, aplicar pasos 2–4 antes de que el breaker abra.
+	 - Post-mortem:
+		 - Evaluar si `failure_threshold=5` es demasiado bajo para el perfil de error transitorio.
+		 - Considerar backoff más agresivo para retries o circuit half-open probabilístico.
+
 	 ### 📘 RUNBOOK: CircuitBreakerOpen
 	 - Síntoma: Circuit Breaker abierto por más de 2m.
 	 - Diagnóstico rápido:

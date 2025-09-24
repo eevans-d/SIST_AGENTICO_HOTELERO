@@ -177,6 +177,29 @@ groups:
           runbook_url: "https://grafana.local/runbooks#pmscachehitratio"
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=21"
 
+      # Predictive Circuit Breaker Alerts
+      - alert: PmsCircuitBreakerImminentOpenWarning
+        expr: (pms_cb_risk_imminent > 0.5) and (pms_cb_failure_streak_fraction >= 0.6) and (pms_cb_failure_ratio_5m > 0.4)
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Riesgo de apertura del Circuit Breaker PMS (warning)"
+          description: "El CB muestra racha >=60% del umbral y failure ratios elevados (1m/5m). Posible apertura inminente si continúan fallos. Revisar latencias/errores del PMS."
+          runbook_url: "https://grafana.local/runbooks#circuitbreakerimminent"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=5"
+
+      - alert: PmsCircuitBreakerImminentOpenCritical
+        expr: (pms_cb_failure_streak_fraction >= 0.8) and (pms_cb_failure_ratio_1m > 0.6) and (pms_cb_failure_ratio_5m > 0.5)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Apertura inminente del Circuit Breaker PMS (critical)"
+          description: "La racha de fallos (>=80% del umbral) y los ratios de fallo recientes son altos. Intervenir antes de apertura (verificar PMS upstream, timeouts, latencia)."
+          runbook_url: "https://grafana.local/runbooks#circuitbreakerimminent"
+          dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=5"
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.

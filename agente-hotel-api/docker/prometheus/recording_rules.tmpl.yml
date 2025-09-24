@@ -83,3 +83,35 @@ groups:
       # Ratio de aciertos del cache (5m). Protegemos contra división por cero.
       - record: pms_cache_hit_ratio
         expr: sum(rate(pms_cache_hits_total[5m])) / clamp_min(sum(rate(pms_cache_hits_total[5m])) + sum(rate(pms_cache_misses_total[5m])), 0.000001)
+
+      # ------------------------------------------------------------------
+      # Circuit Breaker PMS Predictive Metrics
+      # Ratio de fallos (ventanas múltiples) basado en llamadas envueltas
+      - record: pms_cb_failure_ratio_1m
+        expr: sum(rate(pms_circuit_breaker_calls_total{result="failure"}[1m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[1m])), 0.000001)
+
+      - record: pms_cb_failure_ratio_5m
+        expr: sum(rate(pms_circuit_breaker_calls_total{result="failure"}[5m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[5m])), 0.000001)
+
+      - record: pms_cb_failure_ratio_15m
+        expr: sum(rate(pms_circuit_breaker_calls_total{result="failure"}[15m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[15m])), 0.000001)
+
+      # Proporción de la racha actual vs umbral (0..1)
+      - record: pms_cb_failure_streak_fraction
+        expr: pms_circuit_breaker_failure_streak / 5  # 5 es failure_threshold actual
+
+      # Velocidad de incremento de fallos (derivada 5m) - aproximación: incremento medio por minuto
+      - record: pms_cb_failure_streak_rate
+        expr: rate(pms_circuit_breaker_failure_streak[5m])
+
+      # Estimación de minutos hasta apertura si la racha sigue creciendo (solo cuando >0)
+      - record: pms_cb_minutes_to_open_estimate
+        expr: clamp_min((5 - pms_circuit_breaker_failure_streak) / clamp_min(pms_cb_failure_streak_rate, 0.000001) / 60, 0)
+
+      # Condición booleana (0/1) de riesgo de apertura: racha >=60% y failure_ratio_1m > 0.5
+      - record: pms_cb_risk_imminent_raw
+        expr: (pms_cb_failure_streak_fraction >= 0.6) * (pms_cb_failure_ratio_1m > 0.5)
+
+      # Suavizado (promedio 3m) para evitar flapping del riesgo
+      - record: pms_cb_risk_imminent
+        expr: avg_over_time(pms_cb_risk_imminent_raw[3m])

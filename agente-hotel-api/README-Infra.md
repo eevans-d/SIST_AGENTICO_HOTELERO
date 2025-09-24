@@ -216,6 +216,51 @@ Acciones ante degradación (ver runbook `PmsCacheHitRatio` a añadir en manual d
 3. Analizar si hay cardinalidad alta de keys (ej. inclusión de parámetros poco relevantes en cache_key).
 4. Realizar warm-up manual para endpoints críticos si la latencia PMS sube simultáneamente.
 
+## Métricas Predictivas Circuit Breaker PMS
+
+Métricas instrumentadas para anticipar la apertura del breaker y reducir tiempo en estado OPEN:
+
+Primitivas:
+- `pms_circuit_breaker_calls_total{state,result}`: Conteo de llamadas (state previo a la ejecución; result=success|failure).
+- `pms_circuit_breaker_failure_streak`: Racha de fallos consecutivos actual.
+- `pms_circuit_breaker_state`: 0=closed,1=open,2=half-open.
+
+Recording rules derivadas:
+```promql
+# Ratios multi-ventana
+pms_cb_failure_ratio_1m = sum(rate(pms_circuit_breaker_calls_total{result="failure"}[1m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[1m])), 0.000001)
+pms_cb_failure_ratio_5m = sum(rate(pms_circuit_breaker_calls_total{result="failure"}[5m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[5m])), 0.000001)
+pms_cb_failure_ratio_15m = sum(rate(pms_circuit_breaker_calls_total{result="failure"}[15m])) / clamp_min(sum(rate(pms_circuit_breaker_calls_total[15m])), 0.000001)
+
+# Fracción de la racha vs threshold (threshold actual =5)
+pms_cb_failure_streak_fraction = pms_circuit_breaker_failure_streak / 5
+
+# Velocidad de crecimiento de la racha (failures/seg)
+pms_cb_failure_streak_rate = rate(pms_circuit_breaker_failure_streak[5m])
+
+# Estimación de minutos hasta apertura si la racha continúa creciendo al ritmo actual
+pms_cb_minutes_to_open_estimate = clamp_min((5 - pms_circuit_breaker_failure_streak) / clamp_min(pms_cb_failure_streak_rate, 0.000001) / 60, 0)
+
+# Señal booleana suavizada de riesgo inminente
+pms_cb_risk_imminent_raw = (pms_cb_failure_streak_fraction >= 0.6) * (pms_cb_failure_ratio_1m > 0.5)
+pms_cb_risk_imminent = avg_over_time(pms_cb_risk_imminent_raw[3m])
+```
+
+Alertas predictivas:
+- `PmsCircuitBreakerImminentOpenWarning`: Riesgo inminente (racha >=60%, ratios cortos elevados) por 3m.
+- `PmsCircuitBreakerImminentOpenCritical`: Racha >=80% y ratios altos (1m/5m) por 2m.
+
+Interpretación / Operativa:
+1. Ver panel de latencia `PMS API latency p95` y correlacionar con incremento de fallos.
+2. Revisar tipo de errores (panel `PMS Errors by type`). Si predominan timeouts, considerar aumentar ligeramente `read` timeout temporalmente.
+3. Validar conectividad y salud upstream (PMS) antes de modificar parámetros locales.
+4. Si `minutes_to_open_estimate` cae <1 y el servicio upstream está degradado, aplicar mitigación: reducir fan-out de llamadas (limitar intents que consultan disponibilidad) y activar respuestas degradadas.
+5. Post mortem: ajustar `failure_threshold` si se detectan falsos positivos repetidos, o tunear timeouts para reducir fallos transitorios.
+
+Buenas prácticas:
+- Evitar usar únicamente la racha: los failure ratios multi-ventana dan contexto de persistencia vs ráfagas cortas.
+- Usar la señal suavizada `pms_cb_risk_imminent` para paneles (reduce flapping visual) pero mantener condiciones más estrictas en las alertas.
+
 ## Dashboards Grafana
 
 - Carpeta: "Agente Hotel" (provisionada automáticamente).
