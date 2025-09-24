@@ -107,6 +107,17 @@
 		 - Ajustar `SLO_TARGET` (y por ende error budget) sólo tras análisis post-mortem, nunca durante un incidente activo.
 
 	 ### 📘 RUNBOOK: HighHttp5xxRate
+
+	 ### 📘 RUNBOOK: SLO Budget Exhaust Forecast
+	 - Síntoma: Alertmanager muestra proyección de agotamiento (<12h o <6h).
+	 - Diagnóstico rápido:
+		 1) Grafana → "SLO Health" → panel "Hours to Exhaust Budget".
+		 2) Verificar burn rates y budget used.
+		 3) Identificar intents top error% / p95.
+	 - Acciones sugeridas:
+		 - Iniciar acciones de mitigación (reducción de features, fallback responses).
+		 - Si crítico (<6h) escalar a guardia e iniciar plan de reducción de errores priorizando intents top.
+		 - Evaluar si hay despliegue reciente correlacionado.
 	 - Síntoma: Alertmanager muestra "Alta tasa de 5xx" en un endpoint.
 	 - Diagnóstico rápido:
 		 1) Grafana → "Agente - Overview" → panel "HTTP 5xx rate (5m)".

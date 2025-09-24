@@ -73,3 +73,7 @@ groups:
       # Estimación usando ventana lenta (1h/6h) para panorama más estable
       - record: orchestrator_error_budget_hours_to_exhaust_slow
         expr: clamp_min(( (1 - (orchestrator_error_ratio_1h / BUDGET_FRACTION)) / (orchestrator_burn_rate_slow) ) * 30*24, 0)
+
+      # Piso de tráfico SLO parametrizable
+      - record: orchestrator_slo_traffic_floor
+        expr: TRAFFIC_FLOOR_VALUE

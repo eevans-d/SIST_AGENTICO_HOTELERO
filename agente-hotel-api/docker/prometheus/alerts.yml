@@ -89,7 +89,7 @@ groups:
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=8"
 
       - alert: OrchestratorSLODegradationWarning
-        expr: orchestrator_success_rate_all < 99 and orchestrator_message_rate_all > 0.5
+        expr: orchestrator_success_rate_all < 99 and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
         for: 30m
         labels:
           severity: warning
@@ -100,7 +100,7 @@ groups:
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=12"
 
       - alert: OrchestratorSLODegradationCritical
-        expr: orchestrator_success_rate_all < 97 and orchestrator_message_rate_all > 0.5
+        expr: orchestrator_success_rate_all < 97 and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
         for: 10m
         labels:
           severity: critical
@@ -112,7 +112,7 @@ groups:
 
       # Burn rate SLO 99% (error budget 1%) - multi-ventana
       - alert: OrchestratorSLOBurnRateWarning
-        expr: (orchestrator_burn_rate_fast > 2) and (orchestrator_burn_rate_slow > 1) and orchestrator_message_rate_all > 0.5
+        expr: (orchestrator_burn_rate_fast > 2) and (orchestrator_burn_rate_slow > 1) and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
         for: 15m
         labels:
           severity: warning
@@ -123,7 +123,7 @@ groups:
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=14"
 
       - alert: OrchestratorSLOBurnRateCritical
-        expr: (orchestrator_burn_rate_fast2 > 14.4) and (orchestrator_burn_rate_slow2 > 6) and orchestrator_message_rate_all > 0.5
+        expr: (orchestrator_burn_rate_fast2 > 14.4) and (orchestrator_burn_rate_slow2 > 6) and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
         for: 5m
         labels:
           severity: critical
@@ -132,6 +132,28 @@ groups:
           description: "Consumo muy alto del error budget: fast2>14.4 y slow2>6. Atender de inmediato."
           runbook_url: "https://grafana.local/runbooks#orchestratorslo"
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=14"
+
+      - alert: OrchestratorSLOBudgetExhaustForecastWarning
+        expr: orchestrator_error_budget_hours_to_exhaust_fast > 0 and orchestrator_error_budget_hours_to_exhaust_fast < 12 and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLO: presupuesto se agotará (<12h)"
+          description: "Proyección indica agotamiento del error budget en <12h (ventana fast). Iniciar mitigaciones y reducción de errores."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/slo-health/SLO%20Health"
+
+      - alert: OrchestratorSLOBudgetExhaustForecastCritical
+        expr: orchestrator_error_budget_hours_to_exhaust_fast > 0 and orchestrator_error_budget_hours_to_exhaust_fast < 6 and orchestrator_message_rate_all > orchestrator_slo_traffic_floor
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO: presupuesto se agotará (<6h)"
+          description: "Proyección indica agotamiento del error budget en <6h (ventana fast). Escalar incidente y priorizar resolución."
+          runbook_url: "https://grafana.local/runbooks#orchestratorslo"
+          dashboard: "grafana:/d/slo-health/SLO%20Health"
 
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)

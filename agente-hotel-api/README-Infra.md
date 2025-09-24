@@ -127,6 +127,8 @@ Notas:
   - `OrchestratorSLODegradationCritical` (success rate global < 97% por 10m con tráfico global > 0.5 rps)
   - `OrchestratorSLOBurnRateWarning` (burn rate fast>2 & slow>1 con tráfico global > 0.5 rps)
   - `OrchestratorSLOBurnRateCritical` (burn rate fast2>14.4 & slow2>6 con tráfico global > 0.5 rps)
+  - `OrchestratorSLOBudgetExhaustForecastWarning` (proyección agotamiento <12h)
+  - `OrchestratorSLOBudgetExhaustForecastCritical` (proyección agotamiento <6h)
 
 Ajustes:
   - Editar umbrales/ventanas en `alerts.yml` según tráfico real.
@@ -169,6 +171,7 @@ El objetivo SLO (por defecto 99%) se controla con la variable de entorno `SLO_TA
 Variables relevantes:
  - `SLO_TARGET`: Porcentaje de éxito deseado (float). Default: 99.0
  - `ERROR_BUDGET_FRACTION`: (Opcional) Override manual del error budget (si se define, ignora `SLO_TARGET`).
+ - `SLO_TRAFFIC_FLOOR`: Piso de tráfico global (rps) para evaluar alertas SLO/predicción. Default: 0.5
 
 Cambiar SLO:
 1. Editar `.env` y setear `SLO_TARGET=99.2` (ejemplo).
@@ -176,7 +179,7 @@ Cambiar SLO:
 3. Verificar: `make prometheus-rules-status | grep orchestrator_burn_rate_fast` muestra reglas regeneradas.
 
 Pisos de tráfico SLO:
-- Las alertas de degradación y burn rate añaden `orchestrator_message_rate_all > 0.5` para evitar ruido en bajo volumen. Ajustar si el tráfico normal es menor.
+- Las alertas usan `orchestrator_message_rate_all > orchestrator_slo_traffic_floor` (derivado de `SLO_TRAFFIC_FLOOR`) para evitar ruido en bajo volumen.
 
 Métrica auxiliar añadida:
 - `orchestrator_message_rate_all`: suma global de `rate(orchestrator_messages_total[5m])`, usada en alertas SLO.
