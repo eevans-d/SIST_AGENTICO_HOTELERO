@@ -297,28 +297,66 @@ Alerta relacionada:
 
 - `DependencyDown` (warning): `readiness_up < 1` durante más de 2m. Revisar `/health/ready` y los `dependency_up` para diagnóstico rápido.
 
-## Escaneo de Seguridad (Continuous Security)
+## Security Scanning
 
-Herramientas integradas:
-- `gitleaks`: detección de secretos (invocado en `make lint`).
-- `trivy`: vulnerabilidades, configuración e identificación de secretos en FS / imagen Docker.
-- `pip-audit` (opcional si instalado): vulnerabilidades de dependencias Python.
+El proyecto incluye herramientas de escaneo de seguridad integradas:
 
-Targets Makefile:
-- `make security-fast`: escaneo rápido HIGH/CRITICAL (filesystem). Útil en desarrollo.
-- `make security-scan`: agrega reportes JSON en `audit_results/` (deps, config, secrets y opcional imagen Docker `agente-hotel-api:latest`).
+### Trivy Scanning
+- **Fast scan**: `make security-fast` - Solo vulnerabilidades HIGH/CRITICAL + secrets
+- **Full scan**: `make security-scan` - Ejecuta `scripts/security-scan.sh` con reporte completo
+- **CI Integration**: El pipeline CI ejecuta `security-fast` automáticamente
+- **Docker image scan**: `make docker-vulnerability-scan` - Escanea imagen construida
 
-Script principal: `scripts/security-scan.sh`.
-Variables:
-- `IMAGE_TAG`: override de la imagen a escanear (default `agente-hotel-api:latest`).
+## Docker Hardening
 
-Integración CI (sugerido):
-1. Instalar trivy en job CI.
-2. Ejecutar `make security-fast` en push/PR.
-3. Ejecutar `make security-scan` en nightly y subir artefactos (carpeta `audit_results`).
-4. Falla de pipeline opcional si se detectan CVEs CRITICAL no ignorados.
+### Security Features
+- **Non-root user**: Imagen ejecuta como `appuser:1000` (no root)
+- **Minimal attack surface**: Solo dependencias runtime necesarias
+- **Security updates**: Actualizaciones de seguridad en build time
+- **Health checks**: Health check personalizado cada 15s
+- **Build optimization**: Multi-stage build + .dockerignore
 
-Buenas prácticas:
-- Revisar periódicamente dependencias indirectas (lockfile) tras cada actualización de FastAPI / httpx.
-- Definir política de severidad: bloquear merge CRITICAL y HIGH explotables; WARN para MEDIUM.
-- Mantener `.gitignore` actualizado para evitar subir reportes temporales con info sensible.
+### Build Targets
+```bash
+make docker-build-hardened    # Build con hardening + test health check
+make docker-vulnerability-scan # Escaneo de vulnerabilidades imagen
+```
+
+### Production Image
+Usa `requirements-prod.txt` que excluye dependencias de desarrollo para reducir superficie de ataque.
+
+## Synthetic Monitoring
+
+### Health Check Sintético
+Script `scripts/synthetic-health-check.sh` para monitoreo externo:
+
+```bash
+# Local test
+make synthetic-health-check
+
+# Production monitoring (vía cron)
+HEALTH_CHECK_URL=https://api.hotel.com \
+SLACK_WEBHOOK=https://hooks.slack.com/... \
+./scripts/synthetic-health-check.sh
+```
+
+**Environment Variables:**
+- `HEALTH_CHECK_URL`: Base URL a verificar
+- `TIMEOUT`: Timeout por request (default: 10s)  
+- `MAX_RETRIES`: Reintentos máximos (default: 3)
+- `SLACK_WEBHOOK`: Webhook para alertas (opcional)
+
+**Endpoints verificados:**
+- `/health/live` (crítico)
+- `/health/ready` (importante)
+- `/metrics` (opcional)
+
+## Dependency Management
+
+### Dependabot
+Configurado en `.github/dependabot.yml` para actualización automática:
+- **Python deps**: Lunes 09:00 (pip ecosystem)
+- **Docker images**: Martes 10:00
+- **GitHub Actions**: Miércoles 11:00
+
+Límites: 5 PRs Python, 3 PRs Docker/Actions por semana.

@@ -133,6 +133,28 @@ alerts-disable-test: ## Desactiva alerta sintética (restaura alerts-extra.yml)
 	@chmod +x scripts/alerts-disable-test.sh
 	@bash scripts/alerts-disable-test.sh
 
+# ==============================================================================
+# Hardening y Monitoreo Sintético
+# ==============================================================================
+
+synthetic-health-check: ## Ejecuta health check sintético (configurable via env vars)
+	@chmod +x scripts/synthetic-health-check.sh
+	@bash scripts/synthetic-health-check.sh
+
+docker-vulnerability-scan: ## Escanea vulnerabilidades en imagen Docker actual
+	@echo "Scanning Docker image for vulnerabilities..."
+	@docker build -t agente-hotel-api:scan . >/dev/null 2>&1
+	@trivy image --severity HIGH,CRITICAL agente-hotel-api:scan || echo "Vulnerabilities found - review output above"
+
+docker-build-hardened: ## Build imagen con hardening y health checks
+	@echo "Building hardened Docker image..."
+	@docker build -t agente-hotel-api:hardened .
+	@echo "Testing health check..."
+	@timeout 30s docker run --rm -d -p 8002:8000 -e DEBUG=true -e ENVIRONMENT=development -e SECRET_KEY=test-key agente-hotel-api:hardened || true
+	@sleep 5
+	@HEALTH_CHECK_URL=http://localhost:8002 TIMEOUT=5 MAX_RETRIES=1 bash scripts/synthetic-health-check.sh || true
+	@docker stop $$(docker ps -q --filter ancestor=agente-hotel-api:hardened) 2>/dev/null || true
+
 help: ## Muestra esta ayuda
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 

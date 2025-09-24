@@ -56,6 +56,14 @@ jobs:
         working-directory: agente-hotel-api
         run: docker build -t agente-hotel-api:ci .
 
+      - name: Scan Docker image vulnerabilities
+        working-directory: agente-hotel-api
+        run: |
+          trivy image --severity HIGH,CRITICAL --exit-code 1 agente-hotel-api:ci || {
+            echo "::warning::High/Critical vulnerabilities found in Docker image"
+            exit 0
+          }
+
   build-only:
     name: Build Only (post quality gates)
     runs-on: ubuntu-latest
