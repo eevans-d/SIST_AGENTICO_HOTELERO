@@ -299,6 +299,55 @@
       "title": "PMS Cache Ops (hits vs misses, 5m)",
       "type": "timeseries"
     }
+    ,
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 88 },
+      "id": 23,
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.6 }, { "color": "red", "value": 0.8 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "pms_cb_failure_streak_fraction", "refId": "A" } ],
+      "title": "CB Failure Streak Fraction",
+      "type": "stat",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 88 },
+      "id": 24,
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.4 }, { "color": "red", "value": 0.6 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "pms_cb_failure_ratio_1m", "legendFormat": "1m", "refId": "A" }, { "expr": "pms_cb_failure_ratio_5m", "legendFormat": "5m", "refId": "B" } ],
+      "title": "CB Failure Ratios (1m vs 5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 88 },
+      "id": 25,
+      "fieldConfig": { "defaults": { "unit": "minutes", "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 2 }, { "color": "green", "value": 5 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "pms_cb_minutes_to_open_estimate", "refId": "A" } ],
+      "title": "Minutes to Open (estimate)",
+      "type": "stat",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 88 },
+      "id": 26,
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 50 }, { "color": "red", "value": 80 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "100 * pms_cb_risk_imminent", "refId": "A" } ],
+      "title": "CB Risk Imminent (smoothed %)",
+      "type": "stat",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 92 },
+      "id": 27,
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [ { "expr": "sum by (state,result) (rate(pms_circuit_breaker_calls_total[5m]))", "legendFormat": "{{state}} {{result}}", "refId": "A" } ],
+      "title": "CB Calls Rate by State/Result (5m)",
+      "type": "timeseries"
+    }
   ],
   "refresh": "30s",
   "schemaVersion": 36,
