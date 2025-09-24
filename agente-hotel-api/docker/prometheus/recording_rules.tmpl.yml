@@ -51,3 +51,10 @@ groups:
 
       - record: orchestrator_burn_rate_slow2
         expr: orchestrator_error_ratio_6h / BUDGET_FRACTION
+
+      # Constantes de referencia (para paneles/dashboard)
+      - record: orchestrator_slo_target
+        expr: SLO_TARGET_VALUE
+
+      - record: orchestrator_error_budget_fraction
+        expr: BUDGET_FRACTION

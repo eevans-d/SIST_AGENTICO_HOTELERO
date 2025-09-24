@@ -25,8 +25,8 @@ if [ ! -f "$TEMPLATE" ]; then
   exit 1
 fi
 
-# Sustituir placeholder BUDGET_FRACTION en la plantilla
-sed "s/BUDGET_FRACTION/${BUDGET_FRACTION}/g" "$TEMPLATE" > "$OUTFILE"
+# Sustituir placeholders BUDGET_FRACTION y SLO_TARGET_VALUE en la plantilla
+sed "s/BUDGET_FRACTION/${BUDGET_FRACTION}/g; s/SLO_TARGET_VALUE/${SLO_TARGET}/g" "$TEMPLATE" > "$OUTFILE"
 
 echo "Usando SLO_TARGET=${SLO_TARGET} => ERROR_BUDGET_FRACTION=${BUDGET_FRACTION}" >&2
 echo "Recording rules generadas en $OUTFILE:" >&2

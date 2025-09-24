@@ -206,6 +206,63 @@
       "title": "Orchestrator error percentage by intent (5m)",
       "type": "timeseries"
     }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 56 },
+      "id": 12,
+      "targets": [ { "expr": "orchestrator_message_rate_all", "legendFormat": "rps", "refId": "A" } ],
+      "title": "Orchestrator global message rate (5m)",
+      "type": "stat",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 56 },
+      "id": 13,
+      "targets": [ { "expr": "orchestrator_slo_target", "refId": "A" } ],
+      "title": "SLO Target (%)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 56 },
+      "id": 14,
+      "targets": [ { "expr": "orchestrator_error_budget_fraction", "refId": "A" } ],
+      "title": "Error Budget Fraction",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "decimals": 4 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
+      "id": 15,
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 97 }, { "color": "green", "value": 99 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "orchestrator_success_rate_all", "legendFormat": "success%", "refId": "A" } ],
+      "title": "Orchestrator success rate (global %)",
+      "type": "timeseries"
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
+      "id": 16,
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 2 }, { "color": "red", "value": 6 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "orchestrator_burn_rate_fast", "legendFormat": "fast", "refId": "A" }, { "expr": "orchestrator_burn_rate_slow", "legendFormat": "slow", "refId": "B" } ],
+      "title": "SLO Burn Rate (fast/slow)",
+      "type": "timeseries"
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 68 },
+      "id": 17,
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 14.4 }, { "color": "red", "value": 20 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "orchestrator_burn_rate_fast2", "legendFormat": "fast2", "refId": "A" }, { "expr": "orchestrator_burn_rate_slow2", "legendFormat": "slow2", "refId": "B" } ],
+      "title": "SLO Burn Rate (fast2/slow2)",
+      "type": "timeseries"
+    }
   ],
   "refresh": "30s",
   "schemaVersion": 36,
