@@ -81,6 +81,8 @@ class Settings(BaseSettings):
 
     # Seguridad / CSP
     csp_extra_sources: Optional[str] = None  # Ej: "https://cdn.example.com https://fonts.gstatic.com"
+    coop_enabled: bool = False  # Cross-Origin-Opener-Policy
+    coep_enabled: bool = False  # Cross-Origin-Embedder-Policy
 
     # Auth
     jwt_algorithm: str = "HS256"

@@ -39,6 +39,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         # CSP
         response.headers.setdefault("Content-Security-Policy", self.build_csp())
+        # COOP / COEP (opt-in; puede romper integraciones pop-up, revisarlo antes de activar)
+        if getattr(settings, "coop_enabled", False):
+            response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        if getattr(settings, "coep_enabled", False):
+            response.headers.setdefault("Cross-Origin-Embedder-Policy", "require-corp")
         # API responses: evitar cacheo inadvertido (excepto métricas estáticas si se decide luego)
         if request.url.path.startswith("/health") or request.url.path.startswith("/metrics"):
             # health puede cachearse unos segundos si se quiere; por ahora no-cache

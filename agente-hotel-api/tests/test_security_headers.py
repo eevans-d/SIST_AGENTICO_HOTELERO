@@ -37,3 +37,29 @@ async def test_csp_contains_self(test_app):
         resp = await ac.get("/metrics")
     csp = resp.headers.get("Content-Security-Policy", "")
     assert "default-src 'self'" in csp
+
+
+@pytest.mark.asyncio
+async def test_coop_coep_disabled_by_default(test_app):
+    from app.core.settings import settings
+    assert settings.coop_enabled is False
+    assert settings.coep_enabled is False
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get("/health/live")
+    h = resp.headers
+    assert "Cross-Origin-Opener-Policy" not in h
+    assert "Cross-Origin-Embedder-Policy" not in h
+
+
+@pytest.mark.asyncio
+async def test_coop_coep_enabled(monkeypatch, test_app):
+    from app.core import settings as settings_module
+    monkeypatch.setattr(settings_module.settings, "coop_enabled", True)
+    monkeypatch.setattr(settings_module.settings, "coep_enabled", True)
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get("/metrics")
+    h = resp.headers
+    assert h.get("Cross-Origin-Opener-Policy") == "same-origin"
+    assert h.get("Cross-Origin-Embedder-Policy") == "require-corp"
