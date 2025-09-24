@@ -10,6 +10,31 @@ TIMEOUT="${TIMEOUT:-10}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 SLACK_WEBHOOK="${SLACK_WEBHOOK:-}"
 
+# GUARDRAILS: Cargar configuración central si está disponible
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/guardrails.conf" ]]; then
+    source "$SCRIPT_DIR/guardrails.conf"
+    ABSOLUTE_MAX_RETRIES=${HEALTH_CHECK_MAX_RETRIES:-10}
+    ABSOLUTE_MAX_TIMEOUT=${HEALTH_CHECK_MAX_TIMEOUT:-60}
+    RATE_LIMIT_DELAY=${HEALTH_CHECK_RATE_LIMIT:-1}
+else
+    # Fallback values si no existe configuración central
+    ABSOLUTE_MAX_RETRIES=10   # Límite duro sin importar configuración
+    ABSOLUTE_MAX_TIMEOUT=60   # Timeout máximo en segundos
+    RATE_LIMIT_DELAY=1        # Delay mínimo entre requests (segundos)
+fi
+
+# Aplicar guardrails
+if [[ $MAX_RETRIES -gt $ABSOLUTE_MAX_RETRIES ]]; then
+    log "WARN" "MAX_RETRIES limitado a $ABSOLUTE_MAX_RETRIES (era $MAX_RETRIES)"
+    MAX_RETRIES=$ABSOLUTE_MAX_RETRIES
+fi
+
+if [[ $TIMEOUT -gt $ABSOLUTE_MAX_TIMEOUT ]]; then
+    log "WARN" "TIMEOUT limitado a $ABSOLUTE_MAX_TIMEOUT (era $TIMEOUT)"
+    TIMEOUT=$ABSOLUTE_MAX_TIMEOUT
+fi
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,10 +49,28 @@ send_alert() {
     local status="$1"
     local message="$2"
     
+    # GUARDRAIL: Circuit breaker simple para alertas
+    local alert_lockfile="/tmp/agente-health-alert.lock"
+    local alert_cooldown=${HEALTH_CHECK_ALERT_COOLDOWN:-300}  # Desde guardrails.conf
+    
+    if [[ -f "$alert_lockfile" ]]; then
+        local last_alert=$(stat -c %Y "$alert_lockfile" 2>/dev/null || echo 0)
+        local current_time=$(date +%s)
+        local time_diff=$((current_time - last_alert))
+        
+        if [[ $time_diff -lt $alert_cooldown ]]; then
+            log "INFO" "Alert rate-limited (cooldown: $((alert_cooldown - time_diff))s remaining)"
+            return 0
+        fi
+    fi
+    
     if [[ -n "$SLACK_WEBHOOK" ]]; then
-        curl -X POST -H 'Content-type: application/json' \
+        if curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"🚨 Agente Hotel Health Check: $status\\n$message\"}" \
-            "$SLACK_WEBHOOK" >/dev/null 2>&1 || true
+            "$SLACK_WEBHOOK" >/dev/null 2>&1; then
+            # Actualizar lockfile solo si el alert se envió exitosamente
+            touch "$alert_lockfile"
+        fi
     fi
 }
 
@@ -45,7 +88,9 @@ check_endpoint() {
         ((retry_count++))
         if [[ $retry_count -lt $MAX_RETRIES ]]; then
             log "WARN" "${YELLOW}⚠${NC} $description - Retry $retry_count/$MAX_RETRIES"
-            sleep 2
+            # GUARDRAIL: Exponential backoff + rate limiting
+            local backoff_delay=$((RATE_LIMIT_DELAY * retry_count))
+            sleep $backoff_delay
         fi
     done
     

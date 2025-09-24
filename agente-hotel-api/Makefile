@@ -155,6 +155,29 @@ docker-build-hardened: ## Build imagen con hardening y health checks
 	@HEALTH_CHECK_URL=http://localhost:8002 TIMEOUT=5 MAX_RETRIES=1 bash scripts/synthetic-health-check.sh || true
 	@docker stop $$(docker ps -q --filter ancestor=agente-hotel-api:hardened) 2>/dev/null || true
 
+validate-guardrails: ## Valida que todos los guardrails estén configurados correctamente
+	@echo "🛡️ Validating guardrails configuration..."
+	@echo "Checking guardrails.conf..."
+	@test -f scripts/guardrails.conf && echo "✅ Guardrails config exists" || { echo "❌ Guardrails config missing"; exit 1; }
+	@echo "Checking Dependabot limits..."
+	@grep -q "open-pull-requests-limit: [1-5]" ../.github/dependabot.yml && echo "✅ Dependabot PR limits OK" || echo "⚠️ Check Dependabot limits"
+	@echo "Checking workflow timeouts..."
+	@grep -q "timeout-minutes:" ../.github/workflows/ci.yml && echo "✅ CI timeouts configured" || echo "⚠️ Missing CI timeouts"
+	@grep -q "timeout-minutes:" ../.github/workflows/nightly-security.yml && echo "✅ Nightly timeouts configured" || echo "⚠️ Missing nightly timeouts"
+	@echo "Checking synthetic health check limits..."
+	@grep -q "ABSOLUTE_MAX_RETRIES" scripts/synthetic-health-check.sh && echo "✅ Health check limits OK" || echo "⚠️ Missing health check limits"
+	@echo "🎯 Guardrails validation complete!"
+
+test-circuit-breakers: ## Prueba los circuit breakers con cargas controladas
+	@echo "🔄 Testing circuit breakers..."
+	@echo "Testing health check rate limiting..."
+	@for i in {1..3}; do \
+		echo "Attempt $$i:"; \
+		TIMEOUT=2 MAX_RETRIES=1 bash scripts/synthetic-health-check.sh || true; \
+		sleep 1; \
+	done
+	@echo "Circuit breaker test complete!"
+
 help: ## Muestra esta ayuda
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 

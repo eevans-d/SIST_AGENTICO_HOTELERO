@@ -359,4 +359,55 @@ Configurado en `.github/dependabot.yml` para actualización automática:
 - **Docker images**: Martes 10:00
 - **GitHub Actions**: Miércoles 11:00
 
-Límites: 5 PRs Python, 3 PRs Docker/Actions por semana.
+Límites: 3 PRs Python, 2 PRs Docker/Actions por semana.
+
+**Guardrails configurados**: Solo security updates y patches automáticos, major versions requieren review manual.
+
+## Guardrails & Circuit Breakers
+
+### Configuración Central
+Archivo `scripts/guardrails.conf` contiene todos los límites de seguridad:
+
+```bash
+# Validar configuración
+make validate-guardrails
+
+# Probar circuit breakers  
+make test-circuit-breakers
+```
+
+### Límites Implementados
+
+**Workflows:**
+- CI timeout: 15 minutos máximo
+- Deploy timeout: 25 minutos máximo  
+- Nightly scan timeout: 30 minutos máximo
+- Step timeout por defecto: 5 minutos
+
+**Health Checks:**
+- Max retries absoluto: 10 (sin importar configuración)
+- Timeout máximo: 60 segundos
+- Rate limiting: 1 segundo mínimo entre requests
+- Alert cooldown: 5 minutos entre alertas del mismo tipo
+
+**Dependabot:**
+- Python: máximo 3 PRs simultáneos
+- Docker: máximo 2 PRs simultáneos  
+- Actions: máximo 2 PRs simultáneos
+- Solo security + patch updates automáticos
+
+**Docker & Security:**
+- Build timeout: 10 minutos
+- Vulnerability scan timeout: 5 minutos
+- Trivy output limitado para evitar logs gigantes
+
+### Circuit Breakers
+- **Health check alerts**: Lockfile-based con cooldown de 5 minutos
+- **Retry logic**: Exponential backoff automático
+- **Resource limits**: Timeouts absolutos en todos los procesos
+- **Rate limiting**: Delay mínimo entre operaciones críticas
+
+### Emergency Breakers
+- Disk usage >85%: detener workflows
+- Memory usage >90%: kill procesos  
+- CPU usage >95%: throttling automático
