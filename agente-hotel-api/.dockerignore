@@ -1,0 +1,21 @@
+# Excluir artefactos y archivos no necesarios en build context
+.git
+.gitignore
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+.env
+.env.*
+.idea
+.vscode
+.mypy_cache
+.pytest_cache
+.cache
+node_modules
+scripts
+tests
+Dockerfile.production
+README-Infra.md
