@@ -38,6 +38,7 @@ La API expone métricas Prometheus en `/metrics` (router `metrics.py`). Métrica
   - `pms_operations_total{operation,status}`
   - `pms_errors_total{operation,error_type}`
   - `pms_cache_hits_total`, `pms_cache_misses_total`
+  - `pms_cache_hit_ratio` (recording rule 5m)
   - `pms_circuit_breaker_state` (0=closed, 1=open, 2=half-open)
 
 - Reintentos (`app/core/retry.py`):
@@ -129,6 +130,8 @@ Notas:
   - `OrchestratorSLOBurnRateCritical` (burn rate fast2>14.4 & slow2>6 con tráfico global > 0.5 rps)
   - `OrchestratorSLOBudgetExhaustForecastWarning` (proyección agotamiento <12h)
   - `OrchestratorSLOBudgetExhaustForecastCritical` (proyección agotamiento <6h)
+  - `PmsCacheHitRatioLowWarning` (ratio <70% con actividad >0.2 ops/s por 15m)
+  - `PmsCacheHitRatioLowCritical` (ratio <50% con actividad >0.2 ops/s por 10m)
 
 Ajustes:
   - Editar umbrales/ventanas en `alerts.yml` según tráfico real.
@@ -191,6 +194,27 @@ Métricas SLO / Error Budget adicionales:
 - `orchestrator_error_budget_remaining_ratio_30m`
 - `orchestrator_error_budget_hours_to_exhaust_fast`
 - `orchestrator_error_budget_hours_to_exhaust_slow`
+
+## Métricas de Cache PMS
+
+Recording rule:
+
+```promql
+pms_cache_hit_ratio = sum(rate(pms_cache_hits_total[5m])) / clamp_min(sum(rate(pms_cache_hits_total[5m])) + sum(rate(pms_cache_misses_total[5m])), 0.000001)
+```
+
+Interpretación:
+- Objetivo saludable típico: >0.8 (ajustar según patrón de acceso real).
+- Alerta warning dispara <0.7 (15m) y critical <0.5 (10m) siempre que exista actividad de cache >0.2 ops/s (para evitar ruido en horas de baja demanda).
+- Paneles añadidos en dashboard "Agente - Overview":
+  - Stat: "PMS Cache Hit Ratio" (panel id 21)
+  - Serie: "PMS Cache Ops (hits vs misses)" (panel id 22)
+
+Acciones ante degradación (ver runbook `PmsCacheHitRatio` a añadir en manual de operaciones):
+1. Revisar TTL excesivamente corto o invalidaciones masivas (`_invalidate_cache_pattern`).
+2. Verificar crecimiento de misses correlacionado con despliegue reciente.
+3. Analizar si hay cardinalidad alta de keys (ej. inclusión de parámetros poco relevantes en cache_key).
+4. Realizar warm-up manual para endpoints críticos si la latencia PMS sube simultáneamente.
 
 ## Dashboards Grafana
 

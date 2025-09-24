@@ -77,3 +77,9 @@ groups:
       # Piso de tráfico SLO parametrizable
       - record: orchestrator_slo_traffic_floor
         expr: TRAFFIC_FLOOR_VALUE
+
+      # ------------------------------------------------------------------
+      # PMS Cache Performance
+      # Ratio de aciertos del cache (5m). Protegemos contra división por cero.
+      - record: pms_cache_hit_ratio
+        expr: sum(rate(pms_cache_hits_total[5m])) / clamp_min(sum(rate(pms_cache_hits_total[5m])) + sum(rate(pms_cache_misses_total[5m])), 0.000001)

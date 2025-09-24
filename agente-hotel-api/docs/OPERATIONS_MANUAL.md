@@ -150,6 +150,29 @@
 		 - Incrementar límites/retrys temporalmente si corresponde.
 		 - Desplegar mitigaciones (cache warmup, degradación controlada).
 
+	 ### 📘 RUNBOOK: PmsCacheHitRatio
+	 - Síntoma: Alertas `PmsCacheHitRatioLowWarning` o `PmsCacheHitRatioLowCritical`.
+	 - Diagnóstico rápido:
+		 1) Grafana → Dashboard "Agente - Overview" → panel 21 (hit ratio) y panel 22 (hits vs misses).
+		 2) Correlacionar con panel de latencia PMS p95 y estado del Circuit Breaker.
+		 3) Verificar en logs si hay patrón de invalidaciones frecuentes (`Invalidated ... cache keys`).
+	 - Posibles causas:
+		 - TTL demasiado corto (expiraciones antes de reutilización real).
+		 - Clave de cache con demasiados parámetros (alta cardinalidad) → baja reutilización.
+		 - Invalidation agresiva tras `create_reservation` u otras operaciones de escritura.
+		 - Pico de nuevos tipos de consultas (cambio de tráfico estacional) aún no calientes.
+	 - Acciones sugeridas (orden):
+		 1) Confirmar volumen: asegurar actividad >0.2 ops/s (condición de la alerta).
+		 2) Inspeccionar keys representativas en Redis (opcional) para patrones de cardinalidad.
+		 3) Ajustar TTL (aumentar) temporalmente si expiración temprana es evidente.
+		 4) Implementar cache pre-warm (script) para queries populares de disponibilidad (fechas cercanas, room types top).
+		 5) Revisar lógica de invalidación: evaluar un patrón más específico en lugar de `availability:*` completo.
+		 6) Si latencia PMS también aumenta → priorizar mitigación y escalar a equipo PMS.
+	 - Métrica clave:
+		 `pms_cache_hit_ratio` (recording rule 5m). Objetivo recomendado inicial: >0.8.
+	 - Post-mortem:
+		 Documentar ajustes (TTL, patrones clave, warm-up) y validar mejora sostenida >24h.
+
 ---
 
 ## Mantenimiento
