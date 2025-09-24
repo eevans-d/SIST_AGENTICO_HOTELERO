@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión semántica (e.g. 1.2.3)"
+        required: true
+      environment:
+        description: "Destino (staging|production)"
+        required: true
+        default: staging
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: agente-hotel-api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar versión
+        id: semver
+        run: |
+          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Versión inválida (usa MAJOR.MINOR.PATCH)" >&2
+            exit 1
+          fi
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./agente-hotel-api
+          file: ./agente-hotel-api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.semver.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.semver.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.description=Agente Hotelero IA
+
+      - name: Publicar SBOM (Syft) opcional
+        if: always()
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.semver.outputs.version }} -o spdx-json > sbom-${{ steps.semver.outputs.version }}.json
+          echo "SBOM generado: sbom-${{ steps.semver.outputs.version }}.json"
+
+      - name: Summary
+        run: |
+          echo "### Deploy resumen" >> $GITHUB_STEP_SUMMARY
+          echo "Imagen: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.semver.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Entorno: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY

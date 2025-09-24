@@ -1,5 +1,7 @@
 # Agente Hotelero IA
 
+![CI](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/ci.yml/badge.svg)
+
 Sistema multi-servicio (FastAPI) para recepcionista virtual que integra WhatsApp/Gmail y QloApps PMS.
 
 ## Requisitos rápidos
@@ -42,7 +44,19 @@ Sistema multi-servicio (FastAPI) para recepcionista virtual que integra WhatsApp
 - POST: firma X-Hub-Signature-256 con HMAC SHA-256 usando WHATSAPP_APP_SECRET
 
 ## CI
-- GitHub Actions: lint (ruff) + import smoke test
+- GitHub Actions (workflow `ci.yml`):
+   - Instalación dependencias (Poetry)
+   - Lint & formato (ruff)
+   - Tests (unit, integration, e2e rápidos)
+   - Escaneo seguridad rápido (Trivy modo light)
+   - Build de imagen Docker (verificación)
+
+Badge arriba indica estado de la última ejecución en rama `main`.
+
+### Próximos (roadmap)
+- Workflow `deploy.yml` (manual dispatch) para publicar imagen versionada
+- Dependabot / Renovate para actualización de dependencias
+- Escaneo deep (Trivy fs + SBOM) en pipeline nocturno
 
 ## Notas
 - Logging estructurado con structlog y correlation IDs
