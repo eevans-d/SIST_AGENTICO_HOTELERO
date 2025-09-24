@@ -58,3 +58,18 @@ groups:
 
       - record: orchestrator_error_budget_fraction
         expr: BUDGET_FRACTION
+
+      # Error budget consumption estimations
+      - record: orchestrator_error_budget_used_ratio_30m
+        expr: clamp_min(orchestrator_error_ratio_30m / BUDGET_FRACTION, 0)
+
+      - record: orchestrator_error_budget_remaining_ratio_30m
+        expr: clamp_max(1 - orchestrator_error_budget_used_ratio_30m, 1)
+
+      # Estimación de horas hasta agotar presupuesto si se mantiene burn rate fast actual (>0)
+      - record: orchestrator_error_budget_hours_to_exhaust_fast
+        expr: clamp_min(( (1 - (orchestrator_error_ratio_5m / BUDGET_FRACTION)) / (orchestrator_burn_rate_fast) ) * 30*24, 0)
+
+      # Estimación usando ventana lenta (1h/6h) para panorama más estable
+      - record: orchestrator_error_budget_hours_to_exhaust_slow
+        expr: clamp_min(( (1 - (orchestrator_error_ratio_1h / BUDGET_FRACTION)) / (orchestrator_burn_rate_slow) ) * 30*24, 0)

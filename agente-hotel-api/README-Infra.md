@@ -181,6 +181,14 @@ Pisos de tráfico SLO:
 Métrica auxiliar añadida:
 - `orchestrator_message_rate_all`: suma global de `rate(orchestrator_messages_total[5m])`, usada en alertas SLO.
 
+Métricas SLO / Error Budget adicionales:
+- `orchestrator_slo_target`
+- `orchestrator_error_budget_fraction`
+- `orchestrator_error_budget_used_ratio_30m`
+- `orchestrator_error_budget_remaining_ratio_30m`
+- `orchestrator_error_budget_hours_to_exhaust_fast`
+- `orchestrator_error_budget_hours_to_exhaust_slow`
+
 ## Dashboards Grafana
 
 - Carpeta: "Agente Hotel" (provisionada automáticamente).
@@ -192,6 +200,7 @@ Métrica auxiliar añadida:
   - `Agente - Overview` (`docker/grafana/dashboards/agente-overview.json`):
     - Latencias de PMS (p95), requests HTTP y otras métricas generales.
     - Paneles del Orchestrator: p95 por intent, tasa/porcentaje de errores por intent, volumen de mensajes y estado del Circuit Breaker.
+    - Paneles SLO: SLO target, error budget fraction, success rate global, burn rates multi-ventana, budget usado/restante y horas hasta agotarlo.
   - `Webhooks - Rate Limit` (`docker/grafana/dashboards/webhooks-rate-limit.json`):
     - Enfoque en métricas de `/webhooks/whatsapp` y códigos 429.
   - `Readiness & Dependencies` (`docker/grafana/dashboards/readiness-overview.json`):

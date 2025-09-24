@@ -263,6 +263,35 @@
       "title": "SLO Burn Rate (fast2/slow2)",
       "type": "timeseries"
     }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 12, "y": 68 },
+      "id": 18,
+      "targets": [ { "expr": "orchestrator_error_budget_used_ratio_30m", "refId": "A" } ],
+      "title": "Error Budget Used (30m ratio)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 0.8 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 20, "y": 68 },
+      "id": 19,
+      "targets": [ { "expr": "orchestrator_error_budget_remaining_ratio_30m", "refId": "A" } ],
+      "title": "Error Budget Remaining (30m ratio)",
+      "type": "stat",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 0.3 }, { "color": "green", "value": 0.5 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    }
+    ,{
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 72 },
+      "id": 20,
+      "fieldConfig": { "defaults": { "unit": "hours", "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 12 }, { "color": "green", "value": 24 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "orchestrator_error_budget_hours_to_exhaust_fast", "legendFormat": "hrs fast", "refId": "A" }, { "expr": "orchestrator_error_budget_hours_to_exhaust_slow", "legendFormat": "hrs slow", "refId": "B" } ],
+      "title": "Hours to Exhaust Error Budget (fast vs slow)",
+      "type": "timeseries"
+    }
   ],
   "refresh": "30s",
   "schemaVersion": 36,
