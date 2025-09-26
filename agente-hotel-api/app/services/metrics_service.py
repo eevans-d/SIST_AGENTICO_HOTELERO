@@ -28,6 +28,15 @@ class MetricsService:
         self.tenant_request_errors = Counter(
             "tenant_request_errors", "Errores de requests por tenant", ["tenant_id"]
         )
+        # Métricas NLP (fase 5) – categorías de confianza y fallbacks activados
+        self.nlp_confidence_category_total = Counter(
+            "nlp_confidence_category_total",
+            "Total de intents clasificados por categoría de confianza",
+            ["category"],
+        )
+        self.nlp_fallback_total = Counter(
+            "nlp_fallback_total", "Total de fallbacks NLP activados por razón", ["reason"]
+        )
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
         labels = {
@@ -51,6 +60,28 @@ class MetricsService:
         self.tenant_request_total.labels(tenant_id=tenant_id).inc()
         if error:
             self.tenant_request_errors.labels(tenant_id=tenant_id).inc()
+
+    # ---- NLP Confidence & Fallback ----
+    def categorize_confidence(self, confidence: float) -> str:
+        if confidence < 0.45:
+            return "low"
+        if confidence < 0.75:
+            return "medium"
+        return "high"
+
+    def record_nlp_confidence(self, confidence: float):
+        category = self.categorize_confidence(confidence)
+        try:
+            self.nlp_confidence_category_total.labels(category=category).inc()
+        except Exception:  # pragma: no cover
+            pass
+        return category
+
+    def record_nlp_fallback(self, reason: str):
+        try:
+            self.nlp_fallback_total.labels(reason=reason).inc()
+        except Exception:  # pragma: no cover
+            pass
 
 
 metrics_service = MetricsService()

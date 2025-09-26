@@ -34,3 +34,9 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           bash agente-hotel-api/scripts/eval-smoke.sh
+      - name: Publicar artefacto de resumen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-summary
+          path: agente-hotel-api/reports/performance/smoke-summary.json

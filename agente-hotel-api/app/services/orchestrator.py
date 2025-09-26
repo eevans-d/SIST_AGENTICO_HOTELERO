@@ -46,11 +46,15 @@ class Orchestrator:
             confidence = intent_obj.get("confidence", 0.0)
             ff_service = await get_feature_flag_service()
             enhanced_fallback = await ff_service.is_enabled("nlp.fallback.enhanced", default=True)
+            # Registrar categoría de confianza
+            metrics_service.record_nlp_confidence(confidence)
             if enhanced_fallback and confidence < 0.45:
                 # Respuesta de bajo nivel de confianza agresiva
+                metrics_service.record_nlp_fallback("very_low_confidence")
                 return {"response": "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: disponibilidad, precios, información del hotel?"}
             elif enhanced_fallback and confidence < 0.75:
                 message.metadata["low_confidence"] = True
+                metrics_service.record_nlp_fallback("low_confidence_hint")
             response_text = await self.handle_intent(nlp_result, session, message)
             return {"response": response_text}
         except Exception as e:
