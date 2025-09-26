@@ -42,6 +42,21 @@ bash scripts/canary-deploy.sh staging $(git rev-parse --short HEAD)
 ```
 Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
 
+### Tenancy Dinámico
+- Modelos: `Tenant`, `TenantUserIdentifier` (bootstrap automático, migraciones futuras con Alembic recomendado).
+- Servicio: `dynamic_tenant_service` (caché + refresh periódico). Flag `tenancy.dynamic.enabled`.
+- Métricas:
+  - `tenant_resolution_total{result=hit|default|miss_strict|provided}`
+  - `tenants_active_total`, `tenant_identifiers_cached_total`
+  - `tenant_refresh_latency_seconds`
+- Endpoints Admin:
+  - `GET /admin/tenants`
+  - `POST /admin/tenants` (body: tenant_id,name)
+  - `POST /admin/tenants/{tenant_id}/identifiers` (body: identifier)
+  - `DELETE /admin/tenants/{tenant_id}/identifiers/{identifier}`
+  - `PATCH /admin/tenants/{tenant_id}` (body: status=active|inactive)
+  - `POST /admin/tenants/refresh`
+
 
 ## Stack Tecnológico
 

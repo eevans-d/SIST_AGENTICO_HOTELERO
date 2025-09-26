@@ -29,14 +29,20 @@ APP_VERSION = getattr(settings, "version", "0.1.0")
 APP_DEBUG = bool(getattr(settings, "debug", False))
 
 from .services.dynamic_tenant_service import dynamic_tenant_service
+from .services.feature_flag_service import get_feature_flag_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Application startup", app_name=settings.app_name, env=settings.environment)
     # Inicializar servicio de tenants dinámico
+    # Condicional por feature flag
     try:
-        await dynamic_tenant_service.start()
+        ff = await get_feature_flag_service()
+        if await ff.is_enabled("tenancy.dynamic.enabled", default=True):
+            await dynamic_tenant_service.start()
+        else:
+            logger.info("Dynamic tenant service deshabilitado por feature flag")
     except Exception as e:  # pragma: no cover
         logger.warning("DynamicTenantService start failed", error=str(e))
     try:

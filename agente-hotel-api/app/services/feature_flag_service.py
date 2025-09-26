@@ -24,6 +24,7 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     "nlp.fallback.enhanced": True,
     "canary.enabled": False,
     "multi_tenant.experimental": False,
+    "tenancy.dynamic.enabled": True,
 }
 
 
