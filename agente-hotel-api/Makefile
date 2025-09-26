@@ -2,6 +2,7 @@
 .PHONY: security-scan security-fast performance-test stress-test chaos-db chaos-redis resilience-test
 .PHONY: analyze-performance analyze-chaos open-resilience-dashboard install-k6
 .PHONY: k6-smoke
+.PHONY: create-phase5-issues
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 
@@ -188,6 +189,10 @@ test-circuit-breakers: ## Prueba los circuit breakers con cargas controladas
 
 performance-test: ## Ejecuta pruebas de rendimiento con k6
 k6-smoke: ## Ejecuta smoke test rápido (60s, validar P95 y error rate)
+create-phase5-issues: ## Crea issues estándar de la Fase 5 (requiere gh auth)
+	@echo "📌 Creando issues Fase 5..."
+	@bash scripts/create-phase5-issues.sh || echo "⚠ Revisa autenticación gh"
+	@echo "✅ Proceso finalizado"
 	@echo "🚀 Running k6 smoke test..."
 	@command -v k6 >/dev/null 2>&1 || { echo "❌ k6 not found. Ejecuta 'make install-k6'"; exit 1; }
 	@mkdir -p reports/performance
