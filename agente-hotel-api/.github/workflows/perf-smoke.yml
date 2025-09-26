@@ -1,0 +1,33 @@
+name: Performance Smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node (for k6 if needed scripts)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install k6
+        run: |
+          curl -L https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz | tar -xz
+          sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/
+      - name: Start API (background)
+        run: |
+          pip install fastapi uvicorn
+          nohup uvicorn app.main:app --port 8000 &
+          sleep 3
+      - name: Run smoke test
+        run: |
+          k6 run agente-hotel-api/tests/performance/smoke-test.js || true
+      - name: Evaluate basic threshold (placeholder)
+        run: echo "Threshold evaluation pending full instrumentation"

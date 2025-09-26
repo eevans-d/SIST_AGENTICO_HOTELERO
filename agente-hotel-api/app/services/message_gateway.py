@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from ..models.unified_message import UnifiedMessage
+from .tenant_context import tenant_context_service
 
 
 class MessageGateway:
@@ -53,6 +54,7 @@ class MessageGateway:
         else:
             text = (msg.get("text") or {}).get("body")
 
+        tenant_id = tenant_context_service.resolve_tenant(user_id)
         return UnifiedMessage(
             message_id=msg_id or user_id or "",
             canal="whatsapp",
@@ -62,6 +64,7 @@ class MessageGateway:
             texto=text,
             media_url=media_url,
             metadata={},
+            tenant_id=tenant_id,
         )
 
     def normalize_gmail_message(self, email_object) -> UnifiedMessage:

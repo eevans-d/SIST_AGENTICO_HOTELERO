@@ -1,6 +1,7 @@
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
 .PHONY: security-scan security-fast performance-test stress-test chaos-db chaos-redis resilience-test
 .PHONY: analyze-performance analyze-chaos open-resilience-dashboard install-k6
+.PHONY: k6-smoke
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 
@@ -186,6 +187,11 @@ test-circuit-breakers: ## Prueba los circuit breakers con cargas controladas
 # ==============================================================================
 
 performance-test: ## Ejecuta pruebas de rendimiento con k6
+k6-smoke: ## Ejecuta smoke test rápido (60s, validar P95 y error rate)
+	@echo "🚀 Running k6 smoke test..."
+	@command -v k6 >/dev/null 2>&1 || { echo "❌ k6 not found. Ejecuta 'make install-k6'"; exit 1; }
+	@K6_DURATION=$${K6_DURATION:-60s} K6_RPS=$${K6_RPS:-50} k6 run tests/performance/smoke-test.js || true
+	@echo "(No gating aún; integrar en CI posteriormente)"
 	@echo "🚀 Running performance tests..."
 	@command -v k6 >/dev/null 2>&1 || { echo "❌ k6 not found. Install with: curl https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz | tar -xz && sudo cp k6-v0.46.0-linux-amd64/k6 /usr/local/bin/"; exit 1; }
 	@mkdir -p reports/performance
