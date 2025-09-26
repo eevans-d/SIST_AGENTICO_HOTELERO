@@ -25,6 +25,23 @@ make preflight READINESS_SCORE=7.5 MVP_SCORE=7.0 SECURITY_GATE=PASS CHANGE_COMPL
 ```
 Genera `.playbook/preflight_report.json` y aplica reglas de modo (A/B/C).
 
+### Canary Diff (Baseline vs Canary)
+Script: `scripts/canary-deploy.sh`
+Genera reporte: `.playbook/canary_diff_report.json`
+Parámetros principales (env overrides):
+- `P95_INCREASE_LIMIT` (default 1.10)
+- `ERR_INCREASE_LIMIT` (default 1.50)
+- `ERR_ABS_MIN` (default 0.005)
+- `BASELINE_RANGE` / `CANARY_RANGE` (ventanas PromQL)
+
+Uso rápido:
+```
+make canary-diff
+# o manual
+bash scripts/canary-deploy.sh staging $(git rev-parse --short HEAD)
+```
+Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
+
 
 ## Stack Tecnológico
 

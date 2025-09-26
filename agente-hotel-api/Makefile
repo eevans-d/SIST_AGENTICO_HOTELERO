@@ -4,6 +4,7 @@
 .PHONY: k6-smoke
 .PHONY: create-phase5-issues
 .PHONY: preflight
+.PHONY: canary-diff
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 
@@ -357,6 +358,12 @@ help: ## Muestra esta ayuda
 
 preflight: ## Ejecuta preflight (calcula risk_score y genera reporte)
 	@echo "🚦 Ejecutando preflight..."
+
+canary-diff: ## Ejecuta canary deploy local y genera .playbook/canary_diff_report.json
+	@echo "🟡 Ejecutando canary diff (baseline vs canary)"
+	@bash scripts/canary-deploy.sh --dry-run || true
+	@bash scripts/canary-deploy.sh staging local || true
+	@test -f .playbook/canary_diff_report.json && echo "Reporte: .playbook/canary_diff_report.json" || echo "Sin reporte"
 	@command -v python3 >/dev/null 2>&1 || { echo "Python3 no disponible"; exit 1; }
 	@python3 -c "import yaml" 2>/dev/null || { echo "Instalando pyyaml (sudo puede ser requerido)"; python3 -m pip install --user pyyaml >/dev/null; }
 	@python3 scripts/preflight.py || exit $$?
