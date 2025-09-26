@@ -28,14 +28,24 @@ APP_TITLE = getattr(settings, "app_name", "Agente Hotel API")
 APP_VERSION = getattr(settings, "version", "0.1.0")
 APP_DEBUG = bool(getattr(settings, "debug", False))
 
+from .services.dynamic_tenant_service import dynamic_tenant_service
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("Application startup", app_name=settings.app_name, env=settings.environment)
+    # Inicializar servicio de tenants dinámico
+    try:
+        await dynamic_tenant_service.start()
+    except Exception as e:  # pragma: no cover
+        logger.warning("DynamicTenantService start failed", error=str(e))
     try:
         yield
     finally:
-        # Shutdown
+        try:
+            await dynamic_tenant_service.stop()
+        except Exception:  # pragma: no cover
+            pass
         logger.info("Application shutdown")
 
 

@@ -2,7 +2,11 @@
 
 from datetime import datetime, timezone
 from ..models.unified_message import UnifiedMessage
-from .tenant_context import tenant_context_service
+try:
+    from .dynamic_tenant_service import dynamic_tenant_service  # prefer dynamic
+    _TENANT_RESOLVER = dynamic_tenant_service
+except Exception:  # pragma: no cover
+    from .tenant_context import tenant_context_service as _TENANT_RESOLVER  # fallback
 
 
 class MessageGateway:
@@ -53,8 +57,7 @@ class MessageGateway:
             media_url = None
         else:
             text = (msg.get("text") or {}).get("body")
-
-        tenant_id = tenant_context_service.resolve_tenant(user_id)
+        tenant_id = _TENANT_RESOLVER.resolve_tenant(user_id)
         return UnifiedMessage(
             message_id=msg_id or user_id or "",
             canal="whatsapp",
