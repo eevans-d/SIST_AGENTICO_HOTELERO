@@ -1,0 +1,21 @@
+project:
+  name: agente-hotel-api
+  mode: B  # A|B|C
+  tier: Beta
+  env: prod
+  slo:
+    latency_p95_ms: 450
+    error_rate: 0.01
+  rollback_thresholds:
+    error_rate: 0.02
+    p95_ms: 900
+  contacts:
+    owner: "product@hotel.local"
+    tech_lead: "techlead@hotel.local"
+    sre_oncall: "sre@hotel.local"
+  deployment_strategy: canary
+  monitoring_window_hours: 4
+  risk_weights:
+    readiness: 0.5
+    mvp: 0.5
+    security: 0.2

@@ -1,5 +1,23 @@
 # [PROMPT GA-01] Documentación de Infraestructura
 
+## Guía de Alineación (Resumen)
+
+Para iniciar una sesión de trabajo consistente y evitar desviaciones:
+
+1. Ejecutar `bash agente-hotel-api/scripts/session-start.sh` (imprime estado rápido).
+2. Revisar `docs/STATUS_SNAPSHOT.md` (generar previo con `bash agente-hotel-api/scripts/generate-status-summary.sh`).
+3. Confirmar reglas en `docs/playbook/WORKING_AGREEMENT.md`.
+4. Validar que el item a trabajar cumple Definition of Ready (`CONTRIBUTING.md`).
+5. Al abrir PR: adjuntar secciones aplicables de `docs/DOD_CHECKLIST.md`.
+
+Artefactos clave de alineación:
+- `CONTRIBUTING.md`
+- `docs/DOD_CHECKLIST.md`
+- `docs/playbook/PLAYBOOK_GOBERNANZA_PROPOSITO.md`
+- `docs/playbook/WORKING_AGREEMENT.md`
+- `.playbook/project_config.yml`
+
+
 ## Stack Tecnológico
 
 - **Orquestación:** Docker Compose
