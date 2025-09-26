@@ -398,6 +398,33 @@ make test-circuit-breakers
 
 **Docker & Security:**
 - Build timeout: 10 minutos
+
+## Performance Smoke Gating (Fase 5)
+
+Se añadió un pipeline de "smoke performance" que ejecuta una prueba corta (k6 ~60s) en cada push/PR a `main`.
+
+Componentes:
+- Script de prueba: `tests/performance/smoke-test.js` (constant-arrival-rate, 40–50 RPS)
+- Summary JSON: `reports/performance/smoke-summary.json` generado vía `handleSummary` de k6.
+- Script de evaluación: `scripts/eval-smoke.sh` (valida P95 <= 450ms y error rate <= 1%).
+- Workflow CI: `.github/workflows/perf-smoke.yml` (falla si se exceden umbrales).
+
+Uso local:
+```bash
+make k6-smoke                 # Ejecuta test + eval (no bloqueante local)
+cat reports/performance/smoke-summary.json
+P95_LIMIT_MS=400 bash scripts/eval-smoke.sh   # Ajustar umbral manual
+```
+
+Racional:
+1. Detectar regresiones de latencia rápido antes de ejecutar suites largas.
+2. Reducir riesgo de merges que erosionen SLO sin darse cuenta.
+3. Servir de base para canary comparativo (baseline vs canary).
+
+Próximas extensiones sugeridas:
+- Parseo de error rate HTTP real (métrica Prometheus) tras carga.
+- Publicación del summary como artifact CI.
+- Ajuste dinámico de umbrales según error budget restante.
 - Vulnerability scan timeout: 5 minutos
 - Trivy output limitado para evitar logs gigantes
 
