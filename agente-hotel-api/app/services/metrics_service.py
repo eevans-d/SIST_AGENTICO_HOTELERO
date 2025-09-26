@@ -1,6 +1,26 @@
 # [PROMPT 2.9] app/services/metrics_service.py
 
-from prometheus_client import Histogram, Counter, Gauge
+from prometheus_client import Counter, Histogram, Gauge
+
+
+# ===================== NORMALIZACIÓN MENSAJES =====================
+MESSAGE_NORMALIZED_TOTAL = Counter(
+    "message_normalized_total",
+    "Total de mensajes inbound normalizados por canal y tenant",
+    ["canal", "tenant_id"],
+)
+
+MESSAGE_NORMALIZATION_ERRORS_TOTAL = Counter(
+    "message_normalization_errors_total",
+    "Errores de normalización de mensajes inbound por canal y tipo",
+    ["canal", "error_type"],
+)
+
+MESSAGE_NORMALIZATION_LATENCY_SECONDS = Histogram(
+    "message_normalization_latency_seconds",
+    "Latencia de normalización de mensajes por canal",
+    ["canal"],
+)
 
 
 class MetricsService:
@@ -18,16 +38,10 @@ class MetricsService:
         # Gauge de conexiones activas (opcional)
         self.active_connections = Gauge("active_connections", "Active connections")
         # Gauge para feature flags (1=enabled,0=disabled)
-        self.feature_flag_enabled = Gauge(
-            "feature_flag_enabled", "Estado actual de un feature flag", ["flag"]
-        )
+        self.feature_flag_enabled = Gauge("feature_flag_enabled", "Estado actual de un feature flag", ["flag"])
         # Métricas multi-tenant (fase 5 groundwork)
-        self.tenant_request_total = Counter(
-            "tenant_request_total", "Total de requests por tenant", ["tenant_id"]
-        )
-        self.tenant_request_errors = Counter(
-            "tenant_request_errors", "Errores de requests por tenant", ["tenant_id"]
-        )
+        self.tenant_request_total = Counter("tenant_request_total", "Total de requests por tenant", ["tenant_id"])
+        self.tenant_request_errors = Counter("tenant_request_errors", "Errores de requests por tenant", ["tenant_id"])
         # Métricas NLP (fase 5) – categorías de confianza y fallbacks activados
         self.nlp_confidence_category_total = Counter(
             "nlp_confidence_category_total",
@@ -82,6 +96,22 @@ class MetricsService:
             self.nlp_fallback_total.labels(reason=reason).inc()
         except Exception:  # pragma: no cover
             pass
+
+    # ---- Normalización de Mensajes ----
+    def record_message_normalized(self, canal: str, tenant_id: str = "unknown"):
+        try:
+            MESSAGE_NORMALIZED_TOTAL.labels(canal=canal, tenant_id=tenant_id or "unknown").inc()
+        except Exception:
+            pass
+
+    def record_message_normalization_error(self, canal: str, error_type: str):
+        try:
+            MESSAGE_NORMALIZATION_ERRORS_TOTAL.labels(canal=canal, error_type=error_type[:32]).inc()
+        except Exception:
+            pass
+
+    def time_message_normalization(self, canal: str):
+        return MESSAGE_NORMALIZATION_LATENCY_SECONDS.labels(canal=canal).time()
 
 
 metrics_service = MetricsService()

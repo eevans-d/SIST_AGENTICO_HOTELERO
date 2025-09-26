@@ -496,3 +496,21 @@ Próximas extensiones sugeridas:
 - Disk usage >85%: detener workflows
 - Memory usage >90%: kill procesos  
 - CPU usage >95%: throttling automático
+
+## Normalización de Mensajes (WhatsApp)
+Métricas:
+- message_normalized_total{canal,tenant_id}
+- message_normalization_errors_total{canal,error_type}
+- message_normalization_latency_seconds_bucket
+
+Errores controlados:
+- missing_entry
+- missing_changes
+- missing_messages
+- unexpected (errores no previstos)
+
+Flag:
+- tenancy.dynamic.enabled (activa mapeo dinámico de tenants).
+
+Test:
+pytest -q tests/unit/test_message_gateway_normalization.py
