@@ -1,0 +1,34 @@
+name: Preflight Validation
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal deps
+        run: |
+          pip install pyyaml
+      - name: Run Preflight
+        env:
+          READINESS_SCORE: 7.5
+          MVP_SCORE: 7.2
+          SECURITY_GATE: PASS
+          CHANGE_COMPLEXITY: medium
+        run: |
+          python agente-hotel-api/scripts/preflight.py
+          python agente-hotel-api/scripts/validate_preflight.py
+      - name: Upload preflight report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-report
+          path: agente-hotel-api/.playbook/preflight_report.json

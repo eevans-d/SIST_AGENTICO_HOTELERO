@@ -16,6 +16,14 @@ Artefactos clave de alineación:
 - `docs/playbook/PLAYBOOK_GOBERNANZA_PROPOSITO.md`
 - `docs/playbook/WORKING_AGREEMENT.md`
 - `.playbook/project_config.yml`
+- Preflight CI: `.github/workflows/preflight.yml` (genera `.playbook/preflight_report.json` y bloquea si NO_GO / blocking issues)
+
+### Preflight local
+Ejecutar:
+```
+make preflight READINESS_SCORE=7.5 MVP_SCORE=7.0 SECURITY_GATE=PASS CHANGE_COMPLEXITY=medium
+```
+Genera `.playbook/preflight_report.json` y aplica reglas de modo (A/B/C).
 
 
 ## Stack Tecnológico
