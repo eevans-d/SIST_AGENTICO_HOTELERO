@@ -43,18 +43,18 @@ class Settings(BaseSettings):
     # PMS Configuration
     pms_type: PMSType = PMSType.QLOAPPS
     pms_base_url: str = "http://localhost:8080"
-    pms_api_key: SecretStr = SecretStr("dev-pms-key")
+    pms_api_key: SecretStr  # No default - must be provided via environment
     pms_timeout: int = 30
 
     # WhatsApp Meta Cloud
-    whatsapp_access_token: SecretStr = SecretStr("dev-whatsapp-token")
+    whatsapp_access_token: SecretStr  # No default - must be provided via environment
     whatsapp_phone_number_id: str = "000000000000"
-    whatsapp_verify_token: SecretStr = SecretStr("dev-verify-token")
-    whatsapp_app_secret: SecretStr = SecretStr("dev-app-secret")
+    whatsapp_verify_token: SecretStr  # No default - must be provided via environment
+    whatsapp_app_secret: SecretStr  # No default - must be provided via environment
 
     # Gmail Configuration
     gmail_username: str = "dev@example.com"
-    gmail_app_password: SecretStr = SecretStr("dev-gmail-pass")
+    gmail_app_password: SecretStr  # No default - must be provided via environment
 
     # Database & Cache
     # Si existen variables POSTGRES_* se usará para construir postgres_url automáticamente
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
     audio_enabled: bool = True
     tts_engine: TTSEngine = TTSEngine.ESPEAK
-    secret_key: SecretStr = SecretStr("generate_secure_key_here")
+    secret_key: SecretStr  # No default - must be provided via environment
     # Health/Readiness toggles
     check_pms_in_readiness: bool = False
 
@@ -104,8 +104,18 @@ class Settings(BaseSettings):
             "",
             "your_token_here",
             "generate_secure_key_here",
+            "dev-pms-key",
+            "dev-whatsapp-token", 
+            "dev-verify-token",
+            "dev-app-secret",
+            "dev-gmail-pass",
+            "your_qloapps_api_key_here",
+            "your_meta_token_here",
+            "your_verify_token_here",
+            "your_app_secret_here",
+            "your_app_password_here",
         ]:
-            raise ValueError("Critical secret is not set for production environment")
+            raise ValueError(f"Critical secret contains development/placeholder value for production environment")
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo
