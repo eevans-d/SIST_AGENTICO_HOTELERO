@@ -1,4 +1,7 @@
-# General
+.playbook/
+*.log
+__pycache__/
+*.pyc# General
 .DS_Store
 Thumbs.db
 *.swp
