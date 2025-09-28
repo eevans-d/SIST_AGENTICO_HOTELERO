@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.tenant_context import tenant_context_service, TenantContextService
 
 

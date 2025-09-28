@@ -11,6 +11,7 @@ CRITICAL_RULES = [
 
 RULES_FILE = Path(__file__).parent.parent.parent / "docker" / "prometheus" / "recording_rules.tmpl.yml"
 
+
 def test_critical_recording_rules_present():
     text = RULES_FILE.read_text(encoding="utf-8")
     # Simplista: buscar 'record: <name>'

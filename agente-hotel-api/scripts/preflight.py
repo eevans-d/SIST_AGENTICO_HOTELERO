@@ -18,9 +18,13 @@ Exit codes:
 """
 
 from __future__ import annotations
-import json, os, sys, enum, math, pathlib
+import json
+import os
+import sys
+import enum
+import pathlib
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 try:
     import yaml  # type: ignore
@@ -103,9 +107,7 @@ def main():
 
     weights = MODE_WEIGHTS[mode]
     base_component = (
-        (readiness_score * weights.readiness)
-        + (mvp_score * weights.mvp)
-        + (security_score * weights.security)
+        (readiness_score * weights.readiness) + (mvp_score * weights.mvp) + (security_score * weights.security)
     )
     # Escalar base component (max teórico 10 * sum pesos) a 0-100
     max_possible = 10 * (weights.readiness + weights.mvp + weights.security)
@@ -113,8 +115,7 @@ def main():
     risk_score = max(0, 100 - normalized + penalty)
     thresholds = MODE_THRESHOLDS[mode]
     decision = (
-        "GO" if risk_score <= thresholds["go"] else
-        ("GO_CANARY" if risk_score <= thresholds["canary"] else "NO_GO")
+        "GO" if risk_score <= thresholds["go"] else ("GO_CANARY" if risk_score <= thresholds["canary"] else "NO_GO")
     )
 
     artifacts_missing = [a for a in ARTIFACTS_REQUIRED if not (ROOT / a).exists()]

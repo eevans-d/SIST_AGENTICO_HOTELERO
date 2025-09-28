@@ -2,12 +2,12 @@ from __future__ import annotations
 import asyncio
 from typing import Dict, Optional, List
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import AsyncSessionFactory, engine
 from ..core.logging import logger
 from prometheus_client import Counter, Gauge, Histogram
 from ..models.lock_audit import Base
 from ..models.tenant import Tenant, TenantUserIdentifier
+
 
 class DynamicTenantService:
     """Servicio dinámico de tenants con caché en memoria.
@@ -25,18 +25,10 @@ class DynamicTenantService:
         self._lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
         # Métricas
-        self.resolution_total = Counter(
-            "tenant_resolution_total", "Total resoluciones de tenant", ["result"]
-        )
-        self.active_tenants_gauge = Gauge(
-            "tenants_active_total", "Tenants activos en cache"
-        )
-        self.identifiers_cached_gauge = Gauge(
-            "tenant_identifiers_cached_total", "Identificadores en cache"
-        )
-        self.refresh_latency = Histogram(
-            "tenant_refresh_latency_seconds", "Latencia de refresh de tenants"
-        )
+        self.resolution_total = Counter("tenant_resolution_total", "Total resoluciones de tenant", ["result"])
+        self.active_tenants_gauge = Gauge("tenants_active_total", "Tenants activos en cache")
+        self.identifiers_cached_gauge = Gauge("tenant_identifiers_cached_total", "Identificadores en cache")
+        self.refresh_latency = Histogram("tenant_refresh_latency_seconds", "Latencia de refresh de tenants")
 
     async def start(self):
         # Crear tablas si no existen (simple bootstrap; en prod usar migrations)
@@ -68,9 +60,7 @@ class DynamicTenantService:
             async with AsyncSessionFactory() as session:  # type: ignore
                 mapping: Dict[str, str] = {}
                 tenants_meta: Dict[str, dict] = {}
-                tenants = (
-                    await session.execute(select(Tenant).where(Tenant.status == "active"))
-                ).scalars().all()
+                tenants = (await session.execute(select(Tenant).where(Tenant.status == "active"))).scalars().all()
                 for t in tenants:
                     tenants_meta[t.tenant_id] = {"name": t.name, "status": t.status}
                 ids = (await session.execute(select(TenantUserIdentifier))).scalars().all()
@@ -123,8 +113,7 @@ class DynamicTenantService:
         return "default"
 
     def list_tenants(self) -> List[dict]:
-        return [
-            {"tenant_id": tid, **meta} for tid, meta in sorted(self._tenants_meta.items(), key=lambda x: x[0])
-        ]
+        return [{"tenant_id": tid, **meta} for tid, meta in sorted(self._tenants_meta.items(), key=lambda x: x[0])]
+
 
 dynamic_tenant_service = DynamicTenantService(strict_mode=False)

@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict
 
 from ..models.unified_message import UnifiedMessage
-from .feature_flag_service import feature_flag_service
+from .feature_flag_service import DEFAULT_FLAGS
 from .metrics_service import metrics_service
 
 logger = logging.getLogger(__name__)
@@ -29,15 +29,17 @@ class MessageGateway:
     def _resolve_tenant(self, user_id: str | None) -> str:
         if not user_id:
             return "default"
-        use_dynamic = feature_flag_service.is_enabled("tenancy.dynamic.enabled", default=True)
+        use_dynamic = DEFAULT_FLAGS.get("tenancy.dynamic.enabled", True)
         if use_dynamic and _TENANT_RESOLVER_DYNAMIC:
             try:
-                return _TENANT_RESOLVER_DYNAMIC.resolve_tenant(user_id)
+                resolved = _TENANT_RESOLVER_DYNAMIC.resolve_tenant(user_id)  # type: ignore[arg-type]
+                return resolved or "default"
             except Exception as e:  # pragma: no cover
                 logger.warning("tenant.dynamic.resolve_failed", extra={"err": str(e)})
         if _TENANT_RESOLVER_STATIC:
             try:
-                return _TENANT_RESOLVER_STATIC.resolve_tenant(user_id) or "default"
+                resolved = _TENANT_RESOLVER_STATIC.resolve_tenant(user_id)  # type: ignore[arg-type]
+                return resolved or "default"
             except Exception as e:  # pragma: no cover
                 logger.warning("tenant.static.resolve_failed", extra={"err": str(e)})
         return "default"
@@ -71,7 +73,8 @@ class MessageGateway:
                 try:
                     ts_iso = (
                         datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
-                        if ts is not None else datetime.now(timezone.utc).isoformat()
+                        if ts is not None
+                        else datetime.now(timezone.utc).isoformat()
                     )
                 except Exception:
                     ts_iso = datetime.now(timezone.utc).isoformat()
@@ -123,17 +126,15 @@ class MessageGateway:
         # TODO: Implementar Gmail → UnifiedMessage (backlog)
         raise NotImplementedError("normalize_gmail_message no implementado")
 
-## Métricas de Normalización de Mensajes (Nuevo)
-| Métrica | Descripción | Labels |
-|---------|-------------|--------|
-| message_normalized_total | Total de mensajes inbound normalizados | canal, tenant_id |
-| message_normalization_errors_total | Errores de normalización | canal, error_type |
-| message_normalization_latency_seconds | Histograma de latencia de normalización | canal |
-
-Uso:
-- Para detectar picos de errores en ingesta (payloads malformados).
-- Correlacionar caída de intent detection con problemas upstream (errores de normalización).
-- Ajustar parsing o validaciones en canales nuevos.
-
-Flag relevante:
-- tenancy.dynamic.enabled: controla resolución dinámica de tenants en normalización.
+    # Notas de Métricas de Normalización de Mensajes (documentación):
+    # - message_normalized_total: Total de mensajes inbound normalizados (labels: canal, tenant_id)
+    # - message_normalization_errors_total: Errores de normalización (labels: canal, error_type)
+    # - message_normalization_latency_seconds: Histograma de latencia de normalización (labels: canal)
+    #
+    # Uso:
+    # - Detectar picos de errores en ingesta (payloads malformados).
+    # - Correlacionar caída de intent detection con problemas upstream (errores de normalización).
+    # - Ajustar parsing o validaciones en canales nuevos.
+    #
+    # Flag relevante:
+    # - tenancy.dynamic.enabled: controla resolución dinámica de tenants en normalización.

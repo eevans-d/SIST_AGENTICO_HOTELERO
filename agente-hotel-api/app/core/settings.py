@@ -99,12 +99,17 @@ class Settings(BaseSettings):
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
         env = info.data.get("environment") if hasattr(info, "data") else None
-        if env == Environment.PROD and v and v.get_secret_value() in [
-            None,
-            "",
-            "your_token_here",
-            "generate_secure_key_here",
-        ]:
+        if (
+            env == Environment.PROD
+            and v
+            and v.get_secret_value()
+            in [
+                None,
+                "",
+                "your_token_here",
+                "generate_secure_key_here",
+            ]
+        ):
             raise ValueError("Critical secret is not set for production environment")
         return v
 

@@ -1,6 +1,5 @@
 # [PROMPT 2.10] tests/conftest.py
 
-import pytest
 import pytest_asyncio
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -10,6 +9,7 @@ from slowapi.util import get_remote_address
 async def test_app():
     # Lógica para crear una app de prueba con BD temporal
     from app.main import app
+
     # Usar almacenamiento en memoria para el rate limiter en pruebas
     app.state.limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
     return app

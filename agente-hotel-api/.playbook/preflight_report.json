@@ -1,0 +1,23 @@
+{
+  "mode": "B",
+  "weights": {
+    "readiness": 0.5,
+    "mvp": 0.5,
+    "security": 0.2
+  },
+  "scores": {
+    "readiness": 7.0,
+    "mvp": 7.0,
+    "security_gate": "PASS"
+  },
+  "complexity": "medium",
+  "penalty": 5,
+  "risk_score": 30.0,
+  "thresholds": {
+    "go": 50,
+    "canary": 65
+  },
+  "decision": "GO",
+  "blocking_issues": [],
+  "artifacts_missing": []
+}

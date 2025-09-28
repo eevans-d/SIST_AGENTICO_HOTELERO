@@ -1,9 +1,8 @@
 import asyncio
-import types
 
 import pytest
 
-from app.services.feature_flag_service import FeatureFlagService, DEFAULT_FLAGS
+from app.services.feature_flag_service import FeatureFlagService
 
 
 class DummyRedis:

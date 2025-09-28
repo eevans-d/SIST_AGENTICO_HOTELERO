@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
-import redis.asyncio as redis  # type: ignore
 
 from ..core.redis_client import get_redis
 from .metrics_service import metrics_service
@@ -26,9 +25,6 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     "multi_tenant.experimental": False,
     "tenancy.dynamic.enabled": True,
 }
-
-
-from typing import Any
 
 
 class FeatureFlagService:

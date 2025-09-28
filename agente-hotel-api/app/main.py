@@ -17,6 +17,8 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.routers import health, metrics, webhooks, admin
+from .services.dynamic_tenant_service import dynamic_tenant_service
+from .services.feature_flag_service import get_feature_flag_service
 
 setup_logging()
 
@@ -27,9 +29,6 @@ limiter = Limiter(key_func=get_remote_address, storage_uri=str(settings.redis_ur
 APP_TITLE = getattr(settings, "app_name", "Agente Hotel API")
 APP_VERSION = getattr(settings, "version", "0.1.0")
 APP_DEBUG = bool(getattr(settings, "debug", False))
-
-from .services.dynamic_tenant_service import dynamic_tenant_service
-from .services.feature_flag_service import get_feature_flag_service
 
 
 @asynccontextmanager
@@ -59,9 +58,12 @@ app = FastAPI(title=APP_TITLE, version=APP_VERSION, debug=APP_DEBUG, lifespan=li
 
 # Middlewares
 app.state.limiter = limiter
+
+
 def _rl_handler(request: Request, exc: Exception) -> Response:
     # FastAPI espera ExceptionHandler: (Request, Exception) -> Response
     return _rate_limit_exceeded_handler(request, exc)  # type: ignore[arg-type]
+
 
 app.add_exception_handler(RateLimitExceeded, _rl_handler)
 app.add_middleware(SecurityHeadersMiddleware)

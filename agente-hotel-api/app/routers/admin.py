@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi import HTTPException
 from ..services.dynamic_tenant_service import dynamic_tenant_service
-from ..services.feature_flag_service import get_feature_flag_service
 from ..models.tenant import Tenant, TenantUserIdentifier
 from ..core.database import AsyncSessionFactory
 from sqlalchemy import select
@@ -41,9 +40,7 @@ async def create_tenant(body: dict):
     if not tenant_id or not name:
         raise HTTPException(status_code=400, detail="tenant_id y name requeridos")
     async with AsyncSessionFactory() as session:  # type: ignore
-        exists = (
-            await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
-        ).scalar_one_or_none()
+        exists = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if exists:
             raise HTTPException(status_code=409, detail="Tenant ya existe")
         t = Tenant(tenant_id=tenant_id, name=name)
@@ -59,15 +56,11 @@ async def add_identifier(tenant_id: str, body: dict):
     if not identifier:
         raise HTTPException(status_code=400, detail="identifier requerido")
     async with AsyncSessionFactory() as session:  # type: ignore
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
-        ).scalar_one_or_none()
+        tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
         existing = (
-            await session.execute(
-                select(TenantUserIdentifier).where(TenantUserIdentifier.identifier == identifier)
-            )
+            await session.execute(select(TenantUserIdentifier).where(TenantUserIdentifier.identifier == identifier))
         ).scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=409, detail="Identifier ya asignado")
@@ -80,9 +73,7 @@ async def add_identifier(tenant_id: str, body: dict):
 @router.delete("/tenants/{tenant_id}/identifiers/{identifier}")
 async def remove_identifier(tenant_id: str, identifier: str):
     async with AsyncSessionFactory() as session:  # type: ignore
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
-        ).scalar_one_or_none()
+        tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
         rec = (
@@ -107,9 +98,7 @@ async def update_tenant_status(tenant_id: str, body: dict):
     if status not in ("active", "inactive"):
         raise HTTPException(status_code=400, detail="status inválido")
     async with AsyncSessionFactory() as session:  # type: ignore
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))
-        ).scalar_one_or_none()
+        tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
         tenant.status = status

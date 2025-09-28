@@ -7,12 +7,16 @@ Checks:
  - blocking_issues vacío
  - risk_score no aumenta >10% respecto a snapshot previo (si existe .playbook/preflight_prev.json)
 """
+
 from __future__ import annotations
-import json, sys, pathlib
+import json
+import sys
+import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 REPORT = ROOT / ".playbook" / "preflight_report.json"
 PREV = ROOT / ".playbook" / "preflight_prev.json"
+
 
 def main():
     if not REPORT.exists():
@@ -36,6 +40,7 @@ def main():
     # Guardar snapshot como prev
     PREV.write_text(REPORT.read_text(encoding="utf-8"), encoding="utf-8")
     print("✅ Preflight validación exitosa")
+
 
 if __name__ == "__main__":
     main()
