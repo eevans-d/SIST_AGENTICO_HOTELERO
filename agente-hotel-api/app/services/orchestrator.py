@@ -5,7 +5,6 @@ from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
 from .audio_processor import AudioProcessor
-from .pms_adapter import QloAppsAdapter
 from .session_manager import SessionManager
 from .lock_service import LockService
 from .template_service import TemplateService

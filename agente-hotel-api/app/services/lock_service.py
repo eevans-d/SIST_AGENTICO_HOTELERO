@@ -1,7 +1,7 @@
 # [PROMPT 2.3] app/services/lock_service.py
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 import redis.asyncio as redis
@@ -25,7 +25,7 @@ class LockService:
             return None
 
         lock_key = self._get_lock_key(room_id, check_in, check_out)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl)
 
         lock_data = {
@@ -62,7 +62,7 @@ class LockService:
 
         lock_data["extensions"] += 1
         new_ttl = await self.redis.ttl(lock_key) + extra_ttl
-        lock_data["expires_at"] = (datetime.utcnow() + timedelta(seconds=new_ttl)).isoformat()
+        lock_data["expires_at"] = (datetime.now(timezone.utc) + timedelta(seconds=new_ttl)).isoformat()
 
         if await self.redis.set(lock_key, json.dumps(lock_data), ex=new_ttl):
             logger.info(f"Lock extendido: {lock_key}")

@@ -1,6 +1,5 @@
 # [PROMPT 2.10] tests/conftest.py
 
-import pytest
 import pytest_asyncio
 from slowapi import Limiter
 from slowapi.util import get_remote_address

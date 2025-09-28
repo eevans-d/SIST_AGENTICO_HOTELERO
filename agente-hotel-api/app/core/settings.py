@@ -99,13 +99,30 @@ class Settings(BaseSettings):
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
         env = info.data.get("environment") if hasattr(info, "data") else None
-        if env == Environment.PROD and v and v.get_secret_value() in [
-            None,
-            "",
-            "your_token_here",
-            "generate_secure_key_here",
-        ]:
-            raise ValueError("Critical secret is not set for production environment")
+        if env == Environment.PROD and v:
+            secret_value = v.get_secret_value()
+            # Enhanced production secret validation
+            insecure_values = [
+                None, "", "your_token_here", "generate_secure_key_here",
+                "dev-token", "dev-secret", "dev-app-secret", "dev-gmail-pass",
+                "test", "test123", "password", "secret", "admin", "default"
+            ]
+            
+            # Check for obviously insecure values
+            if secret_value in insecure_values:
+                raise ValueError(f"Insecure secret detected for production: {info.field_name}")
+            
+            # Minimum length requirements for production secrets
+            min_lengths = {
+                "secret_key": 32,
+                "whatsapp_app_secret": 16, 
+                "gmail_app_password": 8,
+                "pms_api_key": 8
+            }
+            
+            field_name = info.field_name if hasattr(info, "field_name") else "unknown"
+            if field_name in min_lengths and len(secret_value) < min_lengths[field_name]:
+                raise ValueError(f"Secret '{field_name}' too short for production (min {min_lengths[field_name]} chars)")
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo

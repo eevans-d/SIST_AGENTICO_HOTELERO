@@ -1,7 +1,5 @@
-import asyncio
 import httpx
 import pytest
-from prometheus_client import REGISTRY
 
 from app.core.circuit_breaker import CircuitBreaker, pms_circuit_breaker_calls_total, pms_circuit_breaker_failure_streak
 
