@@ -58,7 +58,6 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      qloapps: { condition: service_healthy }
     networks:
       - backend_network
     volumes:
