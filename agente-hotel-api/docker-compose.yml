@@ -72,7 +72,6 @@ services:
   postgres:
     image: postgres:14-alpine
     container_name: agente_db
-    user: "1000:1000"
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
