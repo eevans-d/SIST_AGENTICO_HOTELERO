@@ -19,14 +19,13 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Install uv for faster dependency resolution
-RUN pip install --no-cache-dir uv
-
 # Copy dependency files only (for better Docker layer caching)
 COPY requirements-prod.txt pyproject.toml ./
 
 # Install Python dependencies (production only, no dev/test dependencies)
-RUN uv pip install --system --no-cache-dir --no-dev -r requirements-prod.txt
+# Use pip directly if uv is not available due to SSL issues
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements-prod.txt
 
 # ============================================================================
 # Production Stage
