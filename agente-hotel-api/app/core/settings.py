@@ -118,9 +118,29 @@ class Settings(BaseSettings):
                 "your_verify_token_here",
                 "your_app_secret_here",
                 "your_app_password_here",
+                # Additional security patterns
+                "password",
+                "123456",
+                "admin",
+                "test",
+                "demo",
+                "changeme",
+                "default",
             ]
         ):
-            raise ValueError("Critical secret contains development/placeholder value for production environment")
+            raise ValueError(
+                "Critical secret contains development/placeholder/weak value for production environment. "
+                "Ensure all secrets are properly configured with strong, unique values."
+            )
+
+        # Additional security: Check minimum length for production secrets
+        if env == Environment.PROD and v:
+            secret_val = v.get_secret_value()
+            if len(secret_val) < 16:
+                raise ValueError(
+                    f"Secret value too short for production environment. Minimum 16 characters required, got {len(secret_val)}."
+                )
+
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo

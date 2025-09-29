@@ -42,7 +42,7 @@ class QloAppsAdapter:
             },
         )
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5, recovery_timeout=30, expected_exception=httpx.HTTPError
+            failure_threshold=5, recovery_timeout=30, expected_exception=httpx.HTTPError, service_name="QloApps_PMS"
         )
         # Inicializar estado del CB
         circuit_breaker_state.set(0)
