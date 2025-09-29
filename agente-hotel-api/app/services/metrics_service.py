@@ -28,14 +28,6 @@ class MetricsService:
         self.tenant_request_errors = Counter(
             "tenant_request_errors", "Errores de requests por tenant", ["tenant_id"]
         )
-        
-        # Hotel business metrics
-        self.hotel_reservations_total = Counter(
-            "hotel_reservations_total", "Total hotel reservations", ["status", "room_type"]
-        )
-        self.hotel_occupancy_rate = Gauge(
-            "hotel_occupancy_rate", "Current hotel occupancy rate", ["room_type"]
-        )
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
         labels = {

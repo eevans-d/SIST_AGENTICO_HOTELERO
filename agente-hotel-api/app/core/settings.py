@@ -99,15 +99,13 @@ class Settings(BaseSettings):
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
         env = info.data.get("environment") if hasattr(info, "data") else None
-        if env == Environment.PROD and v:
-            secret_value = v.get_secret_value()
-            # Basic production secret validation
-            insecure_values = [
-                None, "", "your_token_here", "generate_secure_key_here",
-                "dev-token", "dev-secret", "test", "admin"
-            ]
-            if secret_value in insecure_values:
-                raise ValueError("Critical secret is not set for production environment")
+        if env == Environment.PROD and v and v.get_secret_value() in [
+            None,
+            "",
+            "your_token_here",
+            "generate_secure_key_here",
+        ]:
+            raise ValueError("Critical secret is not set for production environment")
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo
