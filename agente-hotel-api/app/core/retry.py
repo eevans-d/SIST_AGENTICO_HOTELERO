@@ -33,7 +33,7 @@ async def retry_with_backoff(
             last_exception = e
             if attempt < max_attempts - 1:
                 wait_time = backoff_sequence[min(attempt, len(backoff_sequence) - 1)]
-                logger.warning(f"Attempt {attempt + 1} failed: {e}. " f"Retrying in {wait_time} seconds...")
+                logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time} seconds...")
                 # Registrar métrica de reintento
                 retry_attempts.labels(operation=operation_label or "unknown", exception=e.__class__.__name__).inc()
                 await asyncio.sleep(wait_time)

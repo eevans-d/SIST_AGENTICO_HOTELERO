@@ -42,7 +42,12 @@ def verify_webhook_signature(
 
 @router.get("/whatsapp")
 @limit("60/minute")
-async def verify_whatsapp_webhook(request: Request, mode: str = Query(None, alias="hub.mode"), token: str = Query(None, alias="hub.verify_token"), challenge: str = Query(None, alias="hub.challenge")):
+async def verify_whatsapp_webhook(
+    request: Request,
+    mode: str = Query(None, alias="hub.mode"),
+    token: str = Query(None, alias="hub.verify_token"),
+    challenge: str = Query(None, alias="hub.challenge"),
+):
     """Handshake de verificación de WhatsApp (GET)."""
     if mode == "subscribe" and token == settings.whatsapp_verify_token.get_secret_value():
         return PlainTextResponse(challenge)

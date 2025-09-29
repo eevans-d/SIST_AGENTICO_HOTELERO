@@ -38,7 +38,11 @@ class MessageGateway:
         # WhatsApp envía timestamp en segundos (string)
         ts = msg.get("timestamp") or value.get("timestamp")
         try:
-            ts_iso = datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat() if ts is not None else datetime.now(timezone.utc).isoformat()
+            ts_iso = (
+                datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+                if ts is not None
+                else datetime.now(timezone.utc).isoformat()
+            )
         except Exception:
             ts_iso = datetime.now(timezone.utc).isoformat()
 

@@ -99,23 +99,28 @@ class Settings(BaseSettings):
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
         env = info.data.get("environment") if hasattr(info, "data") else None
-        if env == Environment.PROD and v and v.get_secret_value() in [
-            None,
-            "",
-            "your_token_here",
-            "generate_secure_key_here",
-            "dev-pms-key",
-            "dev-whatsapp-token", 
-            "dev-verify-token",
-            "dev-app-secret",
-            "dev-gmail-pass",
-            "your_qloapps_api_key_here",
-            "your_meta_token_here",
-            "your_verify_token_here",
-            "your_app_secret_here",
-            "your_app_password_here",
-        ]:
-            raise ValueError(f"Critical secret contains development/placeholder value for production environment")
+        if (
+            env == Environment.PROD
+            and v
+            and v.get_secret_value()
+            in [
+                None,
+                "",
+                "your_token_here",
+                "generate_secure_key_here",
+                "dev-pms-key",
+                "dev-whatsapp-token",
+                "dev-verify-token",
+                "dev-app-secret",
+                "dev-gmail-pass",
+                "your_qloapps_api_key_here",
+                "your_meta_token_here",
+                "your_verify_token_here",
+                "your_app_secret_here",
+                "your_app_password_here",
+            ]
+        ):
+            raise ValueError("Critical secret contains development/placeholder value for production environment")
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo
