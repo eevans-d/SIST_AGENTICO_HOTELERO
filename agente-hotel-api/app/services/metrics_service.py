@@ -18,16 +18,10 @@ class MetricsService:
         # Gauge de conexiones activas (opcional)
         self.active_connections = Gauge("active_connections", "Active connections")
         # Gauge para feature flags (1=enabled,0=disabled)
-        self.feature_flag_enabled = Gauge(
-            "feature_flag_enabled", "Estado actual de un feature flag", ["flag"]
-        )
+        self.feature_flag_enabled = Gauge("feature_flag_enabled", "Estado actual de un feature flag", ["flag"])
         # Métricas multi-tenant (fase 5 groundwork)
-        self.tenant_request_total = Counter(
-            "tenant_request_total", "Total de requests por tenant", ["tenant_id"]
-        )
-        self.tenant_request_errors = Counter(
-            "tenant_request_errors", "Errores de requests por tenant", ["tenant_id"]
-        )
+        self.tenant_request_total = Counter("tenant_request_total", "Total de requests por tenant", ["tenant_id"])
+        self.tenant_request_errors = Counter("tenant_request_errors", "Errores de requests por tenant", ["tenant_id"])
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
         labels = {

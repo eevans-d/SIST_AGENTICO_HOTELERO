@@ -5,7 +5,6 @@ from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
 from .audio_processor import AudioProcessor
-from .pms_adapter import QloAppsAdapter
 from .session_manager import SessionManager
 from .lock_service import LockService
 from .template_service import TemplateService
@@ -48,7 +47,9 @@ class Orchestrator:
             enhanced_fallback = await ff_service.is_enabled("nlp.fallback.enhanced", default=True)
             if enhanced_fallback and confidence < 0.45:
                 # Respuesta de bajo nivel de confianza agresiva
-                return {"response": "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: disponibilidad, precios, información del hotel?"}
+                return {
+                    "response": "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: disponibilidad, precios, información del hotel?"
+                }
             elif enhanced_fallback and confidence < 0.75:
                 message.metadata["low_confidence"] = True
             response_text = await self.handle_intent(nlp_result, session, message)

@@ -4,11 +4,13 @@ from functools import wraps
 import inspect
 from ..core.settings import settings
 
+
 def limit(rule: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorador dinámico que aplica rate limiting usando el limiter en request.app.state.limiter.
     Permite que las pruebas reemplacen el limiter a memoria sin acoplarse a una instancia global.
     """
+
     def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def _wrapped(*args: Any, **kwargs: Any):
@@ -34,6 +36,7 @@ def limit(rule: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
             # Construir el decorador real en tiempo de ejecución y aplicarlo
             decorated = limiter.limit(rule)(func)
             return await decorated(*args, **kwargs)
+
         # Preservar firma original para FastAPI
         try:
             _wrapped.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]

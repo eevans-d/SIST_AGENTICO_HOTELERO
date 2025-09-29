@@ -20,6 +20,6 @@ async def test_readiness_metrics_update(test_app):
 
     assert "readiness_up" in metrics
     assert "readiness_last_check_timestamp" in metrics
-    assert "dependency_up{name=\"database\"}" in metrics
-    assert "dependency_up{name=\"redis\"}" in metrics
-    assert "dependency_up{name=\"pms\"}" in metrics
+    assert 'dependency_up{name="database"}' in metrics
+    assert 'dependency_up{name="redis"}' in metrics
+    assert 'dependency_up{name="pms"}' in metrics
