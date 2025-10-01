@@ -353,6 +353,54 @@ pre-deploy-check: ## Validación completa pre-deployment
 	@make validate-guardrails || { echo "❌ Guardrails validation failed"; exit 1; }
 	@echo "✅ Pre-deployment validation complete"
 
+# ==============================================================================
+# Deployment & Production Operations
+# ==============================================================================
+
+validate-deployment: ## Ejecuta validación completa pre-deployment
+	@echo "🔍 Running comprehensive pre-deployment validation..."
+	@chmod +x scripts/pre-deployment-validation.sh
+	@bash scripts/pre-deployment-validation.sh
+
+deploy-production: ## Despliegue a producción con validaciones
+	@echo "🚀 Starting production deployment..."
+	@make validate-deployment || { echo "❌ Pre-deployment validation failed"; exit 1; }
+	@echo "Pre-deployment validation passed. Proceeding with deployment..."
+	@chmod +x scripts/deploy.sh
+	@bash scripts/deploy.sh production
+
+deploy-staging: ## Despliegue a staging para pruebas
+	@echo "🧪 Starting staging deployment..."
+	@chmod +x scripts/deploy.sh
+	@bash scripts/deploy.sh staging
+
+build-production: ## Construye imagen de producción
+	@echo "🔨 Building production image..."
+	@docker build -f Dockerfile.production -t agente-hotel-api:production .
+	@echo "✅ Production image built successfully"
+
+test-production-image: ## Prueba la imagen de producción localmente
+	@echo "🧪 Testing production image..."
+	@docker run --rm -d --name agente-test -p 8080:8000 agente-hotel-api:production
+	@sleep 10
+	@curl -f http://localhost:8080/health/live || { docker stop agente-test; echo "❌ Health check failed"; exit 1; }
+	@docker stop agente-test
+	@echo "✅ Production image test passed"
+
+canary-deploy: ## Realiza despliegue canary
+	@echo "🐤 Starting canary deployment..."
+	@chmod +x scripts/canary-deploy.sh
+	@bash scripts/canary-deploy.sh
+
+deployment-status: ## Verifica estado del despliegue actual
+	@echo "📊 Checking deployment status..."
+	@echo "=== Docker Services ==="
+	@docker compose -f docker-compose.production.yml ps || echo "Production stack not running"
+	@echo "=== Health Checks ==="
+	@curl -s http://localhost:8000/health/ready | jq . || echo "API not responding"
+	@echo "=== Recent Logs ==="
+	@docker compose -f docker-compose.production.yml logs --tail=10 agente-api || echo "No logs available"
+
 help: ## Muestra esta ayuda
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_\-]+:.*?##/ {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
