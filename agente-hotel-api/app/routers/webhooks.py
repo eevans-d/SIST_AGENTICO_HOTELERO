@@ -111,8 +111,8 @@ async def handle_whatsapp_webhook(request: Request):
 
     try:
         unified = gateway.normalize_whatsapp_message(payload)
-    except ValueError:
-        # Payload sin mensajes; acuse de recibo sin procesar
+    except (ValueError, Exception):
+        # Payload sin mensajes o error de normalización; acuse de recibo sin procesar
         return {"status": "ok"}
 
     result = await orchestrator.handle_unified_message(unified)
