@@ -1,0 +1,337 @@
+{
+  "interfaces": [
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/health/live",
+      "method": "GET",
+      "location": "agente-hotel-api/app/routers/health.py:13",
+      "input_schema": {
+        "description": "No parameters required",
+        "parameters": [],
+        "schema_location": null
+      },
+      "output_schema": {
+        "description": "Returns {\"status\": \"ok\"} if service is alive",
+        "schema_location": "Inline JSON response"
+      },
+      "authentication": {
+        "required": false,
+        "method": "none",
+        "location": "N/A"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No rate limit on health checks",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["200"],
+        "error_format": "JSON",
+        "location": "app/routers/health.py"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/health/ready",
+      "method": "GET",
+      "location": "agente-hotel-api/app/routers/health.py:18",
+      "input_schema": {
+        "description": "No parameters required",
+        "parameters": [],
+        "schema_location": null
+      },
+      "output_schema": {
+        "description": "Returns readiness status with dependency checks (postgres, redis, optionally PMS)",
+        "schema_location": "app/routers/health.py:18-80"
+      },
+      "authentication": {
+        "required": false,
+        "method": "none",
+        "location": "N/A"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No rate limit",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["200", "503"],
+        "error_format": "JSON with detailed dependency status",
+        "location": "app/routers/health.py"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/webhooks/whatsapp",
+      "method": "POST",
+      "location": "agente-hotel-api/app/routers/webhooks.py:14",
+      "input_schema": {
+        "description": "WhatsApp webhook payload from Meta Cloud API",
+        "parameters": [
+          {
+            "name": "entry",
+            "type": "array",
+            "required": true,
+            "validation": "Validated as WhatsApp webhook structure"
+          }
+        ],
+        "schema_location": "Inline validation in webhooks.py:35-50"
+      },
+      "output_schema": {
+        "description": "Returns {\"status\": \"received\"} or error",
+        "schema_location": "Inline response"
+      },
+      "authentication": {
+        "required": true,
+        "method": "WhatsApp signature verification (X-Hub-Signature-256 header)",
+        "location": "app/routers/webhooks.py (signature validation)"
+      },
+      "rate_limiting": {
+        "present": true,
+        "limits": "120 requests/minute per IP",
+        "location": "app/routers/webhooks.py:13 - @app.state.limiter.limit(\"120/minute\")"
+      },
+      "error_handling": {
+        "status_codes": ["200", "400", "401", "429", "500"],
+        "error_format": "JSON error response",
+        "location": "app/core/middleware.py - global_exception_handler"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/webhooks/whatsapp",
+      "method": "GET",
+      "location": "agente-hotel-api/app/routers/webhooks.py:77",
+      "input_schema": {
+        "description": "WhatsApp webhook verification",
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "type": "string",
+            "required": true,
+            "validation": "Must equal 'subscribe'"
+          },
+          {
+            "name": "hub.verify_token",
+            "type": "string",
+            "required": true,
+            "validation": "Must match WHATSAPP_VERIFY_TOKEN"
+          },
+          {
+            "name": "hub.challenge",
+            "type": "string",
+            "required": true,
+            "validation": "Returned as plain text response"
+          }
+        ],
+        "schema_location": "app/routers/webhooks.py:77-95"
+      },
+      "output_schema": {
+        "description": "Returns hub.challenge as plain text or 403 error",
+        "schema_location": "Inline response"
+      },
+      "authentication": {
+        "required": true,
+        "method": "Token verification via hub.verify_token query param",
+        "location": "app/routers/webhooks.py:86"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No rate limit on verification endpoint",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["200", "403"],
+        "error_format": "HTTP status code only",
+        "location": "app/routers/webhooks.py:90"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/webhooks/gmail",
+      "method": "POST",
+      "location": "agente-hotel-api/app/routers/webhooks.py:98",
+      "input_schema": {
+        "description": "Gmail webhook payload (Gmail push notifications)",
+        "parameters": [
+          {
+            "name": "message",
+            "type": "object",
+            "required": true,
+            "validation": "Gmail Pub/Sub message format"
+          }
+        ],
+        "schema_location": "app/routers/webhooks.py:98-110"
+      },
+      "output_schema": {
+        "description": "Returns {\"status\": \"received\"}",
+        "schema_location": "Inline response"
+      },
+      "authentication": {
+        "required": true,
+        "method": "Gmail Pub/Sub signature verification",
+        "location": "app/routers/webhooks.py (validation logic)"
+      },
+      "rate_limiting": {
+        "present": true,
+        "limits": "120 requests/minute",
+        "location": "app/routers/webhooks.py:97"
+      },
+      "error_handling": {
+        "status_codes": ["200", "400", "500"],
+        "error_format": "JSON",
+        "location": "Global exception handler"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/admin/tenants",
+      "method": "GET",
+      "location": "agente-hotel-api/app/routers/admin.py:20",
+      "input_schema": {
+        "description": "List all tenants",
+        "parameters": [],
+        "schema_location": null
+      },
+      "output_schema": {
+        "description": "Array of tenant objects with identifiers",
+        "schema_location": "app/routers/admin.py:20-35"
+      },
+      "authentication": {
+        "required": false,
+        "method": "none (should be protected in production)",
+        "location": "N/A"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No explicit rate limit",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["200", "500"],
+        "error_format": "JSON",
+        "location": "Global exception handler"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/admin/tenants",
+      "method": "POST",
+      "location": "agente-hotel-api/app/routers/admin.py:38",
+      "input_schema": {
+        "description": "Create new tenant",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "type": "string",
+            "required": true,
+            "validation": "Must be unique"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "validation": "Non-empty string"
+          }
+        ],
+        "schema_location": "app/routers/admin.py:38-58"
+      },
+      "output_schema": {
+        "description": "Created tenant object",
+        "schema_location": "Tenant model serialization"
+      },
+      "authentication": {
+        "required": false,
+        "method": "none (should be protected in production)",
+        "location": "N/A"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No explicit rate limit",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["201", "400", "500"],
+        "error_format": "JSON",
+        "location": "Global exception handler"
+      }
+    },
+    {
+      "type": "REST API",
+      "endpoint_or_topic": "/metrics",
+      "method": "GET",
+      "location": "agente-hotel-api/app/routers/metrics.py:8",
+      "input_schema": {
+        "description": "Prometheus metrics endpoint",
+        "parameters": [],
+        "schema_location": null
+      },
+      "output_schema": {
+        "description": "Prometheus text format metrics",
+        "schema_location": "prometheus_client library format"
+      },
+      "authentication": {
+        "required": false,
+        "method": "none (internal endpoint)",
+        "location": "N/A"
+      },
+      "rate_limiting": {
+        "present": false,
+        "limits": "No rate limit",
+        "location": "N/A"
+      },
+      "error_handling": {
+        "status_codes": ["200"],
+        "error_format": "Prometheus format",
+        "location": "app/routers/metrics.py"
+      }
+    }
+  ],
+  "internal_contracts": [
+    {
+      "from": "orchestrator",
+      "to": "pms_adapter",
+      "function_or_method": "check_availability",
+      "parameters": "checkin: date, checkout: date, room_type: str, guests: int",
+      "return_type": "dict (availability data)",
+      "location": "app/services/pms_adapter.py:84"
+    },
+    {
+      "from": "orchestrator",
+      "to": "nlp_engine",
+      "function_or_method": "process_message",
+      "parameters": "text: str",
+      "return_type": "dict (intent and entities)",
+      "location": "app/services/nlp_engine.py:7"
+    },
+    {
+      "from": "orchestrator",
+      "to": "session_manager",
+      "function_or_method": "get_or_create_session",
+      "parameters": "user_id: str, channel: str, tenant_id: Optional[str]",
+      "return_type": "dict (session data)",
+      "location": "app/services/session_manager.py:8"
+    },
+    {
+      "from": "orchestrator",
+      "to": "lock_service",
+      "function_or_method": "acquire_lock",
+      "parameters": "resource_id: str, ttl: int",
+      "return_type": "bool (lock acquired)",
+      "location": "app/services/lock_service.py:15"
+    },
+    {
+      "from": "pms_adapter",
+      "to": "circuit_breaker",
+      "function_or_method": "call",
+      "parameters": "func: Callable, *args, **kwargs",
+      "return_type": "Any (wrapped function result)",
+      "location": "app/core/circuit_breaker.py:44"
+    }
+  ],
+  "notes": {
+    "openapi_spec": "FastAPI automatically generates OpenAPI/Swagger documentation at /docs and /redoc endpoints",
+    "schema_validation": "Pydantic models provide automatic request/response validation",
+    "authentication_gap": "Admin endpoints lack authentication - marked for production hardening"
+  }
+}

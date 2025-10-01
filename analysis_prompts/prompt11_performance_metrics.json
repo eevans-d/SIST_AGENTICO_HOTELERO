@@ -1,0 +1,84 @@
+{
+  "performance": {
+    "monitoring_tools": {
+      "apm_tool": "Prometheus + Grafana",
+      "logging_service": "structlog to console (JSON format)",
+      "metrics_exported": true,
+      "evidence": "docker-compose.yml:109-157 (prometheus, grafana, alertmanager services), app/routers/metrics.py exports /metrics endpoint"
+    },
+    "performance_metrics_in_code": [
+      {
+        "metric_type": "latency",
+        "location": "app/services/orchestrator.py:71-72",
+        "tool": "Prometheus Histogram"
+      },
+      {
+        "metric_type": "throughput",
+        "location": "app/services/orchestrator.py:73",
+        "tool": "Prometheus Counter"
+      },
+      {
+        "metric_type": "error_rate",
+        "location": "app/services/orchestrator.py:63",
+        "tool": "Prometheus Counter"
+      },
+      {
+        "metric_type": "cache_hit_ratio",
+        "location": "app/services/pms_adapter.py:22-23",
+        "tool": "Prometheus Counter"
+      },
+      {
+        "metric_type": "circuit_breaker_state",
+        "location": "app/services/pms_adapter.py:24",
+        "tool": "Prometheus Gauge"
+      },
+      {
+        "metric_type": "tenant_resolution",
+        "location": "app/services/metrics_service.py",
+        "tool": "Prometheus Counter"
+      }
+    ],
+    "caching": {
+      "cache_used": "Redis",
+      "cache_locations": [
+        "app/services/pms_adapter.py:50-70 (PMS responses)",
+        "app/services/feature_flag_service.py (feature flags)",
+        "app/services/dynamic_tenant_service.py (tenant data)"
+      ],
+      "cache_invalidation_strategy": "Pattern-based invalidation via Redis SCAN + DELETE (pms_adapter.py:71-80), TTL-based expiration",
+      "ttl_configured": true
+    },
+    "database_optimization": {
+      "indexes_defined": false,
+      "query_optimization": "SQLAlchemy ORM with async operations, no explicit optimization",
+      "connection_pooling": true,
+      "evidence": "app/core/settings.py:42-43 (pool_size=10, max_overflow=10), app/core/database.py async engine"
+    },
+    "async_processing": {
+      "async_framework": "asyncio (native Python with FastAPI/Starlette)",
+      "background_jobs": false,
+      "queue_system": "None - direct message processing",
+      "locations": [
+        "All service methods use async/await pattern"
+      ]
+    },
+    "rate_limiting": {
+      "implemented": true,
+      "method": "SlowAPI decorator with Redis backend",
+      "limits": "120 requests/minute per endpoint (webhooks), configurable per route",
+      "location": "app/main.py:25 (Limiter initialization), app/routers/webhooks.py (applied via @limiter.limit decorator)"
+    }
+  },
+  "scalability": {
+    "horizontal_scaling_ready": true,
+    "stateless_design": false,
+    "database_sharding": false,
+    "load_balancing": "NGINX reverse proxy configured (docker/nginx/nginx.conf)"
+  },
+  "evidence": {
+    "prometheus_config": "docker/prometheus/prometheus.yml",
+    "grafana_dashboards": "docker/grafana/dashboards/*.json (6 dashboards)",
+    "metrics_endpoint": "app/routers/metrics.py",
+    "redis_config": "app/core/redis_client.py"
+  }
+}

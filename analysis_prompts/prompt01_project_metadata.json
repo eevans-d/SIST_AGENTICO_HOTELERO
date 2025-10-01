@@ -1,0 +1,69 @@
+{
+  "project_metadata": {
+    "name": "Agente Hotel API (SIST_AGENTICO_HOTELERO)",
+    "version": "0.1.0",
+    "description": "Multi-service hotel receptionist AI agent built with FastAPI, handling WhatsApp/Gmail communications with QloApps PMS integration",
+    "repository_structure": {
+      "total_files": 226,
+      "total_lines_of_code": 3330,
+      "main_directories": [
+        {
+          "path": "agente-hotel-api/app/core",
+          "purpose": "Core configuration, database, Redis, logging, middleware"
+        },
+        {
+          "path": "agente-hotel-api/app/services",
+          "purpose": "Business logic services (orchestrator, PMS adapter, NLP, etc.)"
+        },
+        {
+          "path": "agente-hotel-api/app/models",
+          "purpose": "Pydantic schemas and SQLAlchemy models"
+        },
+        {
+          "path": "agente-hotel-api/app/routers",
+          "purpose": "FastAPI endpoints (health, webhooks, admin, metrics)"
+        },
+        {
+          "path": "agente-hotel-api/app/exceptions",
+          "purpose": "Custom exception classes"
+        },
+        {
+          "path": "agente-hotel-api/app/utils",
+          "purpose": "Utility functions (audio conversion, etc.)"
+        },
+        {
+          "path": "agente-hotel-api/tests",
+          "purpose": "Unit, integration, and e2e tests"
+        },
+        {
+          "path": "agente-hotel-api/scripts",
+          "purpose": "Deployment, backup, monitoring, and operational scripts"
+        },
+        {
+          "path": "agente-hotel-api/docker",
+          "purpose": "Docker configs for Prometheus, Grafana, AlertManager, NGINX"
+        },
+        {
+          "path": "docs",
+          "purpose": "Project documentation, playbooks, and runbooks"
+        }
+      ]
+    },
+    "primary_language": "Python",
+    "secondary_languages": [
+      "YAML",
+      "Shell Script",
+      "Markdown",
+      "JSON"
+    ],
+    "build_system": "Poetry",
+    "package_manager": "poetry",
+    "evidence": {
+      "version": "agente-hotel-api/pyproject.toml:3 (version = \"0.1.0\")",
+      "name": "agente-hotel-api/pyproject.toml:2 (name = \"agente-hotel-api\")",
+      "description": "agente-hotel-api/pyproject.toml:4",
+      "python_version": "agente-hotel-api/pyproject.toml:9 (python = \"^3.12\")",
+      "build_system": "agente-hotel-api/pyproject.toml:35 (requires = [\"poetry-core\"])"
+    }
+  }
+}

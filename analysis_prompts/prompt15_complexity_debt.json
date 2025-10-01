@@ -1,0 +1,130 @@
+{
+  "complexity_analysis": {
+    "largest_files": [
+      {
+        "file": "app/services/pms_adapter.py",
+        "lines_of_code": 243,
+        "purpose": "PMS integration with circuit breaker and caching"
+      },
+      {
+        "file": "app/services/orchestrator.py",
+        "lines_of_code": 153,
+        "purpose": "Message processing orchestration"
+      },
+      {
+        "file": "app/services/message_gateway.py",
+        "lines_of_code": 179,
+        "purpose": "Multi-channel message normalization"
+      },
+      {
+        "file": "app/services/dynamic_tenant_service.py",
+        "lines_of_code": 150,
+        "purpose": "Dynamic tenant resolution with caching"
+      },
+      {
+        "file": "app/routers/admin.py",
+        "lines_of_code": 136,
+        "purpose": "Admin endpoints for tenant management"
+      }
+    ],
+    "most_complex_functions": [
+      {
+        "function": "handle_unified_message",
+        "file": "app/services/orchestrator.py",
+        "line": 26,
+        "complexity_indicator": "Multiple async calls, error handling, feature flag checks, conditional audio processing",
+        "lines_of_code": 53
+      },
+      {
+        "function": "parse_whatsapp_webhook",
+        "file": "app/services/message_gateway.py",
+        "line": 30,
+        "complexity_indicator": "Nested dictionary traversal, multiple message type handling",
+        "lines_of_code": 40
+      },
+      {
+        "function": "ready",
+        "file": "app/routers/health.py",
+        "line": 18,
+        "complexity_indicator": "Multiple dependency checks with error handling",
+        "lines_of_code": 62
+      }
+    ],
+    "code_duplication": {
+      "suspected_duplicates": [
+        {
+          "pattern": "Exception handling with logger.error + metrics increment",
+          "locations": [
+            "orchestrator.py",
+            "pms_adapter.py"
+          ]
+        },
+        {
+          "pattern": "Redis cache get/set/invalidate patterns",
+          "locations": [
+            "pms_adapter.py",
+            "feature_flag_service.py",
+            "dynamic_tenant_service.py"
+          ]
+        }
+      ]
+    },
+    "circular_dependencies": {
+      "present": false,
+      "examples": []
+    }
+  },
+  "technical_debt": {
+    "deprecated_dependencies": [],
+    "outdated_patterns": [
+      {
+        "pattern": "Commented Rasa integration instead of proper feature flagging",
+        "location": "app/services/nlp_engine.py",
+        "recommendation": "Complete Rasa integration or remove commented code"
+      }
+    ],
+    "missing_features": [
+      {
+        "feature": "Database migrations",
+        "severity": "high",
+        "locations_affected": [
+          "No Alembic or migration system - schema created via SQLAlchemy metadata"
+        ]
+      },
+      {
+        "feature": "Admin endpoint authorization",
+        "severity": "high",
+        "locations_affected": [
+          "app/routers/admin.py - no auth decorators"
+        ]
+      },
+      {
+        "feature": "Gmail integration implementation",
+        "severity": "medium",
+        "locations_affected": [
+          "app/services/message_gateway.py:82 - TODO comment"
+        ]
+      },
+      {
+        "feature": "Comprehensive API documentation",
+        "severity": "low",
+        "locations_affected": [
+          "Some endpoints lack detailed descriptions"
+        ]
+      }
+    ]
+  },
+  "refactoring_opportunities": [
+    "Extract common cache patterns into a base CacheService class",
+    "Implement database migrations with Alembic",
+    "Complete or remove commented Rasa integration",
+    "Add authentication middleware for admin endpoints",
+    "Consolidate error handling patterns across services"
+  ],
+  "evidence": {
+    "file_sizes": "Measured via wc -l",
+    "complexity": "Inferred from code structure analysis",
+    "todos": "app/services/message_gateway.py:82",
+    "missing_auth": "app/routers/admin.py lacks authentication"
+  }
+}

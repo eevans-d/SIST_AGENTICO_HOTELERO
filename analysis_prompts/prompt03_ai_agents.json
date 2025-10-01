@@ -1,0 +1,52 @@
+{
+  "agents": [
+    {
+      "name": "NLP Engine (Placeholder)",
+      "location": "agente-hotel-api/app/services/nlp_engine.py",
+      "role": "Process text messages to extract intent and entities for guest communications",
+      "llm_provider": "None (Currently mocked, designed for Rasa)",
+      "llm_model": "Intended: Rasa NLU, Currently: Mock responses",
+      "system_prompt": "N/A - NLP engine uses intent classification, not LLM prompts",
+      "system_prompt_location": "N/A",
+      "tools": [],
+      "constraints": {
+        "max_iterations": null,
+        "max_iterations_location": "N/A",
+        "timeout_seconds": null,
+        "timeout_location": "N/A",
+        "cost_limit": null,
+        "cost_limit_location": "N/A"
+      },
+      "safety_measures": [
+        {
+          "type": "confidence_thresholding",
+          "implementation": "Enhanced fallback for low confidence (<0.45) with feature flag control",
+          "location": "app/services/orchestrator.py:50-55"
+        },
+        {
+          "type": "input_sanitization",
+          "implementation": "Bleach sanitization for text inputs",
+          "location": "app/core/validators.py"
+        },
+        {
+          "type": "rate_limiting",
+          "implementation": "SlowAPI with Redis backend - 120 requests/minute per endpoint",
+          "location": "app/main.py:25 - Limiter configuration"
+        }
+      ],
+      "memory_management": {
+        "type": "conversational",
+        "implementation": "Session-based conversation history stored in PostgreSQL",
+        "location": "app/services/session_manager.py"
+      }
+    }
+  ],
+  "rag_system": {
+    "present": false,
+    "vector_database": null,
+    "embedding_model": null,
+    "retrieval_strategy": null,
+    "location": null
+  },
+  "notes": "The system is designed as a rule-based agent with NLP intent classification rather than a generative AI agent. The NLP engine (app/services/nlp_engine.py:4) has commented-out Rasa integration. Current implementation uses mock responses for intent detection. No LLM or RAG system is currently implemented."
+}

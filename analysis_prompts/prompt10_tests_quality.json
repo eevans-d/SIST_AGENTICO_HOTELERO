@@ -1,0 +1,92 @@
+{
+  "testing": {
+    "test_framework": "pytest 8.2.2",
+    "test_structure": {
+      "unit_tests_directory": "tests/unit",
+      "integration_tests_directory": "tests/integration",
+      "e2e_tests_directory": "tests/e2e"
+    },
+    "test_coverage": {
+      "coverage_tool": "pytest-cov (inferred from pytest usage)",
+      "coverage_config_file": "pytest.ini",
+      "last_coverage_report": "Not found in repository"
+    },
+    "test_statistics": {
+      "total_test_files": 21,
+      "estimated_total_tests": "60-100 (based on 21 test files)",
+      "critical_flows_tested": [
+        "Message processing",
+        "PMS adapter",
+        "Dynamic tenant service"
+      ]
+    },
+    "test_types_present": {
+      "unit_tests": true,
+      "integration_tests": true,
+      "e2e_tests": true,
+      "property_based_tests": false,
+      "performance_tests": true,
+      "security_tests": true
+    },
+    "mocking_strategy": {
+      "mocking_library": "pytest-mock",
+      "external_services_mocked": true,
+      "database_mocked": true
+    },
+    "ci_cd_integration": {
+      "tests_run_on_ci": true,
+      "ci_config_file": ".github/workflows/preflight.yml",
+      "test_commands": [
+        "make test",
+        "pytest"
+      ]
+    }
+  },
+  "code_quality": {
+    "linters_configured": [
+      {
+        "tool": "ruff",
+        "config_file": "pyproject.toml:38-39",
+        "rules_customized": true
+      }
+    ],
+    "formatters_configured": [
+      {
+        "tool": "ruff (format)",
+        "config_file": "pyproject.toml",
+        "enabled": true
+      },
+      {
+        "tool": "prettier",
+        "config_file": ".editorconfig",
+        "enabled": true
+      }
+    ],
+    "static_analysis": [
+      {
+        "tool": "ruff (includes pyflakes, pycodestyle)",
+        "config_file": "pyproject.toml"
+      },
+      {
+        "tool": "gitleaks (secret scanning)",
+        "config_file": "Makefile:96"
+      }
+    ],
+    "pre_commit_hooks": {
+      "configured": true,
+      "hooks": [
+        "ruff-format",
+        "ruff",
+        "prettier",
+        "gitleaks"
+      ],
+      "config_file": ".pre-commit-config.yaml"
+    }
+  },
+  "evidence": {
+    "test_directory": "agente-hotel-api/tests/ contains unit/, integration/, e2e/, mocks/",
+    "pytest_config": "agente-hotel-api/pytest.ini",
+    "ci_workflow": ".github/workflows/preflight.yml, .github/workflows/perf-smoke.yml",
+    "makefile_targets": "make test, make lint, make fmt in Makefile"
+  }
+}

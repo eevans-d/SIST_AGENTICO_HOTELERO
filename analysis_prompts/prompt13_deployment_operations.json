@@ -1,0 +1,97 @@
+{
+  "deployment": {
+    "deployment_method": "Docker with Docker Compose",
+    "deployment_files": [
+      {
+        "file": "Dockerfile",
+        "purpose": "Multi-stage build for development"
+      },
+      {
+        "file": "Dockerfile.production",
+        "purpose": "Optimized production image"
+      },
+      {
+        "file": "docker-compose.yml",
+        "purpose": "Full stack orchestration (dev/staging)"
+      },
+      {
+        "file": "docker-compose.production.yml",
+        "purpose": "Production overrides"
+      },
+      {
+        "file": "Makefile",
+        "purpose": "Deployment automation (46 targets)"
+      }
+    ],
+    "environment_stages": {
+      "development": {
+        "configured": true,
+        "differences": "Uses mock PMS (PMS_TYPE=mock), debug=true, local file mounts"
+      },
+      "staging": {
+        "configured": true,
+        "differences": "docker-compose profiles, real PMS optional"
+      },
+      "production": {
+        "configured": true,
+        "special_config": "docker-compose.production.yml, secret validation enforced, SSL/TLS with certbot"
+      }
+    },
+    "ci_cd_pipeline": {
+      "platform": "GitHub Actions",
+      "config_file": ".github/workflows/preflight.yml, .github/workflows/perf-smoke.yml",
+      "stages": [
+        "lint",
+        "test",
+        "preflight validation",
+        "security scan",
+        "performance test"
+      ],
+      "automated_deployment": false,
+      "deployment_triggers": "Manual deployment via 'make deploy-production'"
+    },
+    "infrastructure_as_code": {
+      "tool": "Docker Compose",
+      "files": [
+        "docker-compose.yml",
+        "docker-compose.production.yml",
+        "docker/*/"
+      ]
+    },
+    "health_checks": {
+      "endpoint": "/health/live (liveness), /health/ready (readiness)",
+      "location": "app/routers/health.py:13, :18",
+      "checks_performed": [
+        "postgres ping",
+        "redis ping",
+        "PMS connectivity (optional)"
+      ]
+    },
+    "rollback_strategy": {
+      "documented": true,
+      "automated": false,
+      "description": "Docker image tagging with version rollback via docker-compose up with specific image tags, documented in deployment playbooks"
+    }
+  },
+  "compliance": {
+    "data_privacy": {
+      "gdpr_considerations": true,
+      "data_retention_policy": "Not explicitly documented",
+      "pii_handling": "Guest communications stored in sessions, no explicit data masking for PII"
+    },
+    "security_compliance": {
+      "standards": [
+        "Security headers (CSP, HSTS, X-Content-Type-Options)",
+        "Secret management with validation"
+      ],
+      "evidence": "app/core/middleware.py:28-50 (SecurityHeadersMiddleware), app/core/settings.py:80-99 (secret validation)"
+    }
+  },
+  "evidence": {
+    "dockerfile": "agente-hotel-api/Dockerfile, Dockerfile.production",
+    "docker_compose": "agente-hotel-api/docker-compose.yml, docker-compose.production.yml",
+    "ci_workflows": ".github/workflows/",
+    "makefile": "agente-hotel-api/Makefile (46 targets for deployment automation)",
+    "health_checks": "app/routers/health.py, docker-compose.yml healthcheck configs"
+  }
+}

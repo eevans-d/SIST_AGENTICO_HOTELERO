@@ -1,0 +1,54 @@
+{
+  "logging": {
+    "logging_framework": "structlog 24.3.0",
+    "log_levels_used": [
+      "DEBUG",
+      "INFO",
+      "WARNING",
+      "ERROR",
+      "CRITICAL"
+    ],
+    "structured_logging": true,
+    "log_format": "JSON",
+    "sensitive_data_in_logs": {
+      "risk": "low",
+      "evidence": "Pydantic SecretStr automatically masks secrets in logs, no explicit PII logging found"
+    },
+    "log_locations": {
+      "development": "console (stdout/stderr)",
+      "production": "console (stdout) - expected to be captured by container orchestration",
+      "configuration": "app/core/logging.py:4-14"
+    }
+  },
+  "historical_issues": {
+    "error_patterns_in_logs": [
+      {
+        "error_type": "Commented Rasa integration",
+        "frequency_indicator": "N/A - not active",
+        "affected_component": "nlp_engine",
+        "evidence": "app/services/nlp_engine.py:4 - from rasa.core.agent import Agent commented out"
+      }
+    ],
+    "todo_fixme_comments": [
+      {
+        "type": "TODO",
+        "location": "app/services/message_gateway.py:82",
+        "content": "TODO: Implementar Gmail → UnifiedMessage (backlog)",
+        "severity": "medium"
+      }
+    ],
+    "known_bugs_in_issues": "No BUGS.md file found, issues tracked in GitHub",
+    "deprecated_code": [
+      {
+        "location": "app/services/nlp_engine.py:4-11",
+        "reason": "Rasa integration commented out, using mock responses"
+      }
+    ]
+  },
+  "incident_response": {
+    "runbooks_present": true,
+    "runbooks_location": "docs/playbook/, TROUBLESHOOTING_AUTOCURACION.md",
+    "alerting_configured": true,
+    "alerting_details": "AlertManager configured (docker/alertmanager/config.yml), Prometheus alerts (docker/prometheus/alerts.yml)"
+  }
+}

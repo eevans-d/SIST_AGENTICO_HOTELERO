@@ -1,0 +1,108 @@
+{
+  "error_handling": {
+    "global_error_handlers": [
+      {
+        "type": "middleware",
+        "location": "app/core/middleware.py:70-94",
+        "handles": [
+          "Exception (catch-all)"
+        ],
+        "action": "Logs error with correlation ID, returns 500 JSON response"
+      },
+      {
+        "type": "FastAPI exception handler",
+        "location": "app/main.py:68 - add_exception_handler(RateLimitExceeded)",
+        "handles": [
+          "RateLimitExceeded"
+        ],
+        "action": "Returns 429 with rate limit message"
+      }
+    ],
+    "exception_patterns": [
+      {
+        "pattern": "try-except with structlog",
+        "frequency": "High (~30+ occurrences)",
+        "common_locations": [
+          "app/services/",
+          "app/core/"
+        ]
+      },
+      {
+        "pattern": "async with error handling",
+        "frequency": "Medium (~15 occurrences)",
+        "common_locations": [
+          "app/services/pms_adapter.py",
+          "app/services/orchestrator.py"
+        ]
+      },
+      {
+        "pattern": "@retry_with_backoff decorator",
+        "frequency": "Low (~3 occurrences)",
+        "common_locations": [
+          "app/services/pms_adapter.py"
+        ]
+      }
+    ],
+    "unhandled_exception_risks": [
+      {
+        "location": "app/services/nlp_engine.py:7-14",
+        "risk": "Commented Rasa code could raise ImportError if uncommented without installation",
+        "exception_types": [
+          "ImportError",
+          "AttributeError"
+        ]
+      },
+      {
+        "location": "app/services/audio_processor.py",
+        "risk": "FFmpeg subprocess calls could fail if not installed",
+        "exception_types": [
+          "FileNotFoundError",
+          "subprocess.CalledProcessError"
+        ]
+      }
+    ],
+    "silent_failures": [
+      {
+        "location": "app/services/orchestrator.py:65-68",
+        "pattern": "except Exception: pass in tenant metrics recording",
+        "severity": "low"
+      },
+      {
+        "location": "app/main.py:13 - lifespan DynamicTenantService",
+        "pattern": "Catches exception and logs warning but continues",
+        "severity": "low"
+      }
+    ],
+    "timeout_handling": {
+      "http_requests": {
+        "default_timeout": 30,
+        "locations": [
+          "app/services/pms_adapter.py:32 - httpx.Timeout config",
+          "app/core/settings.py:20 - pms_timeout"
+        ]
+      },
+      "database_queries": {
+        "timeout_configured": false,
+        "location": "N/A - No explicit query timeout in SQLAlchemy config"
+      },
+      "agent_execution": {
+        "timeout_configured": false,
+        "location": "N/A - No agent timeout constraints"
+      }
+    },
+    "retry_mechanisms": [
+      {
+        "location": "app/core/retry.py:7-27",
+        "strategy": "Exponential backoff with jitter",
+        "max_retries": 3,
+        "applies_to": "@retry_with_backoff decorated functions"
+      },
+      {
+        "location": "app/services/pms_adapter.py (implicit via circuit breaker)",
+        "strategy": "Circuit breaker pattern",
+        "max_retries": "Controlled by circuit state (5 failures to open)",
+        "applies_to": "PMS API calls"
+      }
+    ]
+  }
+}

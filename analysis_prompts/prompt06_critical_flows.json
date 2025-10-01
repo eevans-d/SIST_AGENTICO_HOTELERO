@@ -1,0 +1,290 @@
+{
+  "critical_flows": [
+    {
+      "name": "WhatsApp Message Processing Flow",
+      "description": "Complete flow from receiving a WhatsApp message to sending a response",
+      "business_criticality": "high",
+      "estimated_frequency": "10-100 messages per minute (depends on hotel size)",
+      "trigger": "WhatsApp webhook POST to /webhooks/whatsapp",
+      "entry_point": {
+        "file": "agente-hotel-api/app/routers/webhooks.py",
+        "function": "whatsapp_webhook",
+        "line": 14
+      },
+      "steps": [
+        {
+          "step_number": 1,
+          "component": "webhooks router",
+          "action": "Receive and validate WhatsApp webhook payload",
+          "file_location": "app/routers/webhooks.py",
+          "function": "whatsapp_webhook",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Signature validation", "Rate limit check"],
+          "error_handling": "Returns 401 if signature invalid, 429 if rate limited"
+        },
+        {
+          "step_number": 2,
+          "component": "message_gateway",
+          "action": "Parse webhook payload and create UnifiedMessage",
+          "file_location": "app/services/message_gateway.py",
+          "function": "parse_whatsapp_webhook",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Message type detection (text/audio/image)"],
+          "error_handling": "Raises ValueError for invalid payload structure"
+        },
+        {
+          "step_number": 3,
+          "component": "orchestrator",
+          "action": "Handle unified message and coordinate processing",
+          "file_location": "app/services/orchestrator.py",
+          "function": "handle_unified_message",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Audio transcription needed?", "Confidence threshold check"],
+          "error_handling": "Catches all exceptions, records metrics, re-raises"
+        },
+        {
+          "step_number": 4,
+          "component": "audio_processor (conditional)",
+          "action": "Transcribe audio message to text if message type is audio",
+          "file_location": "app/services/audio_processor.py",
+          "function": "transcribe_whatsapp_audio",
+          "external_calls": ["WhatsApp Media API to download audio"],
+          "database_operations": [],
+          "decision_points": ["Audio format conversion needed?"],
+          "error_handling": "Returns low confidence if transcription fails"
+        },
+        {
+          "step_number": 5,
+          "component": "nlp_engine",
+          "action": "Extract intent and entities from text",
+          "file_location": "app/services/nlp_engine.py",
+          "function": "process_message",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Intent classification", "Low confidence handling"],
+          "error_handling": "Returns mock response (Rasa commented out)"
+        },
+        {
+          "step_number": 6,
+          "component": "session_manager",
+          "action": "Get or create session for user",
+          "file_location": "app/services/session_manager.py",
+          "function": "get_or_create_session",
+          "external_calls": [],
+          "database_operations": ["SELECT from sessions", "INSERT if not exists"],
+          "decision_points": ["Session exists?"],
+          "error_handling": "Creates new session if not found"
+        },
+        {
+          "step_number": 7,
+          "component": "orchestrator",
+          "action": "Handle intent based on classification",
+          "file_location": "app/services/orchestrator.py",
+          "function": "handle_intent",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Intent routing (availability, reservation, info)"],
+          "error_handling": "Default fallback for unknown intents"
+        },
+        {
+          "step_number": 8,
+          "component": "pms_adapter (conditional)",
+          "action": "Check availability or make reservation in PMS",
+          "file_location": "app/services/pms_adapter.py",
+          "function": "check_availability or create_reservation",
+          "external_calls": ["QloApps REST API"],
+          "database_operations": [],
+          "decision_points": ["Circuit breaker open?", "Cache hit?"],
+          "error_handling": "Circuit breaker pattern with exponential backoff retry"
+        },
+        {
+          "step_number": 9,
+          "component": "lock_service (for reservations)",
+          "action": "Acquire distributed lock for room reservation",
+          "file_location": "app/services/lock_service.py",
+          "function": "acquire_lock",
+          "external_calls": ["Redis SETNX"],
+          "database_operations": ["INSERT lock audit record"],
+          "decision_points": ["Lock available?"],
+          "error_handling": "Returns false if lock unavailable, records audit"
+        },
+        {
+          "step_number": 10,
+          "component": "template_service",
+          "action": "Generate response text from template",
+          "file_location": "app/services/template_service.py",
+          "function": "get_response",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": ["Template selection by intent"],
+          "error_handling": "Returns default template if not found"
+        },
+        {
+          "step_number": 11,
+          "component": "whatsapp_client",
+          "action": "Send response message to user",
+          "file_location": "app/services/whatsapp_client.py",
+          "function": "send_text_message",
+          "external_calls": ["WhatsApp Business API"],
+          "database_operations": [],
+          "decision_points": [],
+          "error_handling": "Logs error but doesn't fail request"
+        }
+      ],
+      "data_flow": [
+        {
+          "from": "WhatsApp webhook",
+          "to": "UnifiedMessage",
+          "transformation": "Parse JSON, extract message content, sender, timestamp",
+          "validation": "Signature verification, payload structure validation"
+        },
+        {
+          "from": "UnifiedMessage",
+          "to": "NLP result",
+          "transformation": "Text extraction, intent classification",
+          "validation": "Text sanitization, confidence threshold"
+        },
+        {
+          "from": "NLP result",
+          "to": "PMS query",
+          "transformation": "Entity extraction (dates, room type, guests)",
+          "validation": "Date format, guest count range"
+        },
+        {
+          "from": "PMS response",
+          "to": "User response",
+          "transformation": "Template filling with availability/reservation data",
+          "validation": "Response format validation"
+        }
+      ],
+      "dependencies": {
+        "internal_components": ["message_gateway", "orchestrator", "nlp_engine", "pms_adapter", "session_manager", "lock_service", "template_service", "whatsapp_client"],
+        "external_services": ["WhatsApp Business API", "QloApps PMS"],
+        "databases": ["PostgreSQL (sessions, locks)", "Redis (cache, rate limiting)"],
+        "caches": ["Redis (PMS responses, session data)"]
+      },
+      "sla_requirements": {
+        "documented": false,
+        "max_latency_ms": null,
+        "min_availability": null,
+        "source": "Not formally documented - inferred from timeout configs (30s PMS timeout)"
+      }
+    },
+    {
+      "name": "Health Check Flow",
+      "description": "Kubernetes/Docker liveness and readiness probes",
+      "business_criticality": "high",
+      "estimated_frequency": "4-6 requests per minute per probe",
+      "trigger": "HTTP GET to /health/live or /health/ready",
+      "entry_point": {
+        "file": "agente-hotel-api/app/routers/health.py",
+        "function": "live or ready",
+        "line": 13
+      },
+      "steps": [
+        {
+          "step_number": 1,
+          "component": "health router",
+          "action": "Check application liveness or dependency readiness",
+          "file_location": "app/routers/health.py",
+          "function": "live (line 13) or ready (line 18)",
+          "external_calls": ["PostgreSQL ping", "Redis ping", "PMS health check (optional)"],
+          "database_operations": ["SELECT 1"],
+          "decision_points": ["All dependencies healthy?", "PMS check enabled?"],
+          "error_handling": "Returns 503 if any dependency fails"
+        }
+      ],
+      "data_flow": [],
+      "dependencies": {
+        "internal_components": ["database", "redis_client", "pms_adapter"],
+        "external_services": ["QloApps PMS (optional)"],
+        "databases": ["PostgreSQL", "Redis"],
+        "caches": []
+      },
+      "sla_requirements": {
+        "documented": true,
+        "max_latency_ms": 5000,
+        "min_availability": 99.9,
+        "source": "docker-compose.yml healthcheck configs"
+      }
+    },
+    {
+      "name": "Metrics Collection Flow",
+      "description": "Prometheus scraping of application metrics",
+      "business_criticality": "medium",
+      "estimated_frequency": "4 requests per minute (15s scrape interval)",
+      "trigger": "HTTP GET to /metrics by Prometheus",
+      "entry_point": {
+        "file": "agente-hotel-api/app/routers/metrics.py",
+        "function": "metrics endpoint",
+        "line": 8
+      },
+      "steps": [
+        {
+          "step_number": 1,
+          "component": "metrics router",
+          "action": "Return Prometheus text format metrics",
+          "file_location": "app/routers/metrics.py",
+          "function": "metrics",
+          "external_calls": [],
+          "database_operations": [],
+          "decision_points": [],
+          "error_handling": "Standard HTTP error handling"
+        }
+      ],
+      "data_flow": [
+        {
+          "from": "Application counters/histograms/gauges",
+          "to": "Prometheus text format",
+          "transformation": "Serialize metrics to Prometheus exposition format",
+          "validation": "None required - prometheus_client handles format"
+        }
+      ],
+      "dependencies": {
+        "internal_components": ["prometheus_client library"],
+        "external_services": [],
+        "databases": [],
+        "caches": []
+      },
+      "sla_requirements": {
+        "documented": true,
+        "max_latency_ms": 1000,
+        "min_availability": 99.0,
+        "source": "docker/prometheus/prometheus.yml scrape_timeout"
+      }
+    }
+  ],
+  "use_cases": [
+    {
+      "name": "Guest checks room availability",
+      "description": "Guest sends WhatsApp message asking about available rooms for specific dates",
+      "actor": "Hotel guest via WhatsApp",
+      "flows_involved": ["WhatsApp Message Processing Flow"],
+      "evidence": "app/services/orchestrator.py:83-94, tests/integration/"
+    },
+    {
+      "name": "Guest makes a reservation",
+      "description": "Guest completes reservation after checking availability",
+      "actor": "Hotel guest via WhatsApp",
+      "flows_involved": ["WhatsApp Message Processing Flow"],
+      "evidence": "app/services/orchestrator.py:97-103, lock_service.py usage"
+    },
+    {
+      "name": "System health monitoring",
+      "description": "Kubernetes or monitoring system checks application health",
+      "actor": "Kubernetes/Docker/Monitoring system",
+      "flows_involved": ["Health Check Flow"],
+      "evidence": "docker-compose.yml healthcheck configs, app/routers/health.py"
+    },
+    {
+      "name": "Performance monitoring",
+      "description": "Operations team monitors system performance via Grafana dashboards",
+      "actor": "Operations team",
+      "flows_involved": ["Metrics Collection Flow"],
+      "evidence": "docker/grafana/dashboards/*.json, docker/prometheus/prometheus.yml"
+    }
+  ]
+}

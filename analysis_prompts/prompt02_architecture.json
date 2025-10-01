@@ -1,0 +1,189 @@
+{
+  "architecture": {
+    "pattern": "Multi-service microservices with orchestrator pattern",
+    "justification": "System uses Docker Compose to orchestrate multiple services (agente-api, qloapps, postgres, mysql, redis, prometheus, grafana). The agente-api service implements an orchestrator pattern (app/services/orchestrator.py) to coordinate between NLP, PMS, and messaging services. Evidence: docker-compose.yml defines 7+ services, orchestrator.py:80-93 coordinates workflows.",
+    "components": [
+      {
+        "name": "agente-api",
+        "type": "service",
+        "location": "agente-hotel-api/app",
+        "primary_file": "app/main.py",
+        "language": "Python",
+        "framework": "FastAPI",
+        "purpose": "Main API service handling AI orchestration and guest communications",
+        "entry_point": "app/main.py:43 - FastAPI app initialization with lifespan manager",
+        "dependencies_internal": [
+          "postgres",
+          "redis"
+        ],
+        "dependencies_external": [
+          "WhatsApp Meta Cloud API",
+          "Gmail SMTP",
+          "QloApps PMS"
+        ],
+        "state_management": "stateful with session management",
+        "estimated_lines_of_code": 2796
+      },
+      {
+        "name": "orchestrator",
+        "type": "service",
+        "location": "agente-hotel-api/app/services/orchestrator.py",
+        "primary_file": "orchestrator.py",
+        "language": "Python",
+        "framework": "FastAPI (service layer)",
+        "purpose": "Coordinates message processing flow: message → NLP → PMS → response",
+        "entry_point": "orchestrator.py:26 - handle_unified_message()",
+        "dependencies_internal": [
+          "message_gateway",
+          "nlp_engine",
+          "pms_adapter",
+          "session_manager",
+          "lock_service",
+          "audio_processor"
+        ],
+        "dependencies_external": [],
+        "state_management": "stateless with session context",
+        "estimated_lines_of_code": 153
+      },
+      {
+        "name": "pms_adapter",
+        "type": "service",
+        "location": "agente-hotel-api/app/services/pms_adapter.py",
+        "primary_file": "pms_adapter.py",
+        "language": "Python",
+        "framework": "httpx + circuit breaker",
+        "purpose": "Abstraction layer for PMS integration with circuit breaker, caching, and retry logic",
+        "entry_point": "pms_adapter.py:27 - QloAppsAdapter class",
+        "dependencies_internal": [
+          "redis",
+          "circuit_breaker"
+        ],
+        "dependencies_external": [
+          "QloApps PMS REST API"
+        ],
+        "state_management": "stateless with Redis cache",
+        "estimated_lines_of_code": 243
+      },
+      {
+        "name": "postgres",
+        "type": "database",
+        "location": "docker-compose.yml:72-88",
+        "primary_file": "docker-compose.yml",
+        "language": "SQL",
+        "framework": "PostgreSQL 14",
+        "purpose": "Agent database for sessions, locks, tenant mapping",
+        "entry_point": "SQLAlchemy async engine (app/core/database.py)",
+        "dependencies_internal": [],
+        "dependencies_external": [],
+        "state_management": "stateful",
+        "estimated_lines_of_code": 0
+      },
+      {
+        "name": "redis",
+        "type": "cache",
+        "location": "docker-compose.yml:90-107",
+        "primary_file": "docker-compose.yml",
+        "language": "N/A",
+        "framework": "Redis 7",
+        "purpose": "Caching, rate limiting, distributed locks, feature flags",
+        "entry_point": "app/core/redis_client.py",
+        "dependencies_internal": [],
+        "dependencies_external": [],
+        "state_management": "stateful",
+        "estimated_lines_of_code": 0
+      },
+      {
+        "name": "qloapps",
+        "type": "service",
+        "location": "docker-compose.yml:7-25",
+        "primary_file": "docker-compose.yml",
+        "language": "PHP",
+        "framework": "QloApps (PrestaShop-based)",
+        "purpose": "Hotel Property Management System",
+        "entry_point": "Web interface on port 80",
+        "dependencies_internal": [
+          "mysql"
+        ],
+        "dependencies_external": [],
+        "state_management": "stateful",
+        "estimated_lines_of_code": 0
+      },
+      {
+        "name": "prometheus",
+        "type": "service",
+        "location": "docker-compose.yml (monitoring section)",
+        "primary_file": "docker/prometheus/prometheus.yml",
+        "language": "YAML",
+        "framework": "Prometheus",
+        "purpose": "Metrics collection and alerting",
+        "entry_point": "Scrapes /metrics endpoint every 15s",
+        "dependencies_internal": [
+          "agente-api"
+        ],
+        "dependencies_external": [],
+        "state_management": "stateful (time-series DB)",
+        "estimated_lines_of_code": 0
+      },
+      {
+        "name": "grafana",
+        "type": "frontend",
+        "location": "docker-compose.yml (monitoring section)",
+        "primary_file": "docker/grafana/provisioning",
+        "language": "JSON/YAML",
+        "framework": "Grafana",
+        "purpose": "Monitoring dashboards and visualization",
+        "entry_point": "Web UI on port 3000",
+        "dependencies_internal": [
+          "prometheus"
+        ],
+        "dependencies_external": [],
+        "state_management": "stateful",
+        "estimated_lines_of_code": 0
+      }
+    ],
+    "communication_patterns": [
+      {
+        "from": "WhatsApp/Gmail",
+        "to": "agente-api",
+        "type": "REST",
+        "protocol": "HTTP/HTTPS",
+        "evidence": "app/routers/webhooks.py:14 - @router.post(\"/whatsapp\")"
+      },
+      {
+        "from": "agente-api",
+        "to": "pms_adapter",
+        "type": "function call",
+        "protocol": "Python async",
+        "evidence": "app/services/orchestrator.py:84 - calls pms_adapter methods"
+      },
+      {
+        "from": "pms_adapter",
+        "to": "qloapps",
+        "type": "REST",
+        "protocol": "HTTP",
+        "evidence": "app/services/pms_adapter.py:34 - httpx.AsyncClient(base_url=self.base_url)"
+      },
+      {
+        "from": "agente-api",
+        "to": "postgres",
+        "type": "database query",
+        "protocol": "PostgreSQL wire protocol",
+        "evidence": "app/core/database.py:1 - SQLAlchemy async engine"
+      },
+      {
+        "from": "agente-api",
+        "to": "redis",
+        "type": "cache/lock operations",
+        "protocol": "Redis protocol",
+        "evidence": "app/core/redis_client.py:8 - redis.asyncio connection pool"
+      },
+      {
+        "from": "prometheus",
+        "to": "agente-api",
+        "type": "REST",
+        "protocol": "HTTP",
+        "evidence": "docker/prometheus/prometheus.yml - scrape_configs"
+      }
+    ]
+  }
+}

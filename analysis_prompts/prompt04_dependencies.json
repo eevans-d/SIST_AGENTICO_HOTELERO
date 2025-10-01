@@ -1,0 +1,204 @@
+{
+  "dependencies": {
+    "production": [
+      {
+        "name": "fastapi",
+        "version": "^0.111.0",
+        "purpose": "Web framework for REST API endpoints and request handling",
+        "criticality": "critical"
+      },
+      {
+        "name": "uvicorn",
+        "version": "^0.30.1",
+        "purpose": "ASGI server for serving FastAPI application",
+        "criticality": "critical"
+      },
+      {
+        "name": "sqlalchemy",
+        "version": "^2.0.31",
+        "purpose": "ORM for PostgreSQL database operations (async support)",
+        "criticality": "critical"
+      },
+      {
+        "name": "asyncpg",
+        "version": "^0.29.0",
+        "purpose": "PostgreSQL async driver for SQLAlchemy",
+        "criticality": "critical"
+      },
+      {
+        "name": "redis",
+        "version": "^5.0.7",
+        "purpose": "Redis client for caching, rate limiting, and distributed locks",
+        "criticality": "critical"
+      },
+      {
+        "name": "pydantic",
+        "version": "^2.8.2",
+        "purpose": "Data validation and settings management",
+        "criticality": "critical"
+      },
+      {
+        "name": "pydantic-settings",
+        "version": "^2.3.4",
+        "purpose": "Environment variable management with validation",
+        "criticality": "critical"
+      },
+      {
+        "name": "structlog",
+        "version": "^24.3.0",
+        "purpose": "Structured logging with JSON output",
+        "criticality": "high"
+      },
+      {
+        "name": "python-jose",
+        "version": "^3.3.0 (with cryptography extras)",
+        "purpose": "JWT authentication token generation and validation",
+        "criticality": "high"
+      },
+      {
+        "name": "passlib",
+        "version": "^1.7.4 (with bcrypt extras)",
+        "purpose": "Password hashing with bcrypt algorithm",
+        "criticality": "high"
+      },
+      {
+        "name": "httpx",
+        "version": "^0.27.0",
+        "purpose": "Async HTTP client for PMS API integration",
+        "criticality": "high"
+      },
+      {
+        "name": "prometheus-client",
+        "version": "^0.20.0",
+        "purpose": "Metrics collection and export for monitoring",
+        "criticality": "high"
+      },
+      {
+        "name": "slowapi",
+        "version": "^0.1.9",
+        "purpose": "Rate limiting with Redis backend",
+        "criticality": "high"
+      },
+      {
+        "name": "bleach",
+        "version": "^6.1.0",
+        "purpose": "Input sanitization for XSS prevention",
+        "criticality": "high"
+      },
+      {
+        "name": "python-multipart",
+        "version": "^0.0.9",
+        "purpose": "Form data and file upload handling",
+        "criticality": "medium"
+      }
+    ],
+    "development": [
+      {
+        "name": "pytest",
+        "version": "^8.2.2",
+        "purpose": "Testing framework for unit and integration tests"
+      },
+      {
+        "name": "pytest-asyncio",
+        "version": "^0.23.7",
+        "purpose": "Async test support for pytest"
+      },
+      {
+        "name": "pytest-mock",
+        "version": "^3.14.0",
+        "purpose": "Mocking utilities for tests"
+      },
+      {
+        "name": "ruff",
+        "version": "^0.5.0",
+        "purpose": "Fast Python linter and formatter"
+      },
+      {
+        "name": "pre-commit",
+        "version": "^3.7.1",
+        "purpose": "Git pre-commit hooks for code quality"
+      },
+      {
+        "name": "aiosqlite",
+        "version": "^0.21.0",
+        "purpose": "SQLite async driver for in-memory testing"
+      }
+    ],
+    "system_dependencies": [
+      {
+        "name": "PostgreSQL",
+        "version": "14-alpine",
+        "purpose": "Primary database for agent data (sessions, locks, tenants)",
+        "evidence": "docker-compose.yml:72-88"
+      },
+      {
+        "name": "MySQL",
+        "version": "8.0",
+        "purpose": "Database for QloApps PMS backend",
+        "evidence": "docker-compose.yml:27-45"
+      },
+      {
+        "name": "Redis",
+        "version": "7-alpine",
+        "purpose": "Cache, rate limiting, distributed locks, feature flags",
+        "evidence": "docker-compose.yml:90-107"
+      },
+      {
+        "name": "Docker",
+        "version": "20.10+",
+        "purpose": "Container runtime",
+        "evidence": "Makefile, docker-compose.yml"
+      },
+      {
+        "name": "Docker Compose",
+        "version": "V2",
+        "purpose": "Multi-container orchestration",
+        "evidence": "docker-compose.yml"
+      },
+      {
+        "name": "Python",
+        "version": "3.12",
+        "purpose": "Runtime environment",
+        "evidence": "pyproject.toml:9, Dockerfile:4"
+      },
+      {
+        "name": "FFmpeg",
+        "version": "latest",
+        "purpose": "Audio format conversion for voice messages",
+        "evidence": "app/utils/audio_converter.py"
+      },
+      {
+        "name": "Espeak/Coqui TTS",
+        "version": "system package",
+        "purpose": "Text-to-speech engine",
+        "evidence": "app/core/settings.py:27"
+      }
+    ]
+  },
+  "frameworks_and_libraries": {
+    "web_framework": "FastAPI 0.111.0",
+    "ai_frameworks": ["None currently active - Rasa commented out in nlp_engine.py"],
+    "database_orm": "SQLAlchemy 2.0.31 (async mode with asyncpg)",
+    "testing_framework": "pytest 8.2.2 with pytest-asyncio",
+    "async_framework": "asyncio (native Python) with FastAPI/Starlette"
+  },
+  "infrastructure": {
+    "containerization": "Docker",
+    "orchestration": "Docker Compose",
+    "ci_cd": "GitHub Actions",
+    "evidence_files": [
+      "Dockerfile",
+      "Dockerfile.production",
+      "docker-compose.yml",
+      "docker-compose.production.yml",
+      ".github/workflows/preflight.yml",
+      ".github/workflows/perf-smoke.yml"
+    ]
+  },
+  "evidence": {
+    "dependencies_file": "agente-hotel-api/pyproject.toml:8-24 (production), :26-32 (dev)",
+    "python_version": "agente-hotel-api/pyproject.toml:9",
+    "docker_services": "agente-hotel-api/docker-compose.yml",
+    "build_system": "agente-hotel-api/pyproject.toml:35"
+  }
+}

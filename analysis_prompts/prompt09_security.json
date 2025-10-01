@@ -1,0 +1,77 @@
+{
+  "security": {
+    "input_validation": [
+      {
+        "endpoint_or_function": "All FastAPI endpoints",
+        "validation_method": "Pydantic automatic request validation",
+        "validates": [
+          "Type checking",
+          "Required fields",
+          "Field constraints"
+        ],
+        "location": "FastAPI framework + Pydantic models",
+        "sanitization": false
+      },
+      {
+        "endpoint_or_function": "Text inputs",
+        "validation_method": "Bleach sanitization",
+        "validates": [
+          "HTML/script tags removal"
+        ],
+        "location": "app/core/validators.py",
+        "sanitization": true
+      },
+      {
+        "endpoint_or_function": "Environment variables",
+        "validation_method": "Pydantic field validators",
+        "validates": [
+          "Secret placeholders in production",
+          "URL formats"
+        ],
+        "location": "app/core/settings.py:80-110",
+        "sanitization": false
+      }
+    ],
+    "authentication": {
+      "method": "JWT tokens + API key for PMS + Webhook signature verification",
+      "implementation": "python-jose for JWT, custom signature validation for webhooks",
+      "location": "app/core/security.py, app/routers/webhooks.py (signature validation)",
+      "password_hashing": "bcrypt via passlib",
+      "token_expiration": "60 minutes (configurable via JWT_EXPIRATION_MINUTES)"
+    },
+    "authorization": {
+      "method": "None currently implemented",
+      "implementation": "Admin endpoints lack authorization - marked for production hardening",
+      "location": "app/routers/admin.py has no auth decorators"
+    },
+    "sql_injection_protection": {
+      "orm_used": true,
+      "parameterized_queries": true,
+      "raw_sql_locations": []
+    },
+    "xss_protection": {
+      "output_escaping": true,
+      "csp_headers": true,
+      "location": "app/core/middleware.py:28-50 - SecurityHeadersMiddleware sets CSP, X-Content-Type-Options, etc."
+    },
+    "cors_configuration": {
+      "configured": true,
+      "allowed_origins": [
+        "Configurable via middleware"
+      ],
+      "location": "app/core/middleware.py (CORS middleware)"
+    },
+    "secrets_in_code": {
+      "found": false,
+      "locations": [],
+      "types": []
+    },
+    "dependencies_vulnerabilities": {
+      "scan_needed": true,
+      "known_issues": [
+        "pre-commit hooks include gitleaks for secret scanning",
+        "Makefile includes 'make security-fast' with Trivy"
+      ]
+    }
+  }
+}

@@ -1,0 +1,206 @@
+{
+  "configuration": {
+    "config_files": [
+      {
+        "file": ".env.example",
+        "format": "env",
+        "purpose": "Template for environment variables",
+        "contains_secrets": true,
+        "environment_specific": "all"
+      },
+      {
+        "file": "app/core/settings.py",
+        "format": "Python",
+        "purpose": "Pydantic settings with validation",
+        "contains_secrets": false,
+        "environment_specific": "all"
+      },
+      {
+        "file": "docker-compose.yml",
+        "format": "YAML",
+        "purpose": "Docker service configuration",
+        "contains_secrets": false,
+        "environment_specific": "development"
+      },
+      {
+        "file": "docker-compose.production.yml",
+        "format": "YAML",
+        "purpose": "Production Docker overrides",
+        "contains_secrets": false,
+        "environment_specific": "production"
+      },
+      {
+        "file": "docker/prometheus/prometheus.yml",
+        "format": "YAML",
+        "purpose": "Prometheus scrape configuration",
+        "contains_secrets": false,
+        "environment_specific": "all"
+      },
+      {
+        "file": "docker/grafana/provisioning/datasources/datasource.yml",
+        "format": "YAML",
+        "purpose": "Grafana data source config",
+        "contains_secrets": false,
+        "environment_specific": "all"
+      },
+      {
+        "file": ".playbook/project_config.yml",
+        "format": "YAML",
+        "purpose": "Governance configuration",
+        "contains_secrets": false,
+        "environment_specific": "all"
+      }
+    ],
+    "environment_variables": [
+      {
+        "name": "SECRET_KEY",
+        "required": true,
+        "default_value": null,
+        "purpose": "JWT signing and encryption",
+        "locations_used": [
+          "app/core/settings.py:72"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "POSTGRES_URL",
+        "required": true,
+        "default_value": null,
+        "purpose": "PostgreSQL connection string",
+        "locations_used": [
+          "app/core/settings.py:41"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "POSTGRES_PASSWORD",
+        "required": true,
+        "default_value": null,
+        "purpose": "PostgreSQL password",
+        "locations_used": [
+          "app/core/settings.py:38"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "REDIS_URL",
+        "required": true,
+        "default_value": null,
+        "purpose": "Redis connection string",
+        "locations_used": [
+          "app/core/settings.py:47"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "REDIS_PASSWORD",
+        "required": true,
+        "default_value": null,
+        "purpose": "Redis authentication",
+        "locations_used": [
+          "app/core/settings.py:48"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "PMS_API_KEY",
+        "required": true,
+        "default_value": "dev-pms-key",
+        "purpose": "QloApps API authentication",
+        "locations_used": [
+          "app/core/settings.py:19"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "WHATSAPP_ACCESS_TOKEN",
+        "required": true,
+        "default_value": "dev-whatsapp-token",
+        "purpose": "Meta Cloud API access token",
+        "locations_used": [
+          "app/core/settings.py:23"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "WHATSAPP_VERIFY_TOKEN",
+        "required": true,
+        "default_value": "dev-verify-token",
+        "purpose": "Webhook verification",
+        "locations_used": [
+          "app/core/settings.py:25"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "GMAIL_APP_PASSWORD",
+        "required": true,
+        "default_value": null,
+        "purpose": "Gmail app-specific password",
+        "locations_used": [
+          "app/core/settings.py:61"
+        ],
+        "appears_to_be_secret": true
+      },
+      {
+        "name": "DEBUG",
+        "required": false,
+        "default_value": "True",
+        "purpose": "Enable debug mode (disables rate limiting)",
+        "locations_used": [
+          "app/core/settings.py:14"
+        ],
+        "appears_to_be_secret": false
+      },
+      {
+        "name": "LOG_LEVEL",
+        "required": false,
+        "default_value": "INFO",
+        "purpose": "Logging verbosity",
+        "locations_used": [
+          "app/core/settings.py:67"
+        ],
+        "appears_to_be_secret": false
+      },
+      {
+        "name": "CHECK_PMS_IN_READINESS",
+        "required": false,
+        "default_value": "False",
+        "purpose": "Enable PMS check in /health/ready",
+        "locations_used": [
+          "app/core/settings.py:75"
+        ],
+        "appears_to_be_secret": false
+      }
+    ],
+    "secrets_management": {
+      "method": "environment variables with SecretStr type",
+      "evidence": "app/core/settings.py uses pydantic SecretStr for sensitive values. Production validation fails if placeholder values detected (line 80-99)",
+      "hardcoded_secrets_found": false,
+      "locations": [
+        "Development placeholders in .env.example marked with REPLACE_WITH_*"
+      ]
+    },
+    "database_config": {
+      "connection_string_location": "app/core/settings.py:41 (postgres_url)",
+      "connection_pooling": true,
+      "migrations_present": false,
+      "migrations_location": "N/A - Schema created via SQLAlchemy Base.metadata.create_all()"
+    },
+    "logging_config": {
+      "framework": "structlog",
+      "log_levels": [
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL"
+      ],
+      "log_destinations": [
+        "console (JSON format)"
+      ],
+      "structured_logging": true,
+      "sensitive_data_filtering": "Pydantic SecretStr masks secrets in logs automatically"
+    }
+  }
+}
