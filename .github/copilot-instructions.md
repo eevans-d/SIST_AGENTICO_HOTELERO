@@ -1,282 +1,314 @@
-# AI Agent Instructions for Agente Hotelero IA System
+# AI Agent Instructions for Agente Hotelero IA System# AI Agent Instructions for Agente Hotelero IA System
 
-## System Overview
-This is a multi-service hotel receptionist AI agent built with FastAPI, designed to handle guest communications via WhatsApp, Gmail, and other channels. The system integrates with QloApps PMS for reservation management and uses Docker Compose for orchestration.
 
-## Tool Calling Guidelines
-<tool_calling>
-When working with this repository, you have the capability to call multiple tools in a single response. For maximum efficiency, whenever you need to perform multiple independent operations, ALWAYS invoke all relevant tools simultaneously rather than sequentially. This is especially important when exploring the repository, reading files, viewing directories, validating changes, or working on related tasks.
-</tool_calling>
 
-## Architecture & Core Components
+## System Overview## System Overview
 
-### Service Architecture
-- **agente-api**: Main FastAPI application handling AI orchestration and guest communications
-- **qloapps**: QloApps PMS for hotel management (MySQL-backed)
-- **postgres**: Agent database for sessions, locks, and metadata 
-- **redis**: Caching, rate limiting, and distributed locks
-- **Monitoring stack**: Prometheus, Grafana, AlertManager
+Multi-service hotel receptionist AI agent (FastAPI) handling WhatsApp/Gmail communications with QloApps PMS integration. Uses Docker Compose orchestration with comprehensive observability stack (Prometheus/Grafana/AlertManager).This is a multi-service hotel receptionist AI agent built with FastAPI, designed to handle guest communications via WhatsApp, Gmail, and other channels. The system integrates with QloApps PMS for reservation management and uses Docker Compose for orchestration.
 
-### Key Service Patterns
-- **Orchestrator Pattern**: `app/services/orchestrator.py` coordinates all AI workflows
-- **Adapter Pattern**: `app/services/pms_adapter.py` abstracts PMS interactions with circuit breaker
-- **Unified Messaging**: `app/models/unified_message.py` normalizes multi-channel communications
-- **Session Management**: Persistent guest conversation state in `session_manager.py`
+
+
+## Architecture Fundamentals## Architecture & Core Components
+
+
+
+### Service Boundaries### Service Architecture
+
+- **agente-api**: FastAPI async app with lifespan-managed services (`app/main.py`)- **agente-api**: Main FastAPI application handling AI orchestration and guest communications
+
+- **qloapps + mysql**: PMS backend (profiles-gated; use `PMS_TYPE=mock` for local dev)- **qloapps**: QloApps PMS for hotel management (MySQL-backed)
+
+- **postgres**: Agent DB (sessions, locks, tenant mapping) via SQLAlchemy async- **postgres**: Agent database for sessions, locks, and metadata 
+
+- **redis**: Cache, rate limiting (slowapi), distributed locks, feature flags- **redis**: Caching, rate limiting, and distributed locks
+
+- **Monitoring**: Prometheus scrapes `/metrics`; Grafana dashboards; AlertManager- **Monitoring stack**: Prometheus, Grafana, AlertManager
+
+
+
+### Core Patterns (Read These Files First)### Key Service Patterns
+
+- **Orchestrator**: `orchestrator.py` coordinates message→NLP→PMS→response flow; includes retry logic and feature flag checks- **Orchestrator Pattern**: `app/services/orchestrator.py` coordinates all AI workflows
+
+- **PMS Adapter**: `pms_adapter.py` wraps external PMS calls with circuit breaker (`CircuitBreaker` class), Redis caching, and Prometheus metrics (`pms_api_latency_seconds`, `pms_circuit_breaker_state`)- **Adapter Pattern**: `app/services/pms_adapter.py` abstracts PMS interactions with circuit breaker
+
+- **Message Gateway**: `message_gateway.py` normalizes inbound payloads to `UnifiedMessage`; resolves tenant via dynamic or static service- **Unified Messaging**: `app/models/unified_message.py` normalizes multi-channel communications
+
+- **Dynamic Tenancy**: `dynamic_tenant_service.py` with in-memory cache + background refresh; activated via feature flag `tenancy.dynamic.enabled`- **Session Management**: Persistent guest conversation state in `session_manager.py`
+
+- **Feature Flags**: `feature_flag_service.py` with Redis-backed cache; use `DEFAULT_FLAGS` dict for fallback
 
 ## Essential Development Workflows
 
-### Docker Commands (via Makefile)
-```bash
-make docker-up      # Start full stack with --build
-make docker-down    # Stop and remove containers
-make health         # Run health checks across services
-make backup         # Backup databases
-make logs           # Follow all service logs
-```
+## Critical Development Workflows
 
-### Environment Setup
+### Docker Commands (via Makefile)
+
+### Dependency Management (Auto-Detection)```bash
+
+```bashmake docker-up      # Start full stack with --build
+
+make install  # Detects uv → poetry → npm; uses Poetry in this projectmake docker-down    # Stop and remove containers
+
+poetry install --all-extras  # Manual alternativemake health         # Run health checks across services
+
+```make backup         # Backup databases
+
+make logs           # Follow all service logs
+
+### Docker Stack (Local Dev with PMS Mock)```
+
 ```bash
-make dev-setup      # Copies .env.example to .env (edit with secrets)
-make install        # Auto-detects uv/poetry/npm for deps
+
+make dev-setup     # Creates .env from .env.example### Environment Setup
+
+make docker-up     # Builds and starts stack (uses PMS_TYPE=mock by default)```bash
+
+make health        # Validates /health/ready across servicesmake dev-setup      # Copies .env.example to .env (edit with secrets)
+
+make logs          # Tail all container logsmake install        # Auto-detects uv/poetry/npm for deps
+
+make docker-down   # Teardown```
+
 ```
 
 ### Code Quality
-```bash
+
+**Profile-Gated QloApps**: Real PMS requires `--profile pms` flag; default config uses mock adapter to avoid pull/auth issues.```bash
+
 make fmt            # Ruff format + Prettier
-make lint           # Ruff check --fix + gitleaks security scan
-```
 
-## Configuration Patterns
+### Code Quality & Securitymake lint           # Ruff check --fix + gitleaks security scan
 
-### Settings Architecture
-- `app/core/settings.py` uses Pydantic with validation
+```bash```
+
+make fmt                # Ruff format (line-length 120) + prettier
+
+make lint               # Ruff check --fix + gitleaks secret scan## Configuration Patterns
+
+make security-fast      # Trivy HIGH/CRITICAL scan (vuln+secrets)
+
+make test               # pytest via Poetry (uses aiosqlite for in-memory DB tests)### Settings Architecture
+
+```- `app/core/settings.py` uses Pydantic with validation
+
 - Enum-based configuration (Environment, LogLevel, TTSEngine)
-- Production secret validation prevents deploy with dummy values
-- All secrets use `SecretStr` type
 
-### Network Architecture
-- **frontend_network**: NGINX public exposure
-- **backend_network**: Internal service communication
+### Governance & Pre-Deploy Checks- Production secret validation prevents deploy with dummy values
+
+```bash- All secrets use `SecretStr` type
+
+make preflight          # Runs scripts/preflight.py → .playbook/preflight_report.json
+
+make canary-diff        # Baseline vs canary P95/error rate diff (PromQL-based)### Network Architecture
+
+make pre-deploy-check   # Combined security-fast + SLO validation + resilience tests- **frontend_network**: NGINX public exposure
+
+```- **backend_network**: Internal service communication
+
 - Services communicate via container names (e.g., `postgres:5432`)
+
+## Configuration & Environment
 
 ## Critical Integration Points
 
-### PMS Integration (`pms_adapter.py`)
-- Circuit breaker pattern for resilience
-- Redis caching with cache hit/miss metrics
-- Comprehensive error handling: `PMSError`, `PMSAuthError`, `PMSRateLimitError`
-- Prometheus metrics: latency, operations, circuit breaker state
+### Settings Architecture (`app/core/settings.py`)
 
-### WhatsApp Integration (`whatsapp_client.py`)
-- Meta Cloud API v18.0
-- Audio message transcription workflow
-- Media download capabilities
+- **Pydantic v2** with `SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")`### PMS Integration (`pms_adapter.py`)
 
-### Message Processing Flow
+- **Enums for type safety**: `Environment`, `LogLevel`, `TTSEngine`, `PMSType`- Circuit breaker pattern for resilience
+
+- **SecretStr for sensitive data**: `pms_api_key`, `whatsapp_access_token`, etc.- Redis caching with cache hit/miss metrics
+
+- **Dynamic postgres_url construction**: Fallback to individual `postgres_host`/`postgres_port` if `postgres_url` not set- Comprehensive error handling: `PMSError`, `PMSAuthError`, `PMSRateLimitError`
+
+- **Toggles**: `check_pms_in_readiness` (controls PMS check in `/health/ready`), `debug` (disables rate limiting)- Prometheus metrics: latency, operations, circuit breaker state
+
+
+
+### Feature Flag Patterns### WhatsApp Integration (`whatsapp_client.py`)
+
+```python- Meta Cloud API v18.0
+
+# In services: always await async getter- Audio message transcription workflow
+
+ff = await get_feature_flag_service()- Media download capabilities
+
+if await ff.is_enabled("nlp.fallback.enhanced", default=True):
+
+    # Enhanced fallback logic### Message Processing Flow
+
 1. Webhook receives message → `UnifiedMessage` model
-2. Audio messages → `AudioProcessor` for STT
-3. Text → `NLPEngine` for intent recognition
-4. `Orchestrator` coordinates PMS calls and response generation
+
+# In message gateway: use DEFAULT_FLAGS to avoid import cycles2. Audio messages → `AudioProcessor` for STT
+
+use_dynamic = DEFAULT_FLAGS.get("tenancy.dynamic.enabled", True)3. Text → `NLPEngine` for intent recognition
+
+```4. `Orchestrator` coordinates PMS calls and response generation
+
 5. `TemplateService` for consistent responses
+
+## Integration Patterns
 
 ## Logging & Monitoring
 
-### Structured Logging
-- Uses `structlog` with JSON output
-- Correlation IDs via middleware (`correlation_id_middleware`)
-- All external API calls logged with timing
+### PMS Adapter Circuit Breaker
 
-### Health Checks
-- `/health/live`: Basic liveness
-- `/health/ready`: Dependency readiness (DB, Redis, PMS)
-- Container health checks in docker-compose.yml
+- **State machine**: `CircuitState.CLOSED` → `OPEN` (after 5 failures) → `HALF_OPEN` (after 30s recovery)### Structured Logging
 
-## Testing Structure
+- **Metrics**: `pms_circuit_breaker_state` (0=closed, 1=open, 2=half-open), `pms_circuit_breaker_calls_total{state,result}`- Uses `structlog` with JSON output
 
-### Test Organization
-- `tests/unit/`: Service-level unit tests
-- `tests/integration/`: Cross-service integration tests  
+- **Cache invalidation**: `_invalidate_cache_pattern("availability:*")` after mutations- Correlation IDs via middleware (`correlation_id_middleware`)
+
+- **Retry decorator**: `@retry_with_backoff` in `app/core/retry.py` with exponential backoff- All external API calls logged with timing
+
+
+
+### Rate Limiting (SlowAPI + Redis)### Health Checks
+
+- **Applied per-endpoint**: `@app.state.limiter.limit("120/minute")` on webhook routes- `/health/live`: Basic liveness
+
+- **Debug bypass**: Rate limits ignored when `settings.debug=True` (no Redis required for tests)- `/health/ready`: Dependency readiness (DB, Redis, PMS)
+
+- **Test isolation**: `conftest.py` sets `storage_uri="memory://"` for in-memory rate limiting- Container health checks in docker-compose.yml
+
+
+
+### Multi-Tenant Resolution## Testing Structure
+
+1. **Dynamic service** (`dynamic_tenant_service.py`): Queries `Tenant` + `TenantUserIdentifier` from Postgres; caches in-memory with auto-refresh (300s default)
+
+2. **Metrics**: `tenant_resolution_total{result=hit|default|miss_strict}`, `tenants_active_total`, `tenant_refresh_latency_seconds`### Test Organization
+
+3. **Admin endpoints**: `/admin/tenants` (CRUD), `/admin/tenants/refresh` (force cache refresh)- `tests/unit/`: Service-level unit tests
+
+4. **Fallback chain**: Dynamic → Static → "default" tenant- `tests/integration/`: Cross-service integration tests  
+
 - `tests/e2e/`: End-to-end reservation flows
-- `tests/mocks/`: PMS mock server for testing
 
-### Key Testing Patterns
-- `conftest.py` provides test app fixture
-- Async test patterns with `pytest-asyncio`
+## Observability- `tests/mocks/`: PMS mock server for testing
 
-## Code Conventions
+
+
+### Prometheus Metrics (Key Patterns)### Key Testing Patterns
+
+```python- `conftest.py` provides test app fixture
+
+# Histogram for latency tracking- Async test patterns with `pytest-asyncio`
+
+pms_latency = Histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
+
+with pms_latency.labels(endpoint="/api/availability", method="GET").time():## Code Conventions
+
+    result = await self.client.get("/api/availability")
 
 ### File Organization
-- Services in `app/services/` (business logic)
-- Models in `app/models/` (Pydantic schemas, SQLAlchemy)
+
+# Counter for operations- Services in `app/services/` (business logic)
+
+pms_operations.labels(operation="check_availability", status="success").inc()- Models in `app/models/` (Pydantic schemas, SQLAlchemy)
+
 - Core utilities in `app/core/` (settings, logging, middleware)
-- Routers in `app/routers/` (FastAPI endpoints)
 
-### Error Handling
+# Gauge for stateful metrics- Routers in `app/routers/` (FastAPI endpoints)
+
+circuit_breaker_state.set(0)  # 0=closed, 1=open, 2=half-open
+
+```### Error Handling
+
 - Custom exceptions in `app/exceptions/`
-- Global exception handler in middleware
-- Circuit breaker for external service calls
 
-### Security
+### Structured Logging (`structlog` + JSON)- Global exception handler in middleware
+
+- **Correlation IDs**: `correlation_id_middleware` injects `X-Request-ID` into context- Circuit breaker for external service calls
+
+- **Logged automatically**: All HTTP requests, external API calls, circuit breaker state changes
+
+- **Pattern**: `logger.info("message", key=value)` → JSON output with correlation_id### Security
+
 - Rate limiting via slowapi with Redis backend
-- Security headers middleware
-- Input validation and sanitization
 
-## Project-Specific Conventions
+### Health Checks- Security headers middleware
 
-### Naming Patterns
-- **Services**: Descriptive names ending in `_service.py` (e.g., `orchestrator_service.py`)
-- **Models**: Pydantic models for API schemas, SQLAlchemy models for database entities
-- **Exceptions**: Custom exceptions in `app/exceptions/` following pattern `<Domain>Error`
-- **Tests**: Test files prefixed with `test_` and grouped by functionality
-- **Environment variables**: UPPERCASE with underscores (e.g., `WHATSAPP_VERIFY_TOKEN`)
+- **/health/live**: Always returns 200 (k8s liveness)- Input validation and sanitization
 
-### Response Patterns
-- All API responses use consistent Pydantic models
-- Error responses include correlation IDs for traceability
-- Health check responses follow standard format with detailed dependency status
-- Webhook responses include proper HTTP status codes and validation
+- **/health/ready**: Checks Postgres, Redis, optionally PMS (via `check_pms_in_readiness`)
 
-### Async/Await Conventions
-- All database operations are async
-- External API calls use httpx async client
-- Background tasks use FastAPI's BackgroundTasks
-- Redis operations are async where possible
+- **Container healthchecks**: All Docker services have `healthcheck` stanzas## Development Tips
 
-### Configuration Management
-- Settings centralized in `app/core/settings.py` using Pydantic Settings
-- Environment-specific settings with validation
-- Secret values use SecretStr to prevent accidental logging
-- Default values only for non-production settings
 
-## Development Tips
 
-- **Always use absolute paths** when referencing services in Docker
+## Testing Conventions- **Always use absolute paths** when referencing services in Docker
+
 - **Environment variables** are validated at startup - check logs for missing configs
-- **Redis locks** are used for reservation conflicts - see `lock_service.py`
-- **Audio processing** requires TTS engine configuration (espeak/coqui)
-- **PMS operations** are cached aggressively - use cache invalidation patterns
-- **Use the Makefile**: All common operations have make targets - run `make help` for full list
-- **Poetry vs pip**: Project uses Poetry for dependency management - prefer `poetry add` over `pip install`
-- **Testing isolation**: Each test category can be run independently for faster feedback loops
-- **Docker-first development**: All services run in containers - use `make docker-up` for full stack
 
-## Common Patterns to Follow
+### Async Test Setup (`pytest-asyncio`)- **Redis locks** are used for reservation conflicts - see `lock_service.py`
 
-When adding new services:
-1. Add health check endpoint
-2. Include Prometheus metrics
+```python- **Audio processing** requires TTS engine configuration (espeak/coqui)
+
+@pytest_asyncio.fixture- **PMS operations** are cached aggressively - use cache invalidation patterns
+
+async def test_client():
+
+    from app.main import app## Common Patterns to Follow
+
+    app.state.limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
+
+    async with AsyncClient(app=app, base_url="http://test") as client:When adding new services:
+
+        yield client1. Add health check endpoint
+
+```2. Include Prometheus metrics
+
 3. Use structured logging with correlation IDs
-4. Implement circuit breaker for external calls
-5. Add comprehensive error handling
-6. Write both unit and integration tests
 
-## Development Workflow & CI/CD
+### Database Testing4. Implement circuit breaker for external calls
 
-### GitHub Actions Workflows
-- **CI Pipeline** (`.github/workflows/ci.yml`): Runs on every PR and push to main
-  - Poetry dependency installation
-  - Ruff linting and formatting
-  - Pytest test suite (unit, integration, e2e)
-  - Trivy security scanning (fast mode)
-  - Docker image build verification
-- **Deploy Pipeline** (`.github/workflows/deploy.yml`): Manual dispatch for production deployments
-- **Nightly Security** (`.github/workflows/nightly-security.yml`): Deep security scans
-- **SLO Compliance** (`.github/workflows/slo-compliance.yml`): Service level objective monitoring
+- **SQLite fallback**: `aiosqlite` for in-memory tests (see `tests/unit/test_dynamic_tenant_service.py`)5. Add comprehensive error handling
 
-### Pre-commit Hooks
-The project uses pre-commit hooks (`.pre-commit-config.yaml`) for:
-- Ruff linting and formatting
-- Git security scanning
-- Ensure consistent code quality before commits
+- **Schema creation**: Services call `Base.metadata.create_all()` in `start()` method (migration-free bootstrap for dev/test)6. Write both unit and integration tests
 
-### Testing Philosophy
-- **Unit tests** (`tests/unit/`): Fast, isolated component testing
-- **Integration tests** (`tests/integration/`): Service interaction testing
-- **E2E tests** (`tests/e2e/`): Full workflow validation
-- **Performance tests** (`tests/performance/`): Load and stress testing with k6
-- **Mock services** (`tests/mocks/`): PMS and external API mocking
+### Mock PMS Server
+- **Location**: `tests/mocks/pms_mock_server.py`
+- **Usage**: Pytest fixture or standalone process; mimics QloApps API responses
 
-### Code Quality Standards
-- **Line length**: 120 characters (configured in ruff)
-- **Python version**: 3.12+ required
-- **Import sorting**: Handled by ruff
-- **Type hints**: Required for all public APIs
-- **Docstrings**: Required for all public functions/classes
+## Code Organization Anti-Patterns (Avoid These)
 
-## Deployment & Operations
+1. **Import cycles**: Don't import `feature_flag_service` in `message_gateway.py`; use `DEFAULT_FLAGS` dict directly
+2. **Pydantic v1 validators**: Use `@field_validator` (v2), not `@validator` (v1)
+3. **Sync DB operations in async code**: Always use `AsyncSessionFactory` and `asyncpg`
+4. **Hardcoded secrets**: All production secrets must be `SecretStr` and fail validation if not overridden
 
-### Container Strategy
-- **Development**: `Dockerfile` with hot reload and debug capabilities
-- **Production**: `Dockerfile.production` with multi-stage build and security hardening
-- **Orchestration**: Docker Compose with separate development and production configurations
+## Deployment & Governance
 
-### Environment Configuration
-- **Development**: `.env` file (copy from `.env.example`)
-- **Production**: Environment variables injected by deployment platform
-- **Settings validation**: Strict validation in `app/core/settings.py` prevents deployment with missing secrets
+### Pre-Flight Risk Assessment
+**Script**: `scripts/preflight.py` (Python)
+**Invocation**: `make preflight READINESS_SCORE=7.5 MVP_SCORE=7.0`
+**Output**: `.playbook/preflight_report.json` with `decision: GO|NO_GO|GO_WITH_CAUTION`
+**CI Integration**: `.github/workflows/preflight.yml` runs on PR, blocks merge if NO_GO
 
-### Monitoring & Observability
-- **Metrics**: Prometheus metrics exported at `/metrics`
-- **Health checks**: `/health/live` (basic) and `/health/ready` (dependencies)
-- **Logging**: Structured JSON logs with correlation IDs
-- **Alerting**: Grafana dashboards with AlertManager integration
-- **Performance**: SLO compliance monitoring and error budget tracking
+### Canary Diff Analysis
+**Script**: `scripts/canary-deploy.sh` (Bash + PromQL)
+**Metrics Compared**: P95 latency (`histogram_quantile(0.95, rate(...))`), error rate
+**Thresholds**: P95 ≤ 10% increase, error rate ≤ 50% increase (configurable via env)
+**Output**: `.playbook/canary_diff_report.json` with `status: PASS|FAIL`
 
-## Security Practices
+### Docker Compose Profiles
+- **Default**: Starts agente-api, postgres, redis, monitoring (no QloApps)
+- **PMS profile**: `docker compose --profile pms up` includes qloapps + mysql
+- **Rationale**: Local dev uses mock PMS adapter; staging/prod use real PMS
 
-### Input Validation & Sanitization
-- All user inputs validated with Pydantic models
-- XSS prevention with bleach sanitization
-- Rate limiting implemented with slowapi + Redis
-- Security headers middleware for all responses
+## Quick Reference
 
-### Secrets Management
-- No hardcoded secrets in code (validated in CI)
-- SecretStr type for all sensitive configuration
-- Production deployment validation prevents dummy values
+### Key Files for Onboarding
+1. `app/main.py` → FastAPI app initialization, lifespan manager, middleware stack
+2. `app/services/orchestrator.py` → End-to-end message processing logic
+3. `app/services/pms_adapter.py` → External integration patterns (circuit breaker, cache, metrics)
+4. `app/core/settings.py` → Configuration schema with type validation
+5. `Makefile` → All dev commands (46 targets including resilience/chaos tests)
 
-### Authentication & Authorization
-- JWT tokens with configurable expiration
-- Password hashing with bcrypt via passlib
-- Role-based access control for admin endpoints
-
-## Troubleshooting Quick Reference
-
-### Common Commands
-```bash
-# Quick health check
-make health
-
-# View all service logs
-make logs
-
-# Run specific test categories
-make test  # All tests
-pytest tests/unit/  # Unit tests only
-pytest tests/integration/  # Integration tests only
-
-# Performance testing
-make performance-test  # Load testing with k6
-make stress-test       # Stress testing to find limits
-
-# Security validation
-make security-fast     # Quick security scan
-make security-scan     # Comprehensive security analysis
-
-# Database operations
-make backup    # Backup all databases
-make restore   # Restore from backup
-```
-
-### Service Dependencies
-- **PostgreSQL**: Main application database
-- **Redis**: Caching, rate limiting, distributed locks
-- **QloApps PMS**: External hotel management system (with circuit breaker)
-- **WhatsApp Business API**: Guest communication channel
-- **Gmail API**: Email communication channel
-
-### Performance Baselines
-- **Response time**: P95 < 500ms for API endpoints
-- **Throughput**: 100+ RPS sustained load
-- **Error rate**: < 0.1% under normal conditions
-- **Circuit breaker**: Trips at 50% error rate over 30s window
+### Common Tasks
+- **Add new endpoint**: Create router in `app/routers/`, include in `main.py`, add rate limit decorator if public
+- **Add new metric**: Define in service module, use labels for dimensions, document in `README-Infra.md`
+- **Add new feature flag**: Update `DEFAULT_FLAGS` dict in `feature_flag_service.py`, use `is_enabled()` async method
+- **Change PMS behavior**: Implement in `QloAppsAdapter` class, add cache key pattern, update circuit breaker metrics

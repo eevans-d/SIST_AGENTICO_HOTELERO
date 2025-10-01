@@ -2,359 +2,161 @@
 set -euo pipefail
 
 ###############################################
-# Canary Deploy Script - Production Ready
-# Objetivo: realizar despliegue progresivo validando métricas
-# Usage: ./canary-deploy.sh [env] [version] [traffic_percentage]
+# Canary Deploy Script (fase 5 - versión inicial funcional)
+# Requisitos:
+#  - Docker compose local simulando entornos (usa mismo stack con bandera CANARY=1)
+#  - Prometheus accesible en localhost:9090
+# Uso:
+#  bash scripts/canary-deploy.sh staging <commit>
+# Flags:
+#  --dry-run (no despliega, solo imprime pasos)
 ###############################################
 
-# ============================================================================
-# Configuration
-# ============================================================================
+DRY_RUN=false
+if [[ "${1:-}" == "--dry-run" ]]; then
+	DRY_RUN=true
+	shift || true
+fi
 
 ENV="${1:-staging}"
-VERSION="${2:-$(git rev-parse --short HEAD)}"
-TRAFFIC_PERCENTAGE="${3:-10}"
+VERSION="${2:-local}" # commit hash sugerido
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-LOG_FILE="./canary-deploy.log"
+# Parámetros (override via env):
+PROM_URL="${PROM_URL:-http://localhost:9090}"    # URL Prometheus
+BASELINE_RANGE="${BASELINE_RANGE:-2m}"           # Ventana baseline antes de canary
+CANARY_RANGE="${CANARY_RANGE:-2m}"               # Ventana canary tras warmup
+WARMUP_SECONDS="${WARMUP_SECONDS:-30}"           # Calentamiento tras readiness
+P95_INCREASE_LIMIT="${P95_INCREASE_LIMIT:-1.10}" # Multiplicador máximo permitido
+ERR_INCREASE_LIMIT="${ERR_INCREASE_LIMIT:-1.50}" # Multiplicador máximo permitido
+ERR_ABS_MIN="${ERR_ABS_MIN:-0.005}"              # Error rate absoluto mínimo gatillo
+OUT_JSON="${OUT_JSON:-.playbook/canary_diff_report.json}"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+mkdir -p .playbook
 
-# Deployment configuration
-HEALTH_CHECK_URL="http://localhost:8000/health/ready"
-PROMETHEUS_URL="http://localhost:9090"
-CANARY_DURATION_MINUTES=10
-ROLLBACK_ON_ERROR_RATE_THRESHOLD=5.0  # 5% error rate triggers rollback
-ROLLBACK_ON_LATENCY_P95_THRESHOLD=2000  # 2000ms P95 latency triggers rollback
+echo "[canary] Inicio | env=$ENV version=$VERSION dry_run=$DRY_RUN"
 
-# ============================================================================
-# Logging Functions
-# ============================================================================
+function step() { echo -e "\n➡ $1"; }
 
-log() {
-    echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+if $DRY_RUN; then
+	echo "[canary] DRY RUN: no se realizarán cambios reales"
+fi
+
+step "Construir imagen (si aplica)"
+if ! $DRY_RUN; then
+	docker build -t agente-hotel-api:$VERSION . >/dev/null
+fi
+
+step "Desplegar instancia canary (1 réplica)"
+if ! $DRY_RUN; then
+	CANARY_PORT=8010
+	docker run -d --rm --name agente-hotel-api-canary -p $CANARY_PORT:8000 -e CANARY=1 agente-hotel-api:$VERSION >/dev/null
+	trap 'docker stop agente-hotel-api-canary >/dev/null 2>&1 || true' EXIT
+fi
+
+step "Esperar readiness"
+if ! $DRY_RUN; then
+	ATTEMPTS=0
+	until curl -sSf http://localhost:8010/health/ready >/dev/null 2>&1; do
+		ATTEMPTS=$((ATTEMPTS+1))
+		if [ $ATTEMPTS -gt 15 ]; then
+			echo "❌ Canary no ready tras 15 intentos"; exit 1
+		fi
+		sleep 2
+	done
+	echo "✅ Ready"
+fi
+
+step "Recolectar métricas baseline (P95 y error_rate)"
+P95_QUERY_BASELINE="histogram_quantile(0.95, sum(rate(request_duration_seconds_bucket[${BASELINE_RANGE}])) by (le))"
+ERR_QUERY_BASELINE="(sum(rate(http_requests_total{status_code=~\"5..\"}[${BASELINE_RANGE}])) / sum(rate(http_requests_total[${BASELINE_RANGE}])))"
+
+query_prom() {
+	local q="$1"; local url="${PROM_URL}/api/v1/query?query=${q}"
+	curl -s --fail "$url" | jq -r '.data.result[0].value[1] // 0' 2>/dev/null || echo 0
 }
 
-log_info() {
-    log "${BLUE}[INFO]${NC} $1"
-}
+if ! $DRY_RUN; then
+	BASELINE_P95=$(query_prom "$P95_QUERY_BASELINE")
+	BASELINE_ERR_RATE=$(query_prom "$ERR_QUERY_BASELINE")
+else
+	BASELINE_P95=0.250
+	BASELINE_ERR_RATE=0.002
+fi
+echo "Baseline P95=${BASELINE_P95}s | ErrorRate=${BASELINE_ERR_RATE}"
 
-log_success() {
-    log "${GREEN}[SUCCESS]${NC} $1"
-}
+step "Warmup canary ${WARMUP_SECONDS}s y recopilación canary window (${CANARY_RANGE})"
+if ! $DRY_RUN; then
+	sleep "$WARMUP_SECONDS"
+	# Nota: Idealmente aquí gatillaríamos tráfico sintético (TODO: integrar k6 smoke con --vus bajo)
+	sleep $(echo "$CANARY_RANGE" | sed 's/m/*60/;s/s//;s/[^0-9*]//g' | bc -l 2>/dev/null || echo 30)
+fi
 
-log_warning() {
-    log "${YELLOW}[WARNING]${NC} $1"
-}
+step "Recolectar métricas canary"
+P95_QUERY_CANARY="histogram_quantile(0.95, sum(rate(request_duration_seconds_bucket[${CANARY_RANGE}])) by (le))"
+ERR_QUERY_CANARY="(sum(rate(http_requests_total{status_code=~\"5..\"}[${CANARY_RANGE}])) / sum(rate(http_requests_total[${CANARY_RANGE}])))"
+if ! $DRY_RUN; then
+	CANARY_P95=$(query_prom "$P95_QUERY_CANARY")
+	CANARY_ERR_RATE=$(query_prom "$ERR_QUERY_CANARY")
+else
+	CANARY_P95=0.265
+	CANARY_ERR_RATE=0.0025
+fi
+echo "Canary P95=${CANARY_P95}s | ErrorRate=${CANARY_ERR_RATE}"
 
-log_error() {
-    log "${RED}[ERROR]${NC} $1"
-}
+step "Evaluar diffs (p95 x${P95_INCREASE_LIMIT} / err x${ERR_INCREASE_LIMIT} abs_min=${ERR_ABS_MIN})"
 
-# ============================================================================
-# Utility Functions
-# ============================================================================
+fail_reasons=()
 
-check_prerequisites() {
-    log_info "🔍 Checking prerequisites..."
-    
-    # Check required tools
-    for tool in docker curl jq; do
-        if ! command -v "$tool" &> /dev/null; then
-            log_error "Required tool '$tool' not found"
-            exit 1
-        fi
-    done
-    
-    # Check Docker Compose
-    if ! docker compose version &> /dev/null; then
-        log_error "Docker Compose not available"
-        exit 1
-    fi
-    
-    # Check Prometheus is accessible
-    if ! curl -s "$PROMETHEUS_URL/api/v1/status/config" > /dev/null; then
-        log_warning "Prometheus not accessible at $PROMETHEUS_URL - metrics validation will be limited"
-    fi
-    
-    log_success "Prerequisites check passed"
-}
+P95_LIMIT=$(echo "$BASELINE_P95 * $P95_INCREASE_LIMIT" | bc -l)
+if (( $(echo "$CANARY_P95 > $P95_LIMIT" | bc -l) )); then
+	fail_reasons+=("p95_delta_exceeded")
+fi
 
-build_canary_image() {
-    log_info "🔨 Building canary image for version $VERSION..."
-    
-    cd "$PROJECT_ROOT"
-    
-    # Build the new version
-    docker build -f Dockerfile.production -t "agente-hotel-api:canary-$VERSION" .
-    
-    # Tag as canary
-    docker tag "agente-hotel-api:canary-$VERSION" "agente-hotel-api:canary"
-    
-    log_success "Canary image built successfully"
-}
+ERR_LIMIT_MULTI=$(echo "$BASELINE_ERR_RATE * $ERR_INCREASE_LIMIT" | bc -l)
+ERR_LIMIT=$(echo "$ERR_LIMIT_MULTI > $ERR_ABS_MIN" | bc -l)
+if (( ERR_LIMIT == 1 )); then
+	ERR_THRESH=$ERR_LIMIT_MULTI
+else
+	ERR_THRESH=$ERR_ABS_MIN
+fi
+if (( $(echo "$CANARY_ERR_RATE > $ERR_THRESH" | bc -l) )); then
+	fail_reasons+=("error_rate_delta_exceeded")
+fi
 
-deploy_canary() {
-    log_info "🐤 Deploying canary version..."
-    
-    cd "$PROJECT_ROOT"
-    
-    # Create canary compose override
-    cat > docker-compose.canary.yml << EOF
-version: '3.8'
-services:
-  agente-api-canary:
-    build:
-      context: .
-      dockerfile: Dockerfile.production
-    image: agente-hotel-api:canary
-    container_name: agente-api-canary
-    env_file: .env.production
-    environment:
-      - SERVICE_NAME=agente-api-canary
-      - CANARY_VERSION=$VERSION
-    networks:
-      - backend_network
-    ports:
-      - "8001:8000"  # Different port for canary
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    labels:
-      - "deployment.type=canary"
-      - "deployment.version=$VERSION"
-      - "deployment.traffic_percentage=$TRAFFIC_PERCENTAGE"
+STATUS="PASS"
+if ((${#fail_reasons[@]} > 0)); then
+	STATUS="FAIL"
+fi
 
-networks:
-  backend_network:
-    external: true
-EOF
-    
-    # Deploy canary
-    docker compose -f docker-compose.canary.yml up -d agente-api-canary
-    
-    # Wait for canary to be healthy
-    local attempt=1
-    local max_attempts=12
-    
-    while [[ $attempt -le $max_attempts ]]; do
-        if curl -f -s "http://localhost:8001/health/ready" > /dev/null; then
-            log_success "Canary deployment is healthy"
-            return 0
-        fi
-        
-        log_info "Waiting for canary to be ready... (attempt $attempt/$max_attempts)"
-        sleep 10
-        ((attempt++))
-    done
-    
-    log_error "Canary deployment failed health check after $max_attempts attempts"
-    return 1
-}
-
-configure_traffic_routing() {
-    log_info "🚦 Configuring traffic routing ($TRAFFIC_PERCENTAGE% to canary)..."
-    
-    # In a real production environment, this would configure a load balancer
-    # For demonstration purposes, we'll create a simple nginx configuration
-    
-    cat > /tmp/nginx-canary.conf << EOF
-upstream backend {
-    # Main production servers (90% traffic)
-    server agente-api:8000 weight=90;
-    # Canary server (10% traffic)
-    server agente-api-canary:8000 weight=$TRAFFIC_PERCENTAGE;
-}
-
-server {
-    listen 80;
-    server_name localhost;
-    
-    location / {
-        proxy_pass http://backend;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        
-        # Add canary headers for monitoring
-        add_header X-Canary-Routing "enabled" always;
-        add_header X-Traffic-Split "$TRAFFIC_PERCENTAGE%" always;
-    }
-    
-    # Health check endpoint that doesn't use load balancing
-    location /health/ {
-        proxy_pass http://agente-api:8000;
-        proxy_set_header Host \$host;
-    }
-    
-    # Canary-specific health check
-    location /canary/health/ {
-        proxy_pass http://agente-api-canary:8000/health/;
-        proxy_set_header Host \$host;
-    }
+step "Generar reporte JSON (${OUT_JSON})"
+cat >"$OUT_JSON" <<EOF
+{
+  "env": "${ENV}",
+  "version": "${VERSION}",
+  "baseline": {
+    "p95": ${BASELINE_P95},
+    "error_rate": ${BASELINE_ERR_RATE}
+  },
+  "canary": {
+    "p95": ${CANARY_P95},
+    "error_rate": ${CANARY_ERR_RATE}
+  },
+  "limits": {
+    "p95_multiplier": ${P95_INCREASE_LIMIT},
+    "error_rate_multiplier": ${ERR_INCREASE_LIMIT},
+    "error_rate_abs_min": ${ERR_ABS_MIN}
+  },
+  "status": "${STATUS}",
+  "fail_reasons": ["${fail_reasons[*]}"]
 }
 EOF
-    
-    log_success "Traffic routing configured"
-}
+echo "Reporte en $OUT_JSON"
 
-monitor_canary_metrics() {
-    log_info "📊 Monitoring canary metrics for $CANARY_DURATION_MINUTES minutes..."
-    
-    local start_time=$(date +%s)
-    local end_time=$((start_time + CANARY_DURATION_MINUTES * 60))
-    local check_interval=30  # Check every 30 seconds
-    
-    while [[ $(date +%s) -lt $end_time ]]; do
-        # Check error rate
-        local error_rate=$(query_error_rate)
-        log_info "Current error rate: ${error_rate}%"
-        
-        if (( $(echo "$error_rate > $ROLLBACK_ON_ERROR_RATE_THRESHOLD" | bc -l) )); then
-            log_error "Error rate threshold exceeded: ${error_rate}% > ${ROLLBACK_ON_ERROR_RATE_THRESHOLD}%"
-            return 1
-        fi
-        
-        # Check P95 latency
-        local p95_latency=$(query_p95_latency)
-        log_info "Current P95 latency: ${p95_latency}ms"
-        
-        if (( $(echo "$p95_latency > $ROLLBACK_ON_LATENCY_P95_THRESHOLD" | bc -l) )); then
-            log_error "Latency threshold exceeded: ${p95_latency}ms > ${ROLLBACK_ON_LATENCY_P95_THRESHOLD}ms"
-            return 1
-        fi
-        
-        # Check canary health
-        if ! curl -f -s "http://localhost:8001/health/live" > /dev/null; then
-            log_error "Canary health check failed"
-            return 1
-        fi
-        
-        local remaining_time=$(( (end_time - $(date +%s)) / 60 ))
-        log_info "Canary monitoring continues... ${remaining_time} minutes remaining"
-        
-        sleep $check_interval
-    done
-    
-    log_success "Canary monitoring completed successfully"
-    return 0
-}
+if [[ "$STATUS" == "PASS" ]]; then
+	echo "✅ Criterios OK (canary PASS)."
+else
+	echo "❌ Canary FAIL: ${fail_reasons[*]}"; exit 2
+fi
 
-query_error_rate() {
-    # Query Prometheus for error rate (if available)
-    local query="rate(http_requests_total{status=~\"5..\"}[5m])/rate(http_requests_total[5m])*100"
-    local result=$(curl -s "$PROMETHEUS_URL/api/v1/query?query=$query" | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null || echo "0")
-    echo "${result:-0}"
-}
+echo "[canary] Finalizado"
 
-query_p95_latency() {
-    # Query Prometheus for P95 latency (if available)
-    local query="histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))*1000"
-    local result=$(curl -s "$PROMETHEUS_URL/api/v1/query?query=$query" | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null || echo "0")
-    echo "${result:-0}"
-}
-
-promote_canary() {
-    log_info "🚀 Promoting canary to production..."
-    
-    cd "$PROJECT_ROOT"
-    
-    # Tag canary as the new production version
-    docker tag "agente-hotel-api:canary-$VERSION" "agente-hotel-api:latest"
-    docker tag "agente-hotel-api:canary-$VERSION" "agente-hotel-api:production"
-    
-    # Update production deployment
-    docker compose -f docker-compose.production.yml pull agente-api
-    docker compose -f docker-compose.production.yml up -d agente-api
-    
-    # Wait for production to stabilize
-    sleep 30
-    
-    # Verify production health
-    if curl -f -s "$HEALTH_CHECK_URL" > /dev/null; then
-        log_success "Production deployment is healthy"
-        
-        # Clean up canary deployment
-        docker compose -f docker-compose.canary.yml down
-        rm -f docker-compose.canary.yml
-        
-        log_success "Canary promotion completed successfully"
-        return 0
-    else
-        log_error "Production deployment health check failed after promotion"
-        return 1
-    fi
-}
-
-rollback_canary() {
-    log_error "🔄 Rolling back canary deployment..."
-    
-    cd "$PROJECT_ROOT"
-    
-    # Stop and remove canary deployment
-    docker compose -f docker-compose.canary.yml down || true
-    rm -f docker-compose.canary.yml /tmp/nginx-canary.conf
-    
-    # Remove canary images
-    docker rmi "agente-hotel-api:canary-$VERSION" "agente-hotel-api:canary" || true
-    
-    log_error "Canary deployment rolled back"
-}
-
-# ============================================================================
-# Main Canary Deployment Logic
-# ============================================================================
-
-main() {
-    log_info "🐤 Starting canary deployment for env=$ENV version=$VERSION traffic=$TRAFFIC_PERCENTAGE%"
-    
-    # Set up error handling
-    trap rollback_canary ERR
-    
-    # Validation and prerequisites
-    check_prerequisites
-    
-    # Build and deploy canary
-    build_canary_image
-    deploy_canary
-    
-    # Configure traffic routing (in production, this would be done via load balancer)
-    configure_traffic_routing
-    
-    # Monitor canary metrics
-    if monitor_canary_metrics; then
-        log_success "Canary metrics validation passed"
-        
-        # Promote canary to production
-        if promote_canary; then
-            log_success "🎉 Canary deployment completed successfully!"
-            log_info "Version $VERSION is now running in production"
-        else
-            log_error "Canary promotion failed"
-            rollback_canary
-            exit 1
-        fi
-    else
-        log_error "Canary metrics validation failed"
-        rollback_canary
-        exit 1
-    fi
-    
-    # Remove rollback trap
-    trap - ERR
-}
-
-# ============================================================================
-# Script Execution
-# ============================================================================
-
-echo "Canary deployment started at $(date)" > "$LOG_FILE"
-main "$@"

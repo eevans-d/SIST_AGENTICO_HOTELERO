@@ -17,6 +17,8 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.routers import health, metrics, webhooks, admin
+from .services.dynamic_tenant_service import dynamic_tenant_service
+from .services.feature_flag_service import get_feature_flag_service
 
 setup_logging()
 
@@ -31,12 +33,24 @@ APP_DEBUG = bool(getattr(settings, "debug", False))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("Application startup", app_name=settings.app_name, env=settings.environment)
+    # Inicializar servicio de tenants dinámico
+    # Condicional por feature flag
+    try:
+        ff = await get_feature_flag_service()
+        if await ff.is_enabled("tenancy.dynamic.enabled", default=True):
+            await dynamic_tenant_service.start()
+        else:
+            logger.info("Dynamic tenant service deshabilitado por feature flag")
+    except Exception as e:  # pragma: no cover
+        logger.warning("DynamicTenantService start failed", error=str(e))
     try:
         yield
     finally:
-        # Shutdown
+        try:
+            await dynamic_tenant_service.stop()
+        except Exception:  # pragma: no cover
+            pass
         logger.info("Application shutdown")
 
 

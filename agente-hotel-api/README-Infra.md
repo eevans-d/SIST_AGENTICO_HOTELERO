@@ -1,5 +1,63 @@
 # [PROMPT GA-01] Documentación de Infraestructura
 
+## Guía de Alineación (Resumen)
+
+Para iniciar una sesión de trabajo consistente y evitar desviaciones:
+
+1. Ejecutar `bash agente-hotel-api/scripts/session-start.sh` (imprime estado rápido).
+2. Revisar `docs/STATUS_SNAPSHOT.md` (generar previo con `bash agente-hotel-api/scripts/generate-status-summary.sh`).
+3. Confirmar reglas en `docs/playbook/WORKING_AGREEMENT.md`.
+4. Validar que el item a trabajar cumple Definition of Ready (`CONTRIBUTING.md`).
+5. Al abrir PR: adjuntar secciones aplicables de `docs/DOD_CHECKLIST.md`.
+
+Artefactos clave de alineación:
+- `CONTRIBUTING.md`
+- `docs/DOD_CHECKLIST.md`
+- `docs/playbook/PLAYBOOK_GOBERNANZA_PROPOSITO.md`
+- `docs/playbook/WORKING_AGREEMENT.md`
+- `.playbook/project_config.yml`
+- Preflight CI: `.github/workflows/preflight.yml` (genera `.playbook/preflight_report.json` y bloquea si NO_GO / blocking issues)
+
+### Preflight local
+Ejecutar:
+```
+make preflight READINESS_SCORE=7.5 MVP_SCORE=7.0 SECURITY_GATE=PASS CHANGE_COMPLEXITY=medium
+```
+Genera `.playbook/preflight_report.json` y aplica reglas de modo (A/B/C).
+
+### Canary Diff (Baseline vs Canary)
+Script: `scripts/canary-deploy.sh`
+Genera reporte: `.playbook/canary_diff_report.json`
+Parámetros principales (env overrides):
+- `P95_INCREASE_LIMIT` (default 1.10)
+- `ERR_INCREASE_LIMIT` (default 1.50)
+- `ERR_ABS_MIN` (default 0.005)
+- `BASELINE_RANGE` / `CANARY_RANGE` (ventanas PromQL)
+
+Uso rápido:
+```
+make canary-diff
+# o manual
+bash scripts/canary-deploy.sh staging $(git rev-parse --short HEAD)
+```
+Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
+
+### Tenancy Dinámico
+- Modelos: `Tenant`, `TenantUserIdentifier` (bootstrap automático, migraciones futuras con Alembic recomendado).
+- Servicio: `dynamic_tenant_service` (caché + refresh periódico). Flag `tenancy.dynamic.enabled`.
+- Métricas:
+  - `tenant_resolution_total{result=hit|default|miss_strict|provided}`
+  - `tenants_active_total`, `tenant_identifiers_cached_total`
+  - `tenant_refresh_latency_seconds`
+- Endpoints Admin:
+  - `GET /admin/tenants`
+  - `POST /admin/tenants` (body: tenant_id,name)
+  - `POST /admin/tenants/{tenant_id}/identifiers` (body: identifier)
+  - `DELETE /admin/tenants/{tenant_id}/identifiers/{identifier}`
+  - `PATCH /admin/tenants/{tenant_id}` (body: status=active|inactive)
+  - `POST /admin/tenants/refresh`
+
+
 ## Stack Tecnológico
 
 - **Orquestación:** Docker Compose
@@ -398,6 +456,33 @@ make test-circuit-breakers
 
 **Docker & Security:**
 - Build timeout: 10 minutos
+
+## Performance Smoke Gating (Fase 5)
+
+Se añadió un pipeline de "smoke performance" que ejecuta una prueba corta (k6 ~60s) en cada push/PR a `main`.
+
+Componentes:
+- Script de prueba: `tests/performance/smoke-test.js` (constant-arrival-rate, 40–50 RPS)
+- Summary JSON: `reports/performance/smoke-summary.json` generado vía `handleSummary` de k6.
+- Script de evaluación: `scripts/eval-smoke.sh` (valida P95 <= 450ms y error rate <= 1%).
+- Workflow CI: `.github/workflows/perf-smoke.yml` (falla si se exceden umbrales).
+
+Uso local:
+```bash
+make k6-smoke                 # Ejecuta test + eval (no bloqueante local)
+cat reports/performance/smoke-summary.json
+P95_LIMIT_MS=400 bash scripts/eval-smoke.sh   # Ajustar umbral manual
+```
+
+Racional:
+1. Detectar regresiones de latencia rápido antes de ejecutar suites largas.
+2. Reducir riesgo de merges que erosionen SLO sin darse cuenta.
+3. Servir de base para canary comparativo (baseline vs canary).
+
+Próximas extensiones sugeridas:
+- Parseo de error rate HTTP real (métrica Prometheus) tras carga.
+- Publicación del summary como artifact CI.
+- Ajuste dinámico de umbrales según error budget restante.
 - Vulnerability scan timeout: 5 minutos
 - Trivy output limitado para evitar logs gigantes
 
@@ -411,3 +496,21 @@ make test-circuit-breakers
 - Disk usage >85%: detener workflows
 - Memory usage >90%: kill procesos  
 - CPU usage >95%: throttling automático
+
+## Normalización de Mensajes (WhatsApp)
+Métricas:
+- message_normalized_total{canal,tenant_id}
+- message_normalization_errors_total{canal,error_type}
+- message_normalization_latency_seconds_bucket
+
+Errores controlados:
+- missing_entry
+- missing_changes
+- missing_messages
+- unexpected (errores no previstos)
+
+Flag:
+- tenancy.dynamic.enabled (activa mapeo dinámico de tenants).
+
+Test:
+pytest -q tests/unit/test_message_gateway_normalization.py

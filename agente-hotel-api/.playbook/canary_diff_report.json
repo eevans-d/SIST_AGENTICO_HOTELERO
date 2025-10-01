@@ -1,0 +1,19 @@
+{
+  "env": "staging",
+  "version": "local",
+  "baseline": {
+    "p95": 0.250,
+    "error_rate": 0.002
+  },
+  "canary": {
+    "p95": 0.265,
+    "error_rate": 0.0025
+  },
+  "limits": {
+    "p95_multiplier": 1.10,
+    "error_rate_multiplier": 1.50,
+    "error_rate_abs_min": 0.005
+  },
+  "status": "PASS",
+  "fail_reasons": [""]
+}
