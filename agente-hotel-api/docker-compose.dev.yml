@@ -22,7 +22,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     ports:
-      - "5432:5432"  # Expuesto para debugging con herramientas externas
+      - "5434:5432"  # Puerto alternativo para evitar conflictos (5432 ya en uso)
     networks:
       - dev_network
     volumes:
@@ -52,7 +52,7 @@ services:
       --save 60 1
       --loglevel notice
     ports:
-      - "6379:6379"  # Expuesto para debugging
+      - "6382:6379"  # Puerto alternativo para Redis (6379, 6380 ya en uso)
     networks:
       - dev_network
     volumes:
@@ -77,7 +77,7 @@ services:
   agente-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
       cache_from:
         - agente-hotel-api:latest
       args:
@@ -106,7 +106,7 @@ services:
       - /app/.venv  # Excluir venv del volumen
       - /app/__pycache__  # Excluir cache
     command: >
-      poetry run uvicorn app.main:app 
+      uvicorn app.main:app 
       --host 0.0.0.0 
       --port 8000 
       --reload 
