@@ -1,0 +1,280 @@
+# Docker Compose para Desarrollo Local - Optimizado
+# Version: 2.0
+# Autor: GitHub Copilot
+# Fecha: October 4, 2025
+#
+# USO:
+#   docker compose -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.dev.yml --profile test up
+#   docker compose -f docker-compose.dev.yml --profile minimal up
+
+services:
+  # ============================================================================
+  # SERVICIOS CORE - Siempre activos en desarrollo
+  # ============================================================================
+  
+  postgres:
+    image: postgres:14-alpine
+    container_name: agente_db_dev
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-agente_hotel}
+      - POSTGRES_USER=${POSTGRES_USER:-agente}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5432:5432"  # Expuesto para debugging con herramientas externas
+    networks:
+      - dev_network
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agente} -d ${POSTGRES_DB:-agente_hotel}"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: agente_redis_dev
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:-dev_redis_password}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel notice
+    ports:
+      - "6379:6379"  # Expuesto para debugging
+    networks:
+      - dev_network
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_redis_password}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # AGENTE API - Con hot-reload y debug enabled
+  # ============================================================================
+  
+  agente-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - agente-hotel-api:latest
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: agente_hotel_api_dev
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      - WATCHFILES_FORCE_POLLING=true  # Para hot-reload en algunos sistemas
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"  # FastAPI
+      - "5678:5678"  # Debug port (debugpy)
+    networks:
+      - dev_network
+    volumes:
+      - .:/app  # Hot-reload: cambios en código se reflejan inmediatamente
+      - /app/.venv  # Excluir venv del volumen
+      - /app/__pycache__  # Excluir cache
+    command: >
+      poetry run uvicorn app.main:app 
+      --host 0.0.0.0 
+      --port 8000 
+      --reload 
+      --reload-dir /app/app
+      --log-level debug
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # MONITORING STACK - Perfil "monitoring"
+  # ============================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agente_prometheus_dev
+    profiles: ["monitoring", "full"]
+    ports:
+      - "9090:9090"
+    networks:
+      - dev_network
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_dev_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"  # Solo 7 días en dev
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"  # Permite reload via API
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agente_grafana_dev
+    profiles: ["monitoring", "full"]
+    ports:
+      - "3000:3000"
+    networks:
+      - dev_network
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_dev_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ============================================================================
+  # MAILHOG - Email testing local (Perfil "mail")
+  # ============================================================================
+  
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: agente_mailhog_dev
+    profiles: ["mail", "full"]
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    networks:
+      - dev_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ============================================================================
+  # ADMINER - Database GUI (Perfil "db-admin")
+  # ============================================================================
+  
+  adminer:
+    image: adminer:latest
+    container_name: agente_adminer_dev
+    profiles: ["db-admin", "full"]
+    ports:
+      - "8080:8080"
+    networks:
+      - dev_network
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=pepa-linha
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ============================================================================
+  # REDIS COMMANDER - Redis GUI (Perfil "db-admin")
+  # ============================================================================
+  
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: agente_redis_commander_dev
+    profiles: ["db-admin", "full"]
+    ports:
+      - "8081:8081"
+    networks:
+      - dev_network
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:-dev_redis_password}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+
+networks:
+  dev_network:
+    name: agente_dev_network
+    driver: bridge
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+
+volumes:
+  postgres_dev_data:
+    name: agente_postgres_dev_data
+  redis_dev_data:
+    name: agente_redis_dev_data
+  prometheus_dev_data:
+    name: agente_prometheus_dev_data
+  grafana_dev_data:
+    name: agente_grafana_dev_data

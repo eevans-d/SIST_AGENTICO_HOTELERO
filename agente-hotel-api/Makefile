@@ -418,5 +418,131 @@ canary-diff: ## Ejecuta canary deploy local y genera .playbook/canary_diff_repor
 	@python3 scripts/validate_preflight.py || exit $$?
 	@echo "✅ Preflight completado"
 
+# ==============================================================================
+# Development Experience Commands
+# ==============================================================================
+
+dev-up: ## Levanta stack de desarrollo con hot-reload
+	@echo "🚀 Levantando entorno de desarrollo..."
+	docker compose -f docker-compose.dev.yml up -d
+	@echo "✅ Servicios levantados"
+	@echo "   API:     http://localhost:8000"
+	@echo "   Docs:    http://localhost:8000/docs"
+	@echo "   Logs:    make dev-logs"
+
+dev-down: ## Detiene stack de desarrollo
+	@echo "🛑 Deteniendo entorno de desarrollo..."
+	docker compose -f docker-compose.dev.yml down
+
+dev-logs: ## Muestra logs del entorno de desarrollo
+	docker compose -f docker-compose.dev.yml logs -f
+
+dev-restart: ## Reinicia el servicio de API en desarrollo
+	@echo "🔄 Reiniciando API..."
+	docker compose -f docker-compose.dev.yml restart agente-api
+
+dev-shell: ## Abre shell en el contenedor de desarrollo
+	docker compose -f docker-compose.dev.yml exec agente-api /bin/bash
+
+dev-db-admin: ## Levanta herramientas de admin de BD (Adminer + Redis Commander)
+	@echo "🗄️  Levantando herramientas de admin..."
+	docker compose -f docker-compose.dev.yml --profile db-admin up -d
+	@echo "✅ Admin tools levantadas"
+	@echo "   Adminer (PostgreSQL): http://localhost:8080"
+	@echo "   Redis Commander:      http://localhost:8081"
+
+dev-monitoring: ## Levanta stack de monitoring (Prometheus + Grafana)
+	@echo "📊 Levantando monitoring stack..."
+	docker compose -f docker-compose.dev.yml --profile monitoring up -d
+	@echo "✅ Monitoring levantado"
+	@echo "   Prometheus: http://localhost:9090"
+	@echo "   Grafana:    http://localhost:3000 (admin/admin)"
+
+dev-full: ## Levanta stack completo (dev + monitoring + admin)
+	@echo "🚀 Levantando stack completo de desarrollo..."
+	docker compose -f docker-compose.dev.yml --profile full up -d
+	@echo "✅ Stack completo levantado"
+	@make dev-status
+
+dev-status: ## Muestra el estado de los servicios de desarrollo
+	@echo "📋 Estado de servicios:"
+	@docker compose -f docker-compose.dev.yml ps
+
+dev-clean: ## Limpia volumes y cache de desarrollo
+	@echo "🧹 Limpiando datos de desarrollo..."
+	docker compose -f docker-compose.dev.yml down -v
+	@echo "✅ Limpieza completada"
+
+test-cov: ## Ejecutar tests con coverage report
+	@echo "🧪 Ejecutando tests con coverage..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest --cov=app --cov-report=html --cov-report=term-missing
+else
+	pytest --cov=app --cov-report=html --cov-report=term-missing
+endif
+	@echo "📊 Coverage report: htmlcov/index.html"
+
+test-watch: ## Ejecutar tests en modo watch (auto-reload)
+	@echo "👀 Ejecutando tests en modo watch..."
+ifeq ($(HAS_POETRY),1)
+	poetry run ptw -- -v
+else
+	ptw -- -v
+endif
+
+test-unit: ## Ejecutar solo tests unitarios
+	@echo "🧪 Ejecutando tests unitarios..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/unit -v
+else
+	pytest tests/unit -v
+endif
+
+test-integration: ## Ejecutar solo tests de integración
+	@echo "🔗 Ejecutando tests de integración..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/integration -v
+else
+	pytest tests/integration -v
+endif
+
+test-e2e: ## Ejecutar tests end-to-end
+	@echo "🌐 Ejecutando tests E2E..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/e2e -v
+else
+	pytest tests/e2e -v
+endif
+
+test-debug: ## Ejecutar tests con debugging habilitado
+	@echo "🐛 Ejecutando tests en modo debug..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest -vv -s --pdb
+else
+	pytest -vv -s --pdb
+endif
+
+benchmark: ## Ejecutar benchmarks de performance
+	@echo "⚡ Ejecutando benchmarks..."
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/ --benchmark-only --benchmark-autosave
+else
+	pytest tests/ --benchmark-only --benchmark-autosave
+endif
+
+quick-check: ## Validación rápida (lint + test unit + security-fast)
+	@echo "⚡ Quick check..."
+	@make lint
+	@make test-unit
+	@make security-fast
+	@echo "✅ Quick check completado"
+
+full-check: ## Validación completa (lint + test + coverage + security)
+	@echo "🔍 Full check..."
+	@make lint
+	@make test-cov
+	@make security-fast
+	@echo "✅ Full check completado"
+
 
 .DEFAULT_GOAL := help
