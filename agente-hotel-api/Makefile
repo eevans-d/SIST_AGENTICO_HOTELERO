@@ -544,5 +544,77 @@ full-check: ## Validación completa (lint + test + coverage + security)
 	@make security-fast
 	@echo "✅ Full check completado"
 
+##@ Advanced Tools (Phase B)
+
+.PHONY: pre-commit-install pre-commit-run pre-commit-update security-scan type-check ci-local benchmark-baseline benchmark-compare
+
+pre-commit-install: ## Instalar pre-commit hooks
+	@echo "🪝 Instalando pre-commit hooks..."
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run pre-commit install; \
+	else \
+		pre-commit install; \
+	fi
+	@echo "✅ Pre-commit hooks instalados"
+
+pre-commit-run: ## Ejecutar pre-commit en todos los archivos
+	@echo "🔍 Ejecutando pre-commit en todos los archivos..."
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run pre-commit run --all-files; \
+	else \
+		pre-commit run --all-files; \
+	fi
+
+pre-commit-update: ## Actualizar versiones de pre-commit hooks
+	@echo "⬆️ Actualizando pre-commit hooks..."
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run pre-commit autoupdate; \
+	else \
+		pre-commit autoupdate; \
+	fi
+	@echo "✅ Pre-commit hooks actualizados"
+
+security-scan: ## Ejecutar Bandit (security scan) en el código
+	@echo "🔒 Ejecutando análisis de seguridad con Bandit..."
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run bandit -c pyproject.toml -r app/; \
+	else \
+		bandit -c pyproject.toml -r app/; \
+	fi
+
+type-check: ## Ejecutar MyPy (type checking) en el código
+	@echo "🔎 Ejecutando type checking con MyPy..."
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run mypy app/ --config-file=pyproject.toml; \
+	else \
+		mypy app/ --config-file=pyproject.toml; \
+	fi
+
+ci-local: ## Ejecutar pipeline CI completo (requiere Docker running)
+	@echo "🚀 Ejecutando CI local pipeline..."
+	@if [ ! -f scripts/ci-local.sh ]; then \
+		echo "❌ Error: scripts/ci-local.sh no encontrado"; \
+		exit 1; \
+	fi
+	@bash scripts/ci-local.sh
+
+benchmark-baseline: ## Crear baseline de benchmarks
+	@echo "📊 Creando baseline de benchmarks..."
+	@mkdir -p .benchmarks
+	@if command -v poetry >/dev/null 2>&1; then \
+		poetry run pytest tests/benchmarks/ --benchmark-only --benchmark-json=.benchmarks/baseline.json; \
+	else \
+		pytest tests/benchmarks/ --benchmark-only --benchmark-json=.benchmarks/baseline.json; \
+	fi
+	@echo "✅ Baseline creado en .benchmarks/baseline.json"
+
+benchmark-compare: ## Comparar benchmarks actuales con baseline
+	@echo "📈 Comparando benchmarks..."
+	@if [ ! -f scripts/benchmark-compare.sh ]; then \
+		echo "❌ Error: scripts/benchmark-compare.sh no encontrado"; \
+		exit 1; \
+	fi
+	@bash scripts/benchmark-compare.sh
+
 
 .DEFAULT_GOAL := help
