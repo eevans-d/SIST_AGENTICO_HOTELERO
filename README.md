@@ -2,7 +2,9 @@
 
 ![CI](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/ci.yml/badge.svg)
 [![Tests](https://img.shields.io/badge/tests-46%2F46%20passing-success)](agente-hotel-api/tests/)
+[![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen)](VALIDATION_REPORT_FASE_A.md)
 [![Phase](https://img.shields.io/badge/phase-5%20complete-blue)](EXECUTIVE_SUMMARY.md)
+[![Dev](https://img.shields.io/badge/dev-Phase%20A%20complete-success)](SESSION_SUMMARY_2025-10-04.md)
 [![Status](https://img.shields.io/badge/status-deployment%20ready-green)](STATUS_DEPLOYMENT.md)
 
 **Multi-service AI hotel receptionist** built with FastAPI, handling guest communications via WhatsApp, Gmail, and other channels. Integrates with QloApps PMS for reservation management using Docker Compose orchestration.
@@ -11,11 +13,11 @@
 
 ## 🎯 Quick Links
 
-| 📚 Documentation | 🚀 Deployment | 🤖 AI Guides |
-|------------------|---------------|--------------|
-| [📖 Documentation Index](DOCUMENTATION_INDEX.md) | [🚀 Deployment Plan](DEPLOYMENT_ACTION_PLAN.md) | [🤖 AI Instructions](.github/copilot-instructions.md) |
-| [🏗️ Infrastructure Guide](agente-hotel-api/README-Infra.md) | [✅ Deployment Status](STATUS_DEPLOYMENT.md) | [💡 Copilot Prompts](docs/) |
-| [📊 Executive Summary](EXECUTIVE_SUMMARY.md) | [✅ Merge Complete](MERGE_COMPLETED.md) | [🔧 Contributing](agente-hotel-api/CONTRIBUTING.md) |
+| 📚 Documentation | 🚀 Deployment | 🤖 AI Guides | 🛠️ Development |
+|------------------|---------------|--------------|----------------|
+| [📖 Documentation Index](DOCUMENTATION_INDEX.md) | [🚀 Deployment Plan](DEPLOYMENT_ACTION_PLAN.md) | [🤖 AI Instructions](.github/copilot-instructions.md) | [🧪 Phase A Report](VALIDATION_REPORT_FASE_A.md) |
+| [🏗️ Infrastructure Guide](agente-hotel-api/README-Infra.md) | [✅ Deployment Status](STATUS_DEPLOYMENT.md) | [💡 Copilot Prompts](docs/) | [📋 Session Summary](SESSION_SUMMARY_2025-10-04.md) |
+| [📊 Executive Summary](EXECUTIVE_SUMMARY.md) | [✅ Merge Complete](MERGE_COMPLETED.md) | [🔧 Contributing](agente-hotel-api/CONTRIBUTING.md) | [🗓️ Execution Plan](PLAN_EJECUCION_INMEDIATA.md) |
 
 ---
 
@@ -89,7 +91,50 @@ make logs          # View logs
 
 ---
 
-## 📊 System Architecture
+## �️ Development Environment
+
+### Development Setup (Docker-based)
+
+**New!** Complete development environment with hot-reload and testing tools:
+
+```bash
+cd agente-hotel-api
+docker compose -f docker-compose.dev.yml up -d
+```
+
+**Services:**
+- PostgreSQL (port 5434)
+- Redis (port 6382)  
+- Agente API (port 8000) with hot-reload
+
+**Features:**
+- ✅ 46/46 tests passing in 2.63s
+- ✅ 73% code coverage
+- ✅ Hot-reload (<2s)
+- ✅ All dev dependencies included (pytest-cov, pytest-benchmark, pytest-watch)
+
+**Quick Commands:**
+```bash
+# Run tests
+docker compose -f docker-compose.dev.yml exec -T agente-api \
+  python -m pytest tests/ -v
+
+# Run tests with coverage
+docker compose -f docker-compose.dev.yml exec -T agente-api \
+  python -m pytest tests/ --cov=app --cov-report=term-missing
+
+# Shell access
+docker compose -f docker-compose.dev.yml exec agente-api /bin/bash
+```
+
+**Documentation:**
+- [Phase A Validation Report](VALIDATION_REPORT_FASE_A.md) - Complete testing results
+- [Session Summary](SESSION_SUMMARY_2025-10-04.md) - Development status
+- [Execution Plan](PLAN_EJECUCION_INMEDIATA.md) - Detailed roadmap
+
+---
+
+## �📊 System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
