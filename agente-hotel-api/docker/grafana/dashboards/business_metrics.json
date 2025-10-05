@@ -1,0 +1,389 @@
+{
+  "dashboard": {
+    "title": "Hotel Operations - Business Metrics",
+    "tags": ["hotel", "business", "operations"],
+    "timezone": "Europe/Madrid",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Reservas Confirmadas (24h)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(increase(hotel_reservations_total{status=\"confirmed\"}[24h]))",
+            "legendFormat": "Confirmadas"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "green"}
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Revenue Diario",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "hotel_daily_revenue_euros",
+            "legendFormat": "Revenue"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 5000, "color": "yellow"},
+                {"value": 10000, "color": "green"}
+              ]
+            },
+            "unit": "currencyEUR"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Ocupación Actual",
+        "type": "gauge",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "hotel_occupancy_rate",
+            "legendFormat": "Ocupación"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 75, "color": "green"}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "RevPAR",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "hotel_revpar_euros",
+            "legendFormat": "RevPAR"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyEUR"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Reservas por Estado (24h)",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 4, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (status) (increase(hotel_reservations_total[24h]))",
+            "legendFormat": "{{ status }}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Revenue por Tipo de Habitación (7d)",
+        "type": "timeseries",
+        "gridPos": {"x": 8, "y": 4, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (room_type) (increase(hotel_reservation_value_euros_sum{status=\"confirmed\"}[1d]))",
+            "legendFormat": "{{ room_type }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyEUR"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Habitaciones Disponibles",
+        "type": "bargauge",
+        "gridPos": {"x": 16, "y": 4, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "hotel_available_rooms",
+            "legendFormat": "{{ room_type }}"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Tasa de Fallos en Reservas",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(hotel_failed_reservations_total[5m]) / rate(hotel_reservations_total[5m])",
+            "legendFormat": "Tasa de Fallos"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.10, "color": "yellow"},
+                {"value": 0.15, "color": "red"}
+              ]
+            }
+          }
+        },
+        "alert": {
+          "name": "High Reservation Failure Rate",
+          "conditions": [
+            {
+              "evaluator": {"params": [0.15], "type": "gt"},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "title": "Satisfacción del Huésped (Promedio Móvil 1h)",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(hotel_guest_satisfaction_score_sum[1h]) / rate(hotel_guest_satisfaction_score_count[1h])",
+            "legendFormat": "Satisfacción"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 1,
+            "max": 5,
+            "thresholds": {
+              "steps": [
+                {"value": 1, "color": "red"},
+                {"value": 3, "color": "yellow"},
+                {"value": 4, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Duración de Conversaciones (Percentiles)",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(hotel_conversation_duration_seconds_bucket[10m]))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(hotel_conversation_duration_seconds_bucket[10m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(hotel_conversation_duration_seconds_bucket[10m]))",
+            "legendFormat": "P99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Mensajes por Canal (24h)",
+        "type": "bargauge",
+        "gridPos": {"x": 12, "y": 20, "w": 6, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (channel) (increase(hotel_messages_by_channel_total[24h]))",
+            "legendFormat": "{{ channel }}"
+          }
+        ],
+        "options": {
+          "orientation": "vertical",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 12,
+        "title": "Intents Más Frecuentes (24h)",
+        "type": "bargauge",
+        "gridPos": {"x": 18, "y": 20, "w": 6, "h": 8},
+        "targets": [
+          {
+            "expr": "topk(5, sum by (intent) (increase(hotel_intents_detected_total[24h])))",
+            "legendFormat": "{{ intent }}"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "lcd"
+        }
+      },
+      {
+        "id": 13,
+        "title": "Lead Time Promedio (días)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 28, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(hotel_reservation_lead_time_days_sum[24h]) / rate(hotel_reservation_lead_time_days_count[24h])",
+            "legendFormat": "Lead Time Avg"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "d"
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Noches Promedio por Reserva",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 28, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(hotel_reservation_nights_sum[24h]) / rate(hotel_reservation_nights_count[24h])",
+            "legendFormat": "Noches Avg"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 1
+          }
+        }
+      },
+      {
+        "id": 15,
+        "title": "Tasa de Cancelaciones",
+        "type": "gauge",
+        "gridPos": {"x": 12, "y": 28, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(hotel_cancellations_total[24h]) / rate(hotel_reservations_total{status=\"confirmed\"}[24h])",
+            "legendFormat": "Cancelaciones"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "unit": "percentunit",
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.10, "color": "yellow"},
+                {"value": 0.20, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "Fallbacks del NLP (%)",
+        "type": "gauge",
+        "gridPos": {"x": 18, "y": 28, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(hotel_nlp_fallbacks_total[10m]) / rate(hotel_messages_by_channel_total[10m])",
+            "legendFormat": "NLP Fallback Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "unit": "percentunit",
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.15, "color": "yellow"},
+                {"value": 0.25, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 17,
+        "title": "Conversaciones Activas",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "hotel_active_conversations",
+            "legendFormat": "Activas"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Conversaciones"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "ADR Trend (7 días)",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "hotel_adr_euros",
+            "legendFormat": "ADR"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyEUR"
+          }
+        }
+      }
+    ]
+  }
+}

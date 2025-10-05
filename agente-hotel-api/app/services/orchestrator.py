@@ -11,6 +11,11 @@ from .template_service import TemplateService
 from ..models.unified_message import UnifiedMessage
 from .feature_flag_service import get_feature_flag_service
 from .metrics_service import metrics_service
+from .business_metrics import (
+    intents_detected,
+    nlp_fallbacks,
+    messages_by_channel
+)
 
 
 class Orchestrator:
@@ -28,6 +33,10 @@ class Orchestrator:
         intent_name = "unknown"
         status = "ok"
         tenant_id = getattr(message, "tenant_id", None)
+        
+        # Métrica de negocio: contar mensaje por canal
+        messages_by_channel.labels(channel=message.canal).inc()
+        
         if message.tipo == "audio":
             if not message.media_url:
                 raise ValueError("Missing media_url for audio message")
@@ -39,10 +48,15 @@ class Orchestrator:
             text = message.texto or ""
             nlp_result = await self.nlp_engine.process_message(text)
             intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
-            session = await self.session_manager.get_or_create_session(message.user_id, message.canal, tenant_id)
-            # Fallback dinámico según confianza + feature flag
+            
+            # Métrica de negocio: registrar intent detectado
             intent_obj = nlp_result.get("intent", {})
             confidence = intent_obj.get("confidence", 0.0)
+            confidence_level = "high" if confidence >= 0.75 else "medium" if confidence >= 0.45 else "low"
+            intents_detected.labels(intent=intent_name, confidence_level=confidence_level).inc()
+            
+            session = await self.session_manager.get_or_create_session(message.user_id, message.canal, tenant_id)
+            # Fallback dinámico según confianza + feature flag
             ff_service = await get_feature_flag_service()
             enhanced_fallback = await ff_service.is_enabled("nlp.fallback.enhanced", default=True)
             # Registrar categoría de confianza
@@ -50,6 +64,7 @@ class Orchestrator:
             if enhanced_fallback and confidence < 0.45:
                 # Respuesta de bajo nivel de confianza agresiva
                 metrics_service.record_nlp_fallback("very_low_confidence")
+                nlp_fallbacks.inc()  # Métrica de negocio: fallback detectado
                 return {
                     "response": "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: disponibilidad, precios, información del hotel?"
                 }

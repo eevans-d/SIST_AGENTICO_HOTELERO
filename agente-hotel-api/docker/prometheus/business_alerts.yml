@@ -1,0 +1,226 @@
+groups:
+  - name: business_critical
+    interval: 1m
+    rules:
+      # ================================================================
+      # ALERTAS CRÍTICAS DE RESERVAS
+      # ================================================================
+      
+      - alert: HighReservationFailureRate
+        expr: |
+          (
+            rate(hotel_failed_reservations_total[5m])
+            /
+            rate(hotel_reservations_total[5m])
+          ) > 0.15
+        for: 5m
+        labels:
+          severity: critical
+          team: operations
+          category: reservations
+        annotations:
+          summary: "Tasa alta de fallos en reservas ({{ $value | humanizePercentage }})"
+          description: "Más del 15% de las reservas están fallando en los últimos 5 minutos. Verificar integración con PMS y pasarelas de pago."
+          dashboard: "https://grafana.example.com/d/reservations"
+          runbook: "https://wiki.example.com/runbooks/reservation-failures"
+      
+      - alert: NoReservationsLast30Minutes
+        expr: |
+          increase(hotel_reservations_total{status="confirmed"}[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          team: operations
+          category: reservations
+        annotations:
+          summary: "No se han registrado reservas confirmadas en 30 minutos"
+          description: "Puede indicar un problema en el flujo de reservas o baja demanda fuera de lo común."
+          
+      # ================================================================
+      # ALERTAS DE CONVERSACIÓN Y NLP
+      # ================================================================
+      
+      - alert: HighNLPFallbackRate
+        expr: |
+          (
+            rate(hotel_nlp_fallbacks_total[10m])
+            /
+            rate(hotel_messages_by_channel_total[10m])
+          ) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          team: ai
+          category: nlp
+        annotations:
+          summary: "Tasa alta de fallbacks del NLP ({{ $value | humanizePercentage }})"
+          description: "El NLP no puede determinar el intent en más del 25% de los mensajes. Revisar entrenamiento del modelo."
+          
+      - alert: LongConversationDuration
+        expr: |
+          histogram_quantile(0.95, rate(hotel_conversation_duration_seconds_bucket[15m])) > 600
+        for: 10m
+        labels:
+          severity: warning
+          team: operations
+          category: conversation
+        annotations:
+          summary: "Conversaciones muy largas (P95 > 10 minutos)"
+          description: "Las conversaciones están tomando demasiado tiempo. Puede indicar flujos ineficientes o problemas de comprensión."
+          
+      # ================================================================
+      # ALERTAS DE SATISFACCIÓN DEL HUÉSPED
+      # ================================================================
+      
+      - alert: LowGuestSatisfaction
+        expr: |
+          histogram_quantile(0.5, rate(hotel_guest_satisfaction_score_bucket[1h])) < 3.5
+        for: 30m
+        labels:
+          severity: warning
+          team: operations
+          category: satisfaction
+        annotations:
+          summary: "Satisfacción del huésped baja (mediana < 3.5/5)"
+          description: "La satisfacción de los huéspedes está por debajo del umbral aceptable. Revisar interacciones recientes."
+          
+      - alert: NegativeNPS
+        expr: |
+          histogram_quantile(0.5, rate(hotel_guest_nps_score_bucket[6h])) < 0
+        for: 1h
+        labels:
+          severity: critical
+          team: management
+          category: satisfaction
+        annotations:
+          summary: "NPS negativo detectado"
+          description: "El Net Promoter Score es negativo, indicando más detractores que promotores. Acción inmediata requerida."
+          
+      # ================================================================
+      # ALERTAS OPERACIONALES
+      # ================================================================
+      
+      - alert: CriticalLowOccupancy
+        expr: hotel_occupancy_rate < 30
+        for: 1h
+        labels:
+          severity: warning
+          team: revenue
+          category: occupancy
+        annotations:
+          summary: "Ocupación crítica baja ({{ $value }}%)"
+          description: "La ocupación del hotel está por debajo del 30%. Considerar estrategias de pricing dinámico."
+          
+      - alert: LowAvailableRooms
+        expr: sum(hotel_available_rooms) < 5
+        for: 30m
+        labels:
+          severity: info
+          team: operations
+          category: inventory
+        annotations:
+          summary: "Pocas habitaciones disponibles ({{ $value }})"
+          description: "Menos de 5 habitaciones disponibles. Preparar para posible ocupación completa."
+          
+      - alert: RevPARDecline
+        expr: |
+          (
+            hotel_revpar_euros
+            /
+            hotel_revpar_euros offset 24h
+          ) < 0.85
+        for: 2h
+        labels:
+          severity: warning
+          team: revenue
+          category: performance
+        annotations:
+          summary: "RevPAR ha caído más del 15% vs mismo día semana pasada"
+          description: "Revenue Per Available Room está significativamente bajo. Revisar estrategia de precios y ocupación."
+          
+      # ================================================================
+      # ALERTAS DE CANALES
+      # ================================================================
+      
+      - alert: ChannelResponseTimeSlow
+        expr: |
+          histogram_quantile(0.95, rate(hotel_response_time_by_channel_seconds_bucket[10m])) > 30
+        for: 15m
+        labels:
+          severity: warning
+          team: operations
+          category: performance
+        annotations:
+          summary: "Tiempo de respuesta lento en canal {{ $labels.channel }}"
+          description: "P95 del tiempo de respuesta supera los 30 segundos. Los huéspedes están esperando demasiado."
+          
+      - alert: NoMessagesFromChannel
+        expr: |
+          increase(hotel_messages_by_channel_total[1h]) == 0
+        for: 1h
+        labels:
+          severity: info
+          team: operations
+          category: channels
+        annotations:
+          summary: "Sin mensajes en canal {{ $labels.channel }} por 1 hora"
+          description: "Puede indicar un problema en la integración del canal o ausencia de tráfico inusual."
+          
+      # ================================================================
+      # ALERTAS DE CANCELACIONES
+      # ================================================================
+      
+      - alert: HighCancellationRate
+        expr: |
+          (
+            rate(hotel_cancellations_total[2h])
+            /
+            rate(hotel_reservations_total{status="confirmed"}[2h])
+          ) > 0.20
+        for: 1h
+        labels:
+          severity: warning
+          team: operations
+          category: cancellations
+        annotations:
+          summary: "Tasa de cancelaciones alta ({{ $value | humanizePercentage }})"
+          description: "Más del 20% de las reservas confirmadas están siendo canceladas. Investigar causas."
+
+  - name: business_info
+    interval: 5m
+    rules:
+      # ================================================================
+      # ALERTAS INFORMATIVAS
+      # ================================================================
+      
+      - alert: HighValueReservation
+        expr: |
+          hotel_reservation_value_euros > 2000
+        labels:
+          severity: info
+          team: management
+          category: revenue
+        annotations:
+          summary: "Reserva de alto valor registrada (€{{ $value }})"
+          description: "Se ha registrado una reserva de alto valor. Considerar atención VIP."
+          
+      - alert: FullOccupancy
+        expr: hotel_occupancy_rate >= 95
+        labels:
+          severity: info
+          team: operations
+          category: occupancy
+        annotations:
+          summary: "Hotel cerca de ocupación completa ({{ $value }}%)"
+          description: "El hotel está prácticamente lleno. Preparar servicios adicionales y optimizar operaciones."
+          
+      - alert: LongLeadTimeReservation
+        expr: |
+          hotel_reservation_lead_time_days > 90
+        labels:
+          severity: info
+          team: revenue
+          category: reservations
+        annotations:
+          summary: "Reserva con lead time muy largo ({{ $value }} días)"
+          description: "Reserva anticipada detectada. Oportunidad para up-selling y personalización."

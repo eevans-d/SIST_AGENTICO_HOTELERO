@@ -546,7 +546,7 @@ full-check: ## Validación completa (lint + test + coverage + security)
 
 ##@ Advanced Tools (Phase B)
 
-.PHONY: pre-commit-install pre-commit-run pre-commit-update security-scan type-check ci-local benchmark-baseline benchmark-compare
+.PHONY: pre-commit-install pre-commit-run pre-commit-update security-scan type-check ci-local benchmark-baseline benchmark-compare update-operational-metrics
 
 pre-commit-install: ## Instalar pre-commit hooks
 	@echo "🪝 Instalando pre-commit hooks..."
@@ -615,6 +615,14 @@ benchmark-compare: ## Comparar benchmarks actuales con baseline
 		exit 1; \
 	fi
 	@bash scripts/benchmark-compare.sh
+
+update-operational-metrics: ## Actualizar métricas operacionales del hotel (occupancy, ADR, RevPAR)
+	@echo "🏨 Actualizando métricas operacionales..."
+	@if [ ! -f scripts/update_operational_metrics.py ]; then \
+		echo "❌ Error: scripts/update_operational_metrics.py no encontrado"; \
+		exit 1; \
+	fi
+	@poetry run python scripts/update_operational_metrics.py
 
 
 .DEFAULT_GOAL := help
