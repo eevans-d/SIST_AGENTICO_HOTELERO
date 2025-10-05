@@ -59,20 +59,50 @@ async def verify_whatsapp_webhook(
 @router.post("/whatsapp", dependencies=[Depends(verify_webhook_signature)])
 @limit("120/minute")
 async def handle_whatsapp_webhook(request: Request):
+    """
+    WhatsApp Business API webhook handler.
+    
+    Processes incoming messages from WhatsApp Cloud API v18.0:
+    - Text messages
+    - Audio messages (for STT processing)
+    - Media messages (images, videos, documents)
+    - Button replies
+    - Template status updates
+    
+    Security:
+    - Signature verification (HMAC-SHA256)
+    - Rate limiting (120 req/min)
+    - Payload size limit (1MB)
+    
+    Flow:
+    1. Validate content-type and payload size
+    2. Parse JSON payload
+    3. Normalize to UnifiedMessage
+    4. Process via Orchestrator
+    5. Return response
+    """
     # Validaciones básicas de cabeceras/payload
     ctype = request.headers.get("content-type", "").lower()
     if ctype and "application/json" not in ctype:
+        logger.warning("whatsapp.webhook.unsupported_media_type", content_type=ctype)
         raise HTTPException(status_code=415, detail="Unsupported Media Type")
 
     # Limitar tamaño de payload a 1MB (ya manejado por middleware, pero doble check)
     body_bytes = await request.body()
     if len(body_bytes) > 1_000_000:
+        logger.warning("whatsapp.webhook.payload_too_large", size=len(body_bytes))
         raise HTTPException(status_code=413, detail="Payload too large")
 
     # Procesa el webhook: normaliza el payload, invoca Orchestrator y devuelve respuesta.
     try:
         payload = json.loads(body_bytes.decode() or "{}")
-    except Exception:
+        logger.info(
+            "whatsapp.webhook.received",
+            payload_keys=list(payload.keys()),
+            entry_count=len(payload.get("entry", []))
+        )
+    except Exception as e:
+        logger.error("whatsapp.webhook.invalid_json", error=str(e))
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     # Fallback Redis en memoria para pruebas/local si no hay servidor
