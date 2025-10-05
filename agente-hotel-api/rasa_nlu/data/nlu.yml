@@ -1,8 +1,12 @@
-# [PROMPT 2.5] rasa_nlu/data/nlu.yml
+# [PROMPT 2.5 + E.3] rasa_nlu/data/nlu.yml
+# Rasa NLU Training Data - Spanish Hotel Chatbot
+# 15+ intents, 250+ examples, 5+ entity types
 
 version: "3.1"
 
 nlu:
+  # ==================== AVAILABILITY & BOOKING ====================
+  
   - intent: check_availability
     examples: |
       - ¿Hay disponibilidad para el 15 de diciembre?
@@ -20,6 +24,38 @@ nlu:
       - hay algo para el 25 de diciembre?
       - tienen disponibilidad para año nuevo?
       - para el dia de los enamorados, tenes algo?
+      - consulta de disponibilidad
+      - quisiera saber si tienen lugar
+      - tienen habitaciones disponibles?
+      - para cuatro personas del 10 al 12
+      - necesito una habitacion para el mes que viene
+      - hay espacio para 5 adultos?
+      - busco alojamiento para semana santa
+      - para navidad tienen algo?
+      - tienen lugar del viernes al domingo?
+      - disponibilidad para el feriado largo
+      - cupo para 2 adultos y 1 niño
+      - hay vacantes para junio?
+      - consulto por el 20 de julio
+      - para el verano tienen disponibilidad?
+      - del 15 al 20 de agosto, hay?
+      - necesito habitacion para conferencia
+      - del lunes al miercoles proximos
+      - para la primera quincena de septiembre
+      - hay lugar para luna de miel?
+      - busco para aniversario
+      - disponibilidad fin de año
+      - tienen para carnaval?
+      - para el dia del padre hay lugar?
+      - consulto fechas flexibles
+      - del 5 al 10, o sino del 12 al 17
+      - hay habitaciones libres hoy?
+      - para esta noche tienen?
+      - last minute para mañana
+      - necesito urgente para hoy
+      - check in esta tarde
+      - hay para llegada nocturna?
+      - reserva de ultimo momento
 
   - intent: make_reservation
     examples: |
@@ -38,3 +74,352 @@ nlu:
       - me interesa, quiero avanzar
       - reservamela
       - dale, la quiero
+      - quiero hacer una reserva
+      - necesito reservar una habitacion
+      - me gustaria confirmar la reserva
+      - procedo con la reserva
+      - adelante con la reserva
+      - vamos con la reserva
+      - si, reservo
+      - confirmo
+      - hago la reserva
+      - quiero asegurar la habitacion
+      - me la quedo
+      - la tomo
+      - perfecto, reservo
+      - dale, confirmo
+      - sigo con el proceso
+      - como reservo?
+      - pasos para reservar
+      - que necesitan para reservar?
+      - quiero dejar seña
+      - puedo reservar con tarjeta?
+      - acepta transferencia?
+      - como se confirma la reserva?
+      - necesito factura
+      - reserva a nombre de empresa
+      - booking para grupo
+      - varias habitaciones por favor
+      - quiero 3 habitaciones
+      - reserva conjunta
+      - para toda la familia
+      - bloquear fechas
+      - me interesa, reservo
+      - dale para adelante
+      - si, estoy de acuerdo
+      - acepto las condiciones
+      - proceder con pago
+
+  # ==================== MODIFICATIONS & CANCELLATIONS ====================
+  
+  - intent: cancel_reservation
+    examples: |
+      - quiero cancelar mi reserva
+      - necesito anular la reserva
+      - cancelar booking
+      - tengo que cancelar
+      - no voy a poder ir, cancelo
+      - quisiera dar de baja la reserva
+      - eliminar reserva
+      - anular mi reserva del 15
+      - cancelacion de reserva
+      - me gustaria cancelar
+      - surgió un imprevisto, cancelo
+      - tengo que anular
+      - no puedo viajar, cancelo la reserva
+      - dar de baja mi booking
+      - eliminar mi reserva
+      - reembolso de reserva
+      - devolucion de seña
+      - politica de cancelacion
+      - hasta cuando puedo cancelar?
+      - hay penalidad por cancelar?
+      - cuanto me devuelven si cancelo?
+      - cancelacion sin cargo
+      - free cancellation
+      - quiero mi dinero de vuelta
+      - anulacion de reserva
+      - baja de reserva
+      - no me sirve mas la reserva
+      - cambio de planes, cancelo
+      - ya no viajo
+
+  - intent: modify_reservation
+    examples: |
+      - quiero modificar mi reserva
+      - necesito cambiar las fechas
+      - puedo cambiar la reserva?
+      - modificar booking
+      - cambiar fechas de reserva
+      - extender estadía
+      - acortar la reserva
+      - llegar un dia antes
+      - salir un dia después
+      - agregar una noche más
+      - quitar una noche
+      - cambiar tipo de habitacion
+      - upgrade a suite
+      - cambiar a habitacion mas grande
+      - modificar cantidad de huespedes
+      - agregar una persona
+      - son 3 en vez de 2
+      - cambio de 2 a 4 personas
+      - modificar nombre de titular
+      - cambiar datos de reserva
+      - actualizar informacion
+      - corregir datos
+      - cambiar medio de pago
+      - modificar forma de pago
+      - alterar reserva
+      - ajustar reserva
+      - hacer cambios en la reserva
+      - necesito modificar algo
+
+  # ==================== PRICING & ROOM TYPES ====================
+  
+  - intent: ask_price
+    examples: |
+      - cuanto cuesta la habitacion?
+      - cual es el precio?
+      - tarifa por noche
+      - cuanto sale?
+      - precio de la doble
+      - cuanto me cobrarian?
+      - que precio tienen?
+      - valor de la habitacion
+      - cuanto es por persona?
+      - costo por noche
+      - tarifas del hotel
+      - lista de precios
+      - cuanto cuesta para 2 personas?
+      - precio fin de semana
+      - tarifa por semana
+      - descuento por estadía larga?
+      - precio con desayuno incluido?
+      - solo alojamiento cuanto es?
+      - pension completa precio
+      - media pension costo
+      - all inclusive precio
+      - cuanto sale el upgrade?
+      - diferencia de precio entre habitaciones
+      - precios temporada alta
+      - tarifas temporada baja
+      - promociones vigentes
+      - hay descuentos?
+      - precio final con impuestos?
+
+  - intent: ask_room_types
+    examples: |
+      - que tipos de habitaciones tienen?
+      - habitaciones disponibles
+      - categorías de rooms
+      - que opciones hay?
+      - diferencia entre habitaciones
+      - descripcion de las rooms
+      - que incluye cada habitacion?
+      - habitacion standard como es?
+      - la suite tiene que?
+      - habitacion doble o twin?
+      - matrimonial o dos camas?
+      - king size o queen?
+      - habitacion familiar
+      - cuantas personas entran?
+      - capacidad de la habitacion
+      - metraje de las habitaciones
+      - amenities de cada room
+      - habitacion con vista?
+      - balcon o terraza?
+      - habitaciones comunicadas
+      - habitacion ejecutiva
+      - junior suite
+      - master suite
+      - penthouse
+      - habitacion accesible
+      - para personas con discapacidad
+
+  # ==================== AMENITIES & SERVICES ====================
+  
+  - intent: ask_amenities
+    examples: |
+      - que servicios tienen?
+      - amenities del hotel
+      - tiene piscina?
+      - hay gimnasio?
+      - wifi gratis?
+      - desayuno incluido?
+      - hay estacionamiento?
+      - parking disponible?
+      - spa en el hotel?
+      - restaurante?
+      - room service?
+      - servicio a la habitacion
+      - lavanderia?
+      - aire acondicionado?
+      - calefaccion?
+      - tv cable?
+      - netflix en la tele?
+      - minibar?
+      - caja fuerte?
+      - secador de pelo?
+      - plancha?
+      - facilidades del hotel
+      - que incluye la habitacion?
+      - comodidades
+      - servicios adicionales
+      - bar en el hotel?
+      - terraza?
+      - salon de eventos?
+      - business center?
+      - sala de reuniones?
+
+  - intent: ask_location
+    examples: |
+      - donde estan ubicados?
+      - direccion del hotel
+      - como llego?
+      - cerca de que esta?
+      - ubicacion
+      - en que zona queda?
+      - barrio del hotel
+      - distancia al centro?
+      - cerca del aeropuerto?
+      - como llegar desde terminal?
+      - hay transporte publico cerca?
+      - parada de colectivo
+      - estacion de subte proxima
+      - taxi del aeropuerto cuanto sale?
+      - transfer incluido?
+      - tienen servicio de traslados?
+      - cerca de la playa?
+      - distancia a lugares turisticos
+      - que hay cerca?
+      - restaurantes cerca?
+      - supermercado cerca?
+      - farmacia proxima?
+      - cajero automatico cerca?
+
+  - intent: ask_policies
+    examples: |
+      - cual es la politica de check in?
+      - horario de check out
+      - hasta que hora puedo hacer check in?
+      - early check in disponible?
+      - late check out costo
+      - politica de cancelacion
+      - penalidad por cancelar?
+      - se aceptan mascotas?
+      - admiten perros?
+      - pueden ir niños?
+      - hay restriccion de edad?
+      - se puede fumar?
+      - habitaciones para fumadores?
+      - politica de ruido
+      - horario de silencio
+      - pago con tarjeta?
+      - aceptan efectivo?
+      - se puede pagar en dolares?
+      - politica de reembolso
+      - que pasa si no llego?
+      - garantia con tarjeta?
+      - deposito de seguridad?
+      - politica de huespedes extras
+      - reglas del hotel
+
+  # ==================== CONVERSATIONAL ====================
+  
+  - intent: greeting
+    examples: |
+      - hola
+      - buenos dias
+      - buenas tardes
+      - buenas noches
+      - hey
+      - hola que tal
+      - buenas
+      - buen dia
+      - saludos
+      - holi
+      - ola
+      - hi
+      - hello
+
+  - intent: goodbye
+    examples: |
+      - chau
+      - adios
+      - hasta luego
+      - nos vemos
+      - gracias por todo
+      - muchas gracias
+      - bye
+      - me tengo que ir
+      - eso es todo
+      - nada mas
+      - listo gracias
+      - perfecto chau
+
+  - intent: affirm
+    examples: |
+      - si
+      - sip
+      - dale
+      - ok
+      - okay
+      - correcto
+      - exacto
+      - eso
+      - afirmativo
+      - claro
+      - por supuesto
+      - obvio
+      - see
+      - aja
+
+  - intent: deny
+    examples: |
+      - no
+      - nop
+      - para nada
+      - negativo
+      - no gracias
+      - no me interesa
+      - no quiero
+      - mejor no
+      - no es lo que busco
+      - no me sirve
+      - paso
+
+  - intent: help
+    examples: |
+      - ayuda
+      - no entiendo
+      - como funciona?
+      - que puedo hacer?
+      - opciones
+      - menu
+      - que opciones hay?
+      - como te uso?
+      - que puedes hacer?
+      - en que me podes ayudar?
+      - necesito ayuda
+      - no se como seguir
+      - estoy perdido
+
+  - intent: out_of_scope
+    examples: |
+      - que hora es?
+      - como esta el clima?
+      - quien gano el partido?
+      - receta de pizza
+      - cuanto es 2+2?
+      - donde queda Paris?
+      - quien es el presidente?
+      - asdfghjkl
+      - jkljkljkl
+      - blablabla
+      - testing
+      - prueba
+      - hola hola hola hola
+      - ........................
+      - 123456789
+      - @#$%^&*()
