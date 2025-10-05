@@ -103,7 +103,206 @@ docker compose --profile pms up -d --build
 
 ---
 
-## 💻 Development Workflow
+## � Gmail Integration Setup
+
+### Overview
+The Gmail integration allows the hotel agent to receive and respond to guest inquiries via email. It uses IMAP for polling new messages and SMTP for sending responses.
+
+### Prerequisites
+
+1. **Gmail Account**: Create a dedicated Gmail account for the hotel (e.g., `reservas@hotel.com`)
+2. **App Password**: Generate an App Password (required for IMAP/SMTP access):
+   - Go to [Google Account Security](https://myaccount.google.com/security)
+   - Enable 2-Step Verification
+   - Go to "App passwords" → Generate password for "Mail"
+   - Save the 16-character password
+
+3. **IMAP/SMTP Access**: Ensure IMAP is enabled:
+   - Gmail Settings → Forwarding and POP/IMAP
+   - Enable IMAP access
+
+### Configuration
+
+Add to your `.env` file:
+
+```bash
+# Gmail Configuration
+GMAIL_USERNAME=reservas@hotel.com
+GMAIL_APP_PASSWORD=your-16-char-app-password
+```
+
+**Security Notes**:
+- Never commit real credentials to git
+- Use environment variables in production
+- Rotate app passwords periodically
+- Consider using OAuth2 for enhanced security
+
+### Usage
+
+#### Polling for New Messages
+
+```python
+from app.services.gmail_client import GmailIMAPClient
+
+client = GmailIMAPClient()
+
+# Poll for unread messages
+messages = client.poll_new_messages(
+    folder="INBOX",      # IMAP folder
+    mark_read=True       # Mark as read after fetching
+)
+
+for msg in messages:
+    print(f"From: {msg['from']}")
+    print(f"Subject: {msg['subject']}")
+    print(f"Body: {msg['body']}")
+```
+
+#### Sending Responses
+
+```python
+# Send text email
+client.send_response(
+    to="guest@example.com",
+    subject="Confirmación de Reserva",
+    body="Su reserva ha sido confirmada para el 15-17 de diciembre."
+)
+
+# Send HTML email
+client.send_response(
+    to="guest@example.com",
+    subject="Confirmación de Reserva",
+    body="<h1>Reserva Confirmada</h1><p>Gracias por su reserva.</p>",
+    html=True
+)
+```
+
+### Webhook Endpoint
+
+**POST /webhooks/gmail**: Processes Gmail messages
+
+```bash
+# Manual trigger (useful for testing)
+curl -X POST http://localhost:8000/webhooks/gmail \
+  -H "Content-Type: application/json" \
+  -d '{"notification": "new_message"}'
+```
+
+**Response**:
+```json
+{
+  "status": "ok",
+  "messages_processed": 3,
+  "results": [...]
+}
+```
+
+### Scheduled Polling
+
+For production, set up scheduled polling using cron or a task scheduler:
+
+```bash
+# Crontab example: Poll every 2 minutes
+*/2 * * * * curl -X POST http://localhost:8000/webhooks/gmail
+```
+
+Or use a background service (recommended):
+
+```python
+# app/services/gmail_poller.py
+import asyncio
+from app.services.gmail_client import GmailIMAPClient
+
+async def poll_gmail_continuously():
+    client = GmailIMAPClient()
+    while True:
+        try:
+            messages = client.poll_new_messages()
+            # Process messages...
+            await asyncio.sleep(120)  # Poll every 2 minutes
+        except Exception as e:
+            logger.error(f"Gmail polling error: {e}")
+            await asyncio.sleep(60)  # Retry after 1 min on error
+```
+
+### Message Flow
+
+1. **Guest sends email** → Gmail inbox
+2. **System polls** → GmailIMAPClient.poll_new_messages()
+3. **Normalization** → MessageGateway.normalize_gmail_message()
+4. **Processing** → Orchestrator.handle_unified_message()
+5. **NLP analysis** → Detect intent (check_availability, confirm_booking, etc.)
+6. **PMS interaction** → Check availability, create reservation
+7. **Response** → GmailIMAPClient.send_response()
+
+### Error Handling
+
+The Gmail client includes robust error handling:
+
+```python
+from app.services.gmail_client import (
+    GmailAuthError,
+    GmailConnectionError,
+    GmailClientError
+)
+
+try:
+    messages = client.poll_new_messages()
+except GmailAuthError:
+    # Authentication failed - check credentials
+    print("Invalid Gmail credentials")
+except GmailConnectionError:
+    # Network/connection issue
+    print("Cannot connect to Gmail servers")
+except GmailClientError as e:
+    # Other Gmail-specific errors
+    print(f"Gmail error: {e}")
+```
+
+### Monitoring
+
+Gmail operations are logged with structured logging:
+
+```
+gmail.imap.connecting → gmail.imap.authenticating → gmail.message.fetched
+gmail.smtp.connecting → gmail.smtp.authenticating → gmail.email.sent
+```
+
+**Key Metrics**:
+- `gmail.poll.complete`: Successful polling operations
+- `gmail.message.processed`: Messages successfully processed
+- `gmail.auth.failed`: Authentication failures
+- `gmail.connection.failed`: Connection errors
+
+### Testing
+
+Run Gmail integration tests:
+
+```bash
+make test-integration
+# Or specifically:
+poetry run pytest tests/integration/test_gmail_integration.py -v
+```
+
+### Limitations
+
+- **IMAP Polling**: Not real-time (polling interval: 2-5 min recommended)
+- **Rate Limits**: Gmail IMAP allows ~1 request/sec, SMTP ~100 emails/day (free tier)
+- **Attachment Support**: Currently text-only (attachments not supported)
+- **HTML Emails**: Basic HTML stripping for text extraction
+
+### Advanced: Gmail API (Alternative)
+
+For production-grade systems, consider using Gmail API with push notifications:
+
+1. **Setup**: [Gmail API Quickstart](https://developers.google.com/gmail/api/quickstart/python)
+2. **OAuth2**: More secure than App Passwords
+3. **Push Notifications**: Real-time via Cloud Pub/Sub
+4. **Higher Limits**: Better rate limits and quotas
+
+---
+
+## �💻 Development Workflow
 
 ### Code Organization
 ```
