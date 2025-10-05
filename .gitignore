@@ -1,11 +1,9 @@
-.playbook/
-*.log
-__pycache__/
-*.pyc# General
+# General
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
+*~
 .idea/
 .vscode/
 .history/
@@ -14,6 +12,7 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyc
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -52,7 +51,17 @@ agente-hotel-api/docker/nginx/ssl/*.pem
 # Datos temporales del proyecto
 tmp/
 temp/
+*.tmp
 agente-hotel-api/.cache/
 
 # Rasa (si existieran artefactos)
 **/rasa_nlu/models/
+
+# Backup files (Phase D cleanup)
+*.bak
+*.old
+*.backup
+
+# Playbook runtime reports (keep local only)
+.playbook/*.json
+.playbook/*_report.json
