@@ -16,6 +16,8 @@ from .business_metrics import (
     nlp_fallbacks,
     messages_by_channel
 )
+from ..exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
+from ..core.logging import logger
 
 
 class Orchestrator:
@@ -46,8 +48,33 @@ class Orchestrator:
 
         try:
             text = message.texto or ""
-            nlp_result = await self.nlp_engine.process_message(text)
-            intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+            
+            # Graceful degradation: Si NLP falla, usar reglas básicas
+            try:
+                nlp_result = await self.nlp_engine.process_message(text)
+                intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+            except Exception as nlp_error:
+                logger.warning(f"NLP failed, using rule-based fallback: {nlp_error}")
+                metrics_service.record_nlp_fallback("nlp_service_failure")
+                nlp_fallbacks.inc()
+                
+                # Reglas básicas de fallback
+                text_lower = text.lower()
+                if any(word in text_lower for word in ["disponibilidad", "disponible", "habitacion", "cuarto"]):
+                    intent_name = "check_availability"
+                    nlp_result = {"intent": {"name": "check_availability", "confidence": 0.5}, "entities": []}
+                elif any(word in text_lower for word in ["reservar", "reserva", "reservacion", "booking"]):
+                    intent_name = "make_reservation"
+                    nlp_result = {"intent": {"name": "make_reservation", "confidence": 0.5}, "entities": []}
+                elif any(word in text_lower for word in ["precio", "costo", "tarifa", "valor"]):
+                    intent_name = "pricing_info"
+                    nlp_result = {"intent": {"name": "pricing_info", "confidence": 0.5}, "entities": []}
+                else:
+                    intent_name = "unknown"
+                    nlp_result = {"intent": {"name": "unknown", "confidence": 0.0}, "entities": []}
+                    return {
+                        "response": "Disculpa, estoy teniendo problemas técnicos. ¿Puedes decirme si quieres: consultar disponibilidad, hacer una reserva, o información de precios?"
+                    }
             
             # Métrica de negocio: registrar intent detectado
             intent_obj = nlp_result.get("intent", {})
@@ -71,7 +98,22 @@ class Orchestrator:
             elif enhanced_fallback and confidence < 0.75:
                 message.metadata["low_confidence"] = True
                 metrics_service.record_nlp_fallback("low_confidence_hint")
-            response_text = await self.handle_intent(nlp_result, session, message)
+            
+            # Graceful degradation: Manejar fallos de PMS
+            try:
+                response_text = await self.handle_intent(nlp_result, session, message)
+            except (PMSError, CircuitBreakerOpenError) as pms_error:
+                logger.error(f"PMS unavailable, degraded response: {pms_error}")
+                orchestrator_degraded_responses.inc()
+                
+                # Respuesta degradada según el intent
+                if intent_name == "check_availability":
+                    response_text = "Lo siento, nuestro sistema de disponibilidad está temporalmente fuera de servicio. Por favor, contacta directamente con recepción al [TELÉFONO] o escribe a [EMAIL]."
+                elif intent_name == "make_reservation":
+                    response_text = "No puedo procesar reservas en este momento por mantenimiento del sistema. Por favor, contacta con recepción al [TELÉFONO] o intenta más tarde."
+                else:
+                    response_text = "Disculpa, estoy experimentando dificultades técnicas. ¿Puedes contactar directamente con recepción? Teléfono: [TELÉFONO]"
+            
             return {"response": response_text}
         except Exception as e:
             status = "error"
@@ -130,4 +172,7 @@ orchestrator_messages_total = Counter(
 )
 orchestrator_errors_total = Counter(
     "orchestrator_errors_total", "Errores no controlados por intent y tipo", ["intent", "error_type"]
+)
+orchestrator_degraded_responses = Counter(
+    "orchestrator_degraded_responses_total", "Respuestas degradadas por fallo de servicios externos"
 )

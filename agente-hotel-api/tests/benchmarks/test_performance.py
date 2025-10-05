@@ -43,12 +43,14 @@ def test_pydantic_validation_performance(benchmark):
 
     def validate_message():
         return UnifiedMessage(
-            channel="test",
-            sender_id="test_user_123",
-            content="Hola, quiero hacer una reserva para 2 personas",
-            timestamp=int(datetime.now().timestamp()),
-            tenant_id="default"
+            message_id="bench_msg_123",
+            canal="test",
+            user_id="test_user_123",
+            timestamp_iso=datetime.now().isoformat(),
+            tipo="text",
+            texto="Hola, quiero hacer una reserva para 2 personas",
+            metadata={"tenant_id": "default"}
         )
 
     result = benchmark(validate_message)
-    assert result.sender_id == "test_user_123"
+    assert result.user_id == "test_user_123"

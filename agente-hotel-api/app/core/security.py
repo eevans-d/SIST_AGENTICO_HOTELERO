@@ -32,7 +32,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     try:
         jwt_alg = getattr(settings, "jwt_algorithm", "HS256")
         payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[jwt_alg])
-        username: str = payload.get("sub")
+        username: str | None = payload.get("sub")
         if username is None:
             raise credentials_exception
     except JWTError:

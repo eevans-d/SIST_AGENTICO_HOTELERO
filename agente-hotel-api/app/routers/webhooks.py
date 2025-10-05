@@ -62,7 +62,7 @@ async def handle_whatsapp_webhook(request: Request):
     if ctype and "application/json" not in ctype:
         raise HTTPException(status_code=415, detail="Unsupported Media Type")
 
-    # Limitar tamaño de payload a 1MB
+    # Limitar tamaño de payload a 1MB (ya manejado por middleware, pero doble check)
     body_bytes = await request.body()
     if len(body_bytes) > 1_000_000:
         raise HTTPException(status_code=413, detail="Payload too large")

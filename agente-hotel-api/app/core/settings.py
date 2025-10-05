@@ -98,19 +98,42 @@ class Settings(BaseSettings):
     )
     @classmethod
     def validate_secrets_in_prod(cls, v: SecretStr, info):
+        """
+        Valida que secrets no usen valores dummy en producción.
+        Previene deploys accidentales con credenciales de desarrollo.
+        """
         env = info.data.get("environment") if hasattr(info, "data") else None
-        if (
-            env == Environment.PROD
-            and v
-            and v.get_secret_value()
-            in [
-                None,
-                "",
-                "your_token_here",
-                "generate_secure_key_here",
-            ]
-        ):
-            raise ValueError("Critical secret is not set for production environment")
+        
+        # Lista extendida de valores dummy prohibidos en producción
+        dummy_values = [
+            None,
+            "",
+            "your_token_here",
+            "generate_secure_key_here",
+            "dev-pms-key",
+            "dev-whatsapp-token",
+            "dev-verify-token",
+            "dev-app-secret",
+            "dev-gmail-pass",
+            "test",
+            "testing",
+            "dummy",
+            "changeme",
+            "replace_me",
+            "secret",
+            "password",
+            "12345",
+        ]
+        
+        if env == Environment.PROD and v:
+            secret_value = v.get_secret_value()
+            if secret_value in dummy_values or len(secret_value) < 8:
+                field_name = info.field_name if hasattr(info, "field_name") else "secret"
+                raise ValueError(
+                    f"Production secret '{field_name}' is not secure. "
+                    f"Must be at least 8 characters and not a dummy value. "
+                    f"Please set proper secrets in production environment."
+                )
         return v
 
     # Construye postgres_url si hay POSTGRES_* en el entorno o en el modelo

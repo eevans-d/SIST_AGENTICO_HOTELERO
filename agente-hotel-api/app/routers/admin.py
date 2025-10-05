@@ -20,12 +20,14 @@ async def get_dashboard(request: Request):
 
 
 @router.get("/tenants")
-async def list_tenants():
+@limit("60/minute")
+async def list_tenants(request: Request):
     return {"tenants": dynamic_tenant_service.list_tenants()}
 
 
 @router.post("/tenants/refresh")
-async def refresh_tenants():
+@limit("30/minute")
+async def refresh_tenants(request: Request):
     try:
         await dynamic_tenant_service.refresh()
         return {"status": "refreshed"}
@@ -34,7 +36,8 @@ async def refresh_tenants():
 
 
 @router.post("/tenants")
-async def create_tenant(body: dict):
+@limit("30/minute")
+async def create_tenant(request: Request, body: dict):
     tenant_id = body.get("tenant_id")
     name = body.get("name")
     if not tenant_id or not name:

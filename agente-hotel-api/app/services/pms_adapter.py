@@ -30,8 +30,22 @@ class QloAppsAdapter:
         self.redis = redis_client
         self.base_url = settings.pms_base_url
         self.api_key = settings.pms_api_key.get_secret_value()
-        self.timeout_config = httpx.Timeout(connect=5.0, read=8.0, write=15.0, pool=30.0)
-        self.limits = httpx.Limits(max_keepalive_connections=5, max_connections=10, keepalive_expiry=30.0)
+        
+        # Timeouts más agresivos para evitar cuellos de botella
+        self.timeout_config = httpx.Timeout(
+            connect=5.0,   # 5s para establecer conexión
+            read=15.0,     # 15s para leer respuesta (PMS puede ser lento)
+            write=10.0,    # 10s para enviar datos
+            pool=30.0      # 30s para obtener conexión del pool
+        )
+        
+        # Límites de conexión optimizados para producción
+        self.limits = httpx.Limits(
+            max_keepalive_connections=20,  # Aumentado de 5 a 20 para mejor throughput
+            max_connections=100,            # Aumentado de 10 a 100 para manejar picos
+            keepalive_expiry=30.0           # Mantener keepalive por 30s
+        )
+        
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_config,

@@ -7,6 +7,7 @@
 .PHONY: canary-diff
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
+.PHONY: test-unit test-integration test-e2e test-business-metrics load-test chaos-test
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -65,6 +66,53 @@ ifeq ($(HAS_POETRY),1)
 	poetry run pytest -q
 else
 	pytest -q
+endif
+
+test-unit: ## Ejecutar solo tests unitarios
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/unit/ -v
+else
+	pytest tests/unit/ -v
+endif
+
+test-integration: ## Ejecutar solo tests de integración
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/integration/ -v
+else
+	pytest tests/integration/ -v
+endif
+
+test-e2e: ## Ejecutar solo tests end-to-end
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/e2e/ -v
+else
+	pytest tests/e2e/ -v
+endif
+
+test-business-metrics: ## Ejecutar tests de business metrics
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest tests/unit/test_business_metrics.py -v
+else
+	pytest tests/unit/test_business_metrics.py -v
+endif
+
+load-test: ## Ejecutar load testing con Locust (requiere locust instalado)
+	@echo "Starting Locust load test..."
+	@if ! command -v locust >/dev/null 2>&1; then \
+		echo "❌ Locust no instalado. Instalar con: pip install locust"; \
+		exit 1; \
+	fi
+	@echo "Locust UI disponible en: http://localhost:8089"
+	@echo "Configuración sugerida: 50 usuarios, spawn rate 5, duración 5m"
+	locust -f tests/load/locustfile.py --host=http://localhost:8000
+
+chaos-test: ## Ejecutar chaos engineering tests
+ifeq ($(HAS_POETRY),1)
+	@echo "Running chaos/resilience tests..."
+	poetry run pytest tests/chaos/test_resilience.py -v --tb=short
+else
+	@echo "Running chaos/resilience tests..."
+	pytest tests/chaos/test_resilience.py -v --tb=short
 endif
 
 

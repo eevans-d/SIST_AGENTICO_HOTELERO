@@ -1,7 +1,7 @@
 # [PROMPT GA-02] app/core/database.py
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from typing import AsyncGenerator
 
 from .settings import Environment, settings
 
@@ -34,14 +34,15 @@ if settings.environment == Environment.PROD:
 
 engine = create_async_engine(POSTGRES_URL, **engine_kwargs)
 
-AsyncSessionFactory = sessionmaker(
-    bind=engine,
+# SQLAlchemy 2.0 style: use async_sessionmaker instead of sessionmaker
+AsyncSessionFactory = async_sessionmaker(
+    engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency to get a database session."""
     async with AsyncSessionFactory() as session:
         yield session
