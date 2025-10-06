@@ -8,6 +8,7 @@ import asyncio
 from contextlib import asynccontextmanager
 # import whisper
 from ..core.logging import logger
+from ..exceptions.audio_exceptions import AudioDownloadError, AudioConversionError, AudioTranscriptionError
 
 
 class WhisperSTT:
@@ -67,29 +68,64 @@ class AudioProcessor:
             except Exception as e:
                 logger.error(f"Error in temp file cleanup: {e}")
 
+    async def _download_audio(self, audio_url: str, destination: Path):
+        """
+        Descarga un archivo de audio desde una URL y lo guarda en la ruta especificada.
+        """
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(audio_url) as response:
+                    if response.status != 200:
+                        raise AudioDownloadError(f"Failed to download audio. HTTP Status: {response.status}")
+
+                    with open(destination, "wb") as f:
+                        while chunk := await response.content.read(1024):
+                            f.write(chunk)
+
+            logger.info(f"Audio downloaded successfully to {destination}")
+        except Exception as e:
+            logger.error(f"Error downloading audio from {audio_url}: {e}")
+            raise AudioDownloadError(f"An error occurred while downloading audio.")
+
+    async def _convert_to_wav(self, input_file: Path, output_file: Path):
+        """
+        Convierte un archivo de audio a formato WAV usando FFmpeg.
+        """
+        try:
+            cmd = [
+                "ffmpeg", "-i", str(input_file), "-ar", "16000", "-ac", "1",
+                "-c:a", "pcm_s16le", "-y", str(output_file)
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                raise AudioConversionError(f"FFmpeg conversion failed. Return code: {process.returncode}")
+
+            logger.info(f"Audio converted successfully: {input_file} -> {output_file}")
+
+        except FileNotFoundError:
+            raise AudioConversionError("FFmpeg not found. Please install FFmpeg.")
+        except Exception as e:
+            logger.error(f"Error converting audio {input_file} to {output_file}: {e}")
+            raise AudioConversionError(f"An error occurred during audio conversion.")
+
     async def transcribe_whatsapp_audio(self, audio_url: str) -> dict:
         """
         Transcribe audio de WhatsApp con manejo seguro de archivos temporales.
-        
-        Previene memory leaks:
-        1. Usa context manager para archivos temporales
-        2. Cleanup automático incluso si hay excepciones
-        3. Timeouts para operaciones de I/O
         """
         try:
-            # Usar context manager para archivos temporales
             async with self._temporary_file(suffix=".ogg") as audio_temp:
                 async with self._temporary_file(suffix=".wav") as wav_temp:
-                    # 1. Descargar el audio (requiere implementación del downloader)
-                    # await self._download_audio(audio_url, audio_temp)
-                    
-                    # 2. Convertir a WAV
-                    # await self._convert_to_wav(audio_temp, wav_temp)
-                    
-                    # 3. Transcribir con Whisper
+                    await self._download_audio(audio_url, audio_temp)
+                    await self._convert_to_wav(audio_temp, wav_temp)
                     result = await self.stt.transcribe(wav_temp)
-                    
-                    # Los archivos se limpian automáticamente al salir del context manager
                     return result
                     
         except Exception as e:
@@ -107,10 +143,8 @@ class AudioProcessor:
         """
         try:
             async with self._temporary_file(suffix=".ogg") as output_temp:
-                # Generar audio
                 audio_data = await self.tts.synthesize(text)
                 
-                # Si TTS genera archivo, leerlo y retornar bytes
                 if output_temp.exists():
                     with open(output_temp, "rb") as f:
                         audio_data = f.read()
