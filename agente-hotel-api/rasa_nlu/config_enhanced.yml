@@ -1,0 +1,127 @@
+"""
+Updated Rasa NLU Configuration - Multilingual Hotel Bot 
+Enhanced configuration for DIET Classifier with optimized pipeline for 15+ intents
+"""
+
+recipe: default.v1
+
+# Base configuration - será extendido por cada idioma
+language: es
+
+pipeline:
+  # ==================== TOKENIZATION ====================
+  - name: WhitespaceTokenizer
+    # Tokenizador para todos los idiomas
+    intent_tokenization_flag: true
+    intent_split_symbol: "+"
+  
+  # ==================== FEATURIZERS ====================
+  - name: RegexFeaturizer
+    # Extractor basado en patrones (fechas, números, emails)
+    case_sensitive: false
+    # Patrones avanzados para fechas y horas
+    patterns:
+      - (0?[1-9]|[12][0-9]|3[01])[-/](0?[1-9]|1[0-2])[-/](\d{4}|\d{2})
+      - (0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])[-/](\d{4}|\d{2})
+      - (\d{4})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])
+      - \d{1,2}:\d{2}\s*(?:[aApP][mM])?
+  
+  - name: LexicalSyntacticFeaturizer
+    # Características sintácticas y lexicales
+    features:
+      - ["low", "title", "upper"]
+      - ["BOS", "EOS", "low", "upper", "title", "digit"]
+      - ["low", "title", "upper"]
+  
+  - name: CountVectorsFeaturizer
+    # Bolsa de palabras a nivel de palabra
+    analyzer: word
+    min_ngram: 1
+    max_ngram: 2
+    max_features: 30000
+    min_df: 1
+  
+  - name: CountVectorsFeaturizer
+    # N-gramas a nivel de carácter (maneja errores ortográficos)
+    analyzer: char_wb
+    min_ngram: 2
+    max_ngram: 5
+    max_features: 30000
+    min_df: 1
+  
+  # ==================== INTENT CLASSIFICATION + ENTITY EXTRACTION ====================
+  - name: DIETClassifier
+    # Dual Intent Entity Transformer (mejorado)
+    epochs: 150
+    constrain_similarities: true
+    
+    # Arquitectura mejorada
+    embedding_dimension: 128
+    transformer_size: 256
+    number_of_transformer_layers: 3
+    number_of_attention_heads: 4
+    
+    # Modelo de confianza
+    model_confidence: softmax
+    
+    # Regularización
+    drop_rate: 0.2
+    weight_decay: 0.001
+    
+    # Entrenamiento
+    batch_size: 
+      - 64
+      - 256
+    learning_rate: 0.001
+    
+    # Early stopping
+    evaluate_every_number_of_epochs: 20
+    evaluate_on_number_of_examples: 100
+    
+    # Configuración para datos desbalanceados
+    use_masked_language_model: true
+    entity_recognition: true
+    intent_classification: true
+    BILOU_flag: true
+  
+  - name: RegexEntityExtractor
+    # Extractor basado en expresiones regulares
+    # Patrones específicos para fechas, correos, teléfonos, etc.
+    case_sensitive: false
+    use_lookup_tables: true
+    use_regexes: true
+    # Listas de búsqueda cargadas desde archivos
+    
+  - name: EntitySynonymMapper
+    # Mapeo de sinónimos (doble -> habitación doble)
+  
+  - name: ResponseSelector
+    # Selector de respuestas para fallback/chitchat
+    epochs: 100
+    constrain_similarities: true
+    retrieval_intent: out_of_scope
+    scale_loss: true
+
+# ==================== POLICIES (for dialogue management) ====================
+policies:
+  - name: MemoizationPolicy
+    max_history: 10
+  
+  - name: RulePolicy
+    core_fallback_threshold: 0.4
+    core_fallback_action_name: "action_default_fallback"
+    enable_fallback_prediction: true
+  
+  - name: TEDPolicy
+    max_history: 10
+    epochs: 150
+    constrain_similarities: true
+    # Hiperparámetros optimizados
+    embedding_dimension: 128
+    hidden_layers_sizes:
+      - 256
+      - 128
+    # Umbrales de confianza actualizados
+    # - intent: >0.80 → confiado
+    # - intent: 0.45-0.80 → incierto (pedir clarificación)
+    # - intent: <0.45 → fallback

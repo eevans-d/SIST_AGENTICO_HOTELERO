@@ -1,0 +1,298 @@
+# [FASE E.5] rasa_nlu/data/nlu_en.yml
+# English training data for multilingual support
+
+version: "3.1"
+
+nlu:
+  # ==================== AVAILABILITY & BOOKING ====================
+  - intent: check_availability
+    examples: |
+      - Do you have any rooms available for [next weekend](check_date)?
+      - I need to know if you have availability for [July 15](check_date)
+      - Checking availability for [2 nights](duration) starting [tomorrow](check_date)
+      - Are there any [double rooms](room_type) available for [Christmas](check_date)?
+      - I want to check if you have rooms on [May 10](check_date)
+      - Looking for availability from [June 2](check_date) to [June 5](check_date)
+      - Any rooms for [4 people](guests) next [month](check_date)?
+      - Do you have [suites](room_type) available in [December](check_date)?
+      - Can I book a room for [next Tuesday](check_date)?
+      - Availability for [one week](duration) in [August](check_date)
+      - I need [2 rooms](room_count), one [single](room_type) and one [double](room_type)
+      - Check if you have anything for [this weekend](check_date)
+
+  - intent: make_reservation
+    examples: |
+      - I want to book a room
+      - Can I make a reservation for [next Friday](check_date)?
+      - I'd like to book [2 nights](duration) starting [September 5](check_date)
+      - Book me a [double room](room_type) for [July 10](check_date)
+      - I need to reserve [3 rooms](room_count) for my family
+      - We'd like to stay in your hotel from [April 15](check_date) to [April 20](check_date)
+      - Make a reservation for [Smith](guest_name)
+      - I want to book the [suite](room_type) with [ocean view](room_feature)
+      - Reserve a [smoking room](room_feature) for [next month](check_date)
+      - Book a room for [5 nights](duration) for [Mr. Johnson](guest_name)
+      - I need to make a reservation with [breakfast included](service)
+      - Book a room with [king size bed](room_feature)
+
+  # ==================== RESERVATION MANAGEMENT ====================
+  - intent: modify_reservation
+    examples: |
+      - I need to change my reservation
+      - Can I modify the dates of my booking?
+      - Need to change reservation [#45321](booking_id) to [next week](check_date)
+      - I'd like to extend my stay for [2 more nights](duration)
+      - Need to switch from a [double room](room_type) to a [suite](room_type)
+      - Can I add [breakfast](service) to my existing reservation?
+      - Want to change arrival date from [June 5](check_date) to [June 7](check_date)
+      - Need to add a [crib](room_feature) to my room
+      - Change my reservation under [Johnson](guest_name)
+      - Modify booking to include [airport shuttle](service)
+      - Can I upgrade my room for reservation [#67890](booking_id)?
+
+  - intent: cancel_reservation
+    examples: |
+      - I need to cancel my booking
+      - Cancel reservation [#12345](booking_id)
+      - Need to cancel my stay for [July 15](check_date)
+      - Please cancel the room booked under [Smith](guest_name)
+      - I want to cancel my reservation made last week
+      - Need to cancel my upcoming booking
+      - Cancel hotel reservation [#RT56789](booking_id)
+      - I'd like to cancel and get a refund
+      - Need to remove my booking for [this weekend](check_date)
+      - Cancel my [suite](room_type) reservation
+      - Please delete my reservation under [Wilson](guest_name)
+
+  - intent: check_reservation
+    examples: |
+      - I want to check my booking status
+      - Can you tell me about my reservation [#34567](booking_id)?
+      - Need details about my upcoming stay
+      - What's the status of my booking under [Thompson](guest_name)?
+      - Check reservation [#BC9876](booking_id)
+      - Can you confirm my reservation for [next Friday](check_date)?
+      - I'd like to know if my booking is confirmed
+      - Show me my reservation details
+      - Need to verify my room type for booking [#ZX5432](booking_id)
+      - What room did I book for [Christmas](check_date)?
+      - Confirm my reservation details please
+
+  # ==================== HOTEL INFORMATION ====================
+  - intent: hotel_info
+    examples: |
+      - Tell me about your hotel
+      - What services do you offer?
+      - Do you have a [swimming pool](hotel_amenity)?
+      - Is there [free wifi](hotel_amenity)?
+      - Tell me about the [restaurant](hotel_amenity) in your hotel
+      - What time is [breakfast](meal_type) served?
+      - Do you have [gym facilities](hotel_amenity)?
+      - Information about [parking](hotel_amenity) at the hotel
+      - Is there a [spa](hotel_amenity) in the hotel?
+      - What are your [check-in](process) and [check-out](process) times?
+      - Do you offer [room service](service)?
+      - Tell me about your [conference rooms](hotel_amenity)
+
+  - intent: room_info
+    examples: |
+      - What room types do you have?
+      - Tell me about your [suites](room_type)
+      - What's included in the [standard room](room_type)?
+      - Do rooms have [air conditioning](room_feature)?
+      - What's the difference between [deluxe](room_type) and [standard](room_type) rooms?
+      - Do you have rooms with [ocean view](room_feature)?
+      - Are there [connecting rooms](room_feature) available?
+      - Do you have rooms with [bathtubs](room_feature)?
+      - Tell me about the [presidential suite](room_type)
+      - Are there [mini-bars](room_feature) in the rooms?
+      - Do you have [non-smoking](room_feature) rooms?
+      - What amenities are in your [family rooms](room_type)?
+
+  # ==================== PRICING & PAYMENT ====================
+  - intent: price_info
+    examples: |
+      - How much does a [double room](room_type) cost?
+      - What's the price for [next weekend](check_date)?
+      - Tell me about your rates for [August](check_date)
+      - What's the price difference between [standard](room_type) and [deluxe](room_type)?
+      - Do you have special rates for [corporate bookings](booking_type)?
+      - How much for [5 nights](duration) in [July](check_date)?
+      - Price for a [single room](room_type) with [breakfast](service)
+      - Are there any discounts for [long stays](duration)?
+      - What's the total cost for [2 adults](guests) and [1 child](guests)?
+      - Do you offer [weekend packages](offer)?
+      - What's your [summer special](offer) price?
+      - Cost for room with [all-inclusive](service) option
+
+  - intent: payment_info
+    examples: |
+      - How can I pay for my reservation?
+      - Do you accept [credit cards](payment_method)?
+      - Can I pay using [PayPal](payment_method)?
+      - Is there a [deposit](payment_type) required?
+      - Do you offer [free cancellation](policy)?
+      - What's your [refund policy](policy)?
+      - When will my [credit card](payment_method) be charged?
+      - Can I pay when I [check in](process)?
+      - Do you need a [credit card](payment_method) to hold the reservation?
+      - Can I [split the bill](payment_option) for multiple rooms?
+      - Do you accept [cash](payment_method) payments?
+      - What's your policy on [pre-authorization](payment_type)?
+
+  # ==================== LOCATION & TRANSPORTATION ====================
+  - intent: location_info
+    examples: |
+      - Where is your hotel located?
+      - How do I get to the hotel from the [airport](location)?
+      - Are you near the [city center](location)?
+      - What's the address of your hotel?
+      - How far is the hotel from [downtown](location)?
+      - Is your hotel close to [tourist attractions](location)?
+      - Can you send me directions to the hotel?
+      - Are you near any [public transportation](transport_type)?
+      - How far is the [train station](location) from the hotel?
+      - Is the [beach](location) within walking distance?
+      - What's in the neighborhood around the hotel?
+      - How far is it to the nearest [shopping mall](location)?
+
+  - intent: transportation_info
+    examples: |
+      - Do you offer [airport shuttle](service)?
+      - Is there [parking](service) at the hotel?
+      - How much does [parking](service) cost?
+      - Can you arrange [taxi service](service) for me?
+      - Is there [public transportation](transport_type) near the hotel?
+      - How do I get to [downtown](location) from the hotel?
+      - Do I need to [rent a car](transport_type)?
+      - Can the hotel arrange [transportation](service) to [tourist sites](location)?
+      - Is [valet parking](service) available?
+      - How frequent is the [shuttle service](service) to the [airport](location)?
+      - Do you have [bicycle rental](service)?
+      - What's the best way to get around the area?
+
+  # ==================== SPECIAL REQUESTS ====================
+  - intent: special_request
+    examples: |
+      - I need a [room for disabled persons](accessibility)
+      - Can I request a [late check-out](process)?
+      - I'd like a room on a [high floor](room_preference)
+      - Need a [baby cot](room_feature) in my room
+      - Request for [extra pillows](room_feature)
+      - Do you allow [pets](policy)?
+      - I need a [quiet room](room_preference) away from elevators
+      - Can I have a [birthday surprise](special_service) arranged?
+      - Need a [wake-up call](service) at [6am](time)
+      - Request for [hypoallergenic bedding](room_feature)
+      - Can you arrange [flowers](special_service) in the room?
+      - Need [early check-in](process) around [10am](time)
+
+  - intent: food_drink_request
+    examples: |
+      - What time does the [restaurant](hotel_amenity) open?
+      - Do you serve [vegetarian options](diet_restriction)?
+      - I have [food allergies](diet_restriction), can you accommodate?
+      - Need to book a table at your [restaurant](hotel_amenity)
+      - What's on your [breakfast](meal_type) menu?
+      - Do you have a [bar](hotel_amenity) in the hotel?
+      - Can I get [room service](service) at [midnight](time)?
+      - Do you offer [gluten-free](diet_restriction) meals?
+      - What are your [dinner](meal_type) hours?
+      - Can I order [champagne](beverage) for my room?
+      - Do you have [halal options](diet_restriction)?
+      - Information about your [all-inclusive](service) meal plan
+
+  # ==================== GENERAL CONVERSATION ====================
+  - intent: greet
+    examples: |
+      - hello
+      - hi
+      - hey there
+      - good morning
+      - good afternoon
+      - good evening
+      - hey
+      - hello there
+      - howdy
+      - hi there
+      - greetings
+      - what's up
+
+  - intent: goodbye
+    examples: |
+      - bye
+      - goodbye
+      - see you around
+      - see you later
+      - have a good day
+      - take care
+      - bye bye
+      - thanks, goodbye
+      - catch you later
+      - farewell
+      - have a nice day
+      - until next time
+
+  - intent: thank
+    examples: |
+      - thank you
+      - thanks
+      - thanks a lot
+      - thank you very much
+      - I appreciate it
+      - thank you for your help
+      - thanks for the information
+      - that's helpful, thanks
+      - much appreciated
+      - great, thank you
+      - perfect, thanks
+      - awesome, thank you
+
+  - intent: affirm
+    examples: |
+      - yes
+      - yes please
+      - yeah
+      - sure
+      - correct
+      - that's right
+      - absolutely
+      - indeed
+      - that works
+      - right
+      - ok
+      - of course
+      - sounds good
+      - I agree
+
+  - intent: deny
+    examples: |
+      - no
+      - no thanks
+      - not really
+      - nope
+      - don't do that
+      - I don't think so
+      - not interested
+      - absolutely not
+      - no way
+      - not now
+      - I disagree
+      - I don't want that
+      - not correct
+      - that's wrong
+
+  - intent: out_of_scope
+    examples: |
+      - Can you tell me about the weather?
+      - I want to order a pizza
+      - What's the stock market doing today?
+      - Tell me a joke
+      - Who is the president?
+      - Can you book me a flight?
+      - Help me with my homework
+      - What movies are playing?
+      - Translate this to French
+      - Can you play music?
+      - What's 2+2?
+      - Tell me your life story

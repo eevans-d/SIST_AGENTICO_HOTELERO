@@ -1,0 +1,298 @@
+# [FASE E.5] rasa_nlu/data/nlu_pt.yml
+# Portuguese training data for multilingual support
+
+version: "3.1"
+
+nlu:
+  # ==================== AVAILABILITY & BOOKING ====================
+  - intent: check_availability
+    examples: |
+      - Vocês têm quartos disponíveis para [o próximo fim de semana](check_date)?
+      - Preciso saber se vocês têm disponibilidade para [15 de julho](check_date)
+      - Verificando disponibilidade para [2 noites](duration) começando [amanhã](check_date)
+      - Há algum [quarto duplo](room_type) disponível para o [Natal](check_date)?
+      - Quero verificar se vocês têm quartos em [10 de maio](check_date)
+      - Procurando disponibilidade de [2 de junho](check_date) até [5 de junho](check_date)
+      - Algum quarto para [4 pessoas](guests) no próximo [mês](check_date)?
+      - Vocês têm [suítes](room_type) disponíveis em [dezembro](check_date)?
+      - Posso reservar um quarto para [próxima terça-feira](check_date)?
+      - Disponibilidade para [uma semana](duration) em [agosto](check_date)
+      - Preciso de [2 quartos](room_count), um [individual](room_type) e um [duplo](room_type)
+      - Verifique se tem alguma coisa para [este fim de semana](check_date)
+
+  - intent: make_reservation
+    examples: |
+      - Quero reservar um quarto
+      - Posso fazer uma reserva para [próxima sexta-feira](check_date)?
+      - Gostaria de reservar [2 noites](duration) começando em [5 de setembro](check_date)
+      - Reserve-me um [quarto duplo](room_type) para [10 de julho](check_date)
+      - Preciso reservar [3 quartos](room_count) para minha família
+      - Gostaríamos de ficar no seu hotel de [15 de abril](check_date) até [20 de abril](check_date)
+      - Faça uma reserva para [Silva](guest_name)
+      - Quero reservar a [suíte](room_type) com [vista para o mar](room_feature)
+      - Reserve um [quarto para fumantes](room_feature) para o [próximo mês](check_date)
+      - Reserve um quarto para [5 noites](duration) para o [Sr. Oliveira](guest_name)
+      - Preciso fazer uma reserva com [café da manhã incluído](service)
+      - Reserve um quarto com [cama king size](room_feature)
+
+  # ==================== RESERVATION MANAGEMENT ====================
+  - intent: modify_reservation
+    examples: |
+      - Preciso mudar minha reserva
+      - Posso modificar as datas da minha reserva?
+      - Preciso alterar a reserva [#45321](booking_id) para a [próxima semana](check_date)
+      - Gostaria de estender minha estadia por [mais 2 noites](duration)
+      - Preciso mudar de um [quarto duplo](room_type) para uma [suíte](room_type)
+      - Posso adicionar [café da manhã](service) à minha reserva existente?
+      - Quero mudar a data de chegada de [5 de junho](check_date) para [7 de junho](check_date)
+      - Preciso adicionar um [berço](room_feature) ao meu quarto
+      - Alterar minha reserva em nome de [Oliveira](guest_name)
+      - Modificar reserva para incluir [traslado do aeroporto](service)
+      - Posso fazer um upgrade do meu quarto para a reserva [#67890](booking_id)?
+
+  - intent: cancel_reservation
+    examples: |
+      - Preciso cancelar minha reserva
+      - Cancelar reserva [#12345](booking_id)
+      - Preciso cancelar minha estadia para [15 de julho](check_date)
+      - Por favor, cancele o quarto reservado em nome de [Silva](guest_name)
+      - Quero cancelar minha reserva feita na semana passada
+      - Preciso cancelar minha próxima reserva
+      - Cancelar reserva de hotel [#RT56789](booking_id)
+      - Gostaria de cancelar e receber um reembolso
+      - Preciso remover minha reserva para [este fim de semana](check_date)
+      - Cancelar minha reserva de [suíte](room_type)
+      - Por favor, exclua minha reserva em nome de [Wilson](guest_name)
+
+  - intent: check_reservation
+    examples: |
+      - Quero verificar o status da minha reserva
+      - Pode me informar sobre minha reserva [#34567](booking_id)?
+      - Preciso de detalhes sobre minha próxima estadia
+      - Qual é o status da minha reserva em nome de [Fernandes](guest_name)?
+      - Verificar reserva [#BC9876](booking_id)
+      - Pode confirmar minha reserva para [próxima sexta-feira](check_date)?
+      - Gostaria de saber se minha reserva está confirmada
+      - Mostre-me os detalhes da minha reserva
+      - Preciso verificar meu tipo de quarto para a reserva [#ZX5432](booking_id)
+      - Que quarto eu reservei para o [Natal](check_date)?
+      - Confirme os detalhes da minha reserva, por favor
+
+  # ==================== HOTEL INFORMATION ====================
+  - intent: hotel_info
+    examples: |
+      - Conte-me sobre seu hotel
+      - Quais serviços vocês oferecem?
+      - Vocês têm [piscina](hotel_amenity)?
+      - Há [wifi gratuito](hotel_amenity)?
+      - Fale-me sobre o [restaurante](hotel_amenity) do seu hotel
+      - A que horas é servido o [café da manhã](meal_type)?
+      - Vocês têm [academia](hotel_amenity)?
+      - Informações sobre [estacionamento](hotel_amenity) no hotel
+      - Há um [spa](hotel_amenity) no hotel?
+      - Quais são os horários de [check-in](process) e [check-out](process)?
+      - Vocês oferecem [serviço de quarto](service)?
+      - Fale-me sobre suas [salas de conferência](hotel_amenity)
+
+  - intent: room_info
+    examples: |
+      - Que tipos de quarto vocês têm?
+      - Conte-me sobre suas [suítes](room_type)
+      - O que está incluído no [quarto padrão](room_type)?
+      - Os quartos têm [ar condicionado](room_feature)?
+      - Qual é a diferença entre quartos [deluxe](room_type) e [padrão](room_type)?
+      - Vocês têm quartos com [vista para o mar](room_feature)?
+      - Existem [quartos comunicantes](room_feature) disponíveis?
+      - Vocês têm quartos com [banheiras](room_feature)?
+      - Conte-me sobre a [suíte presidencial](room_type)
+      - Há [frigobar](room_feature) nos quartos?
+      - Vocês têm quartos [não-fumantes](room_feature)?
+      - Quais comodidades estão em seus [quartos familiares](room_type)?
+
+  # ==================== PRICING & PAYMENT ====================
+  - intent: price_info
+    examples: |
+      - Quanto custa um [quarto duplo](room_type)?
+      - Qual é o preço para o [próximo fim de semana](check_date)?
+      - Conte-me sobre suas tarifas para [agosto](check_date)
+      - Qual é a diferença de preço entre [padrão](room_type) e [deluxe](room_type)?
+      - Vocês têm tarifas especiais para [reservas corporativas](booking_type)?
+      - Quanto custa por [5 noites](duration) em [julho](check_date)?
+      - Preço para um [quarto individual](room_type) com [café da manhã](service)
+      - Existem descontos para [estadias longas](duration)?
+      - Qual é o custo total para [2 adultos](guests) e [1 criança](guests)?
+      - Vocês oferecem [pacotes de fim de semana](offer)?
+      - Qual é o preço do seu [especial de verão](offer)?
+      - Custo para quarto com opção [all-inclusive](service)
+
+  - intent: payment_info
+    examples: |
+      - Como posso pagar pela minha reserva?
+      - Vocês aceitam [cartões de crédito](payment_method)?
+      - Posso pagar usando [PayPal](payment_method)?
+      - É necessário um [depósito](payment_type)?
+      - Vocês oferecem [cancelamento gratuito](policy)?
+      - Qual é a [política de reembolso](policy) de vocês?
+      - Quando meu [cartão de crédito](payment_method) será cobrado?
+      - Posso pagar quando fizer o [check-in](process)?
+      - Vocês precisam de um [cartão de crédito](payment_method) para garantir a reserva?
+      - Posso [dividir a conta](payment_option) para vários quartos?
+      - Vocês aceitam pagamentos em [dinheiro](payment_method)?
+      - Qual é a política de vocês sobre [pré-autorização](payment_type)?
+
+  # ==================== LOCATION & TRANSPORTATION ====================
+  - intent: location_info
+    examples: |
+      - Onde está localizado o seu hotel?
+      - Como eu chego ao hotel do [aeroporto](location)?
+      - Vocês ficam perto do [centro da cidade](location)?
+      - Qual é o endereço do hotel?
+      - Quão longe é o hotel do [centro](location)?
+      - O hotel fica próximo a [atrações turísticas](location)?
+      - Podem me enviar direções para o hotel?
+      - Vocês estão perto de algum [transporte público](transport_type)?
+      - Quão longe é a [estação de trem](location) do hotel?
+      - A [praia](location) fica a uma distância que se pode ir a pé?
+      - O que há no bairro ao redor do hotel?
+      - Quão longe é até o [shopping center](location) mais próximo?
+
+  - intent: transportation_info
+    examples: |
+      - Vocês oferecem [traslado do aeroporto](service)?
+      - Há [estacionamento](service) no hotel?
+      - Quanto custa o [estacionamento](service)?
+      - Podem providenciar [serviço de táxi](service) para mim?
+      - Existe [transporte público](transport_type) perto do hotel?
+      - Como eu chego ao [centro](location) do hotel?
+      - Eu preciso [alugar um carro](transport_type)?
+      - O hotel pode organizar [transporte](service) para [locais turísticos](location)?
+      - Há [serviço de manobrista](service) disponível?
+      - Com que frequência é o [serviço de traslado](service) para o [aeroporto](location)?
+      - Vocês têm [aluguel de bicicletas](service)?
+      - Qual é a melhor maneira de se locomover na área?
+
+  # ==================== SPECIAL REQUESTS ====================
+  - intent: special_request
+    examples: |
+      - Preciso de um [quarto para pessoas com deficiência](accessibility)
+      - Posso solicitar um [check-out tardio](process)?
+      - Eu gostaria de um quarto em um [andar alto](room_preference)
+      - Preciso de um [berço](room_feature) no meu quarto
+      - Pedido de [travesseiros extras](room_feature)
+      - Vocês permitem [animais de estimação](policy)?
+      - Preciso de um [quarto silencioso](room_preference) longe dos elevadores
+      - Posso ter uma [surpresa de aniversário](special_service) organizada?
+      - Preciso de uma [chamada de despertar](service) às [6h](time)
+      - Pedido de [roupa de cama hipoalergênica](room_feature)
+      - Podem organizar [flores](special_service) no quarto?
+      - Preciso de [check-in antecipado](process) por volta das [10h](time)
+
+  - intent: food_drink_request
+    examples: |
+      - Que horas abre o [restaurante](hotel_amenity)?
+      - Vocês servem [opções vegetarianas](diet_restriction)?
+      - Tenho [alergias alimentares](diet_restriction), vocês podem acomodar?
+      - Preciso reservar uma mesa no seu [restaurante](hotel_amenity)
+      - O que tem no cardápio do [café da manhã](meal_type)?
+      - Vocês têm um [bar](hotel_amenity) no hotel?
+      - Posso receber [serviço de quarto](service) à [meia-noite](time)?
+      - Vocês oferecem refeições [sem glúten](diet_restriction)?
+      - Quais são os horários do [jantar](meal_type)?
+      - Posso pedir [champanhe](beverage) para meu quarto?
+      - Vocês têm [opções halal](diet_restriction)?
+      - Informações sobre seu plano de refeições [all-inclusive](service)
+
+  # ==================== GENERAL CONVERSATION ====================
+  - intent: greet
+    examples: |
+      - olá
+      - oi
+      - e aí
+      - bom dia
+      - boa tarde
+      - boa noite
+      - oi tudo bem
+      - olá tudo bem
+      - como vai
+      - oi pessoal
+      - saudações
+      - e aí beleza
+
+  - intent: goodbye
+    examples: |
+      - tchau
+      - adeus
+      - até mais
+      - até logo
+      - tenha um bom dia
+      - se cuide
+      - tchau tchau
+      - obrigado, tchau
+      - até a próxima
+      - passar bem
+      - tenha um bom dia
+      - até a próxima vez
+
+  - intent: thank
+    examples: |
+      - obrigado
+      - valeu
+      - muito obrigado
+      - agradeço
+      - eu aprecio isso
+      - obrigado pela ajuda
+      - obrigado pela informação
+      - isso é útil, obrigado
+      - muito agradecido
+      - ótimo, obrigado
+      - perfeito, obrigado
+      - incrível, obrigado
+
+  - intent: affirm
+    examples: |
+      - sim
+      - sim por favor
+      - claro
+      - com certeza
+      - correto
+      - está certo
+      - absolutamente
+      - de fato
+      - isso funciona
+      - certo
+      - ok
+      - claro que sim
+      - parece bom
+      - eu concordo
+
+  - intent: deny
+    examples: |
+      - não
+      - não obrigado
+      - na verdade não
+      - nem pensar
+      - não faça isso
+      - acho que não
+      - não tenho interesse
+      - absolutamente não
+      - de jeito nenhum
+      - agora não
+      - eu discordo
+      - eu não quero isso
+      - não está correto
+      - isso está errado
+
+  - intent: out_of_scope
+    examples: |
+      - Pode me falar sobre o clima?
+      - Quero pedir uma pizza
+      - Como está a bolsa de valores hoje?
+      - Conte uma piada
+      - Quem é o presidente?
+      - Pode me reservar um voo?
+      - Me ajude com minha lição de casa
+      - Quais filmes estão passando?
+      - Traduza isso para francês
+      - Pode tocar música?
+      - Quanto é 2+2?
+      - Conte-me sua história de vida

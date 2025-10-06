@@ -1,0 +1,190 @@
+"""
+Dominio de Rasa NLU mejorado con soporte multilingüe
+Incluye intenciones, entidades y respuestas en español, inglés y portugués
+"""
+
+version: "3.1"
+
+intents:
+  # ==================== DISPONIBILIDAD Y RESERVAS ====================
+  - check_availability
+  - make_reservation
+  - cancel_reservation
+  - modify_reservation
+  
+  # ==================== PRECIOS Y TIPOS DE HABITACIÓN ====================
+  - ask_price
+  - ask_room_types
+  
+  # ==================== SERVICIOS Y UBICACIÓN ====================
+  - ask_amenities
+  - ask_services
+  - ask_location
+  - ask_policies
+  
+  # ==================== CONVERSACIONAL ====================
+  - greeting
+  - goodbye
+  - affirm
+  - deny
+  - help
+  - out_of_scope
+  
+  # ==================== NUEVAS INTENCIONES ====================
+  - ask_payment_methods
+  - ask_transportation
+  - ask_activities
+  - ask_weather
+  - ask_special_requests
+  - ask_covid_measures
+  - ask_wifi_password
+
+entities:
+  # ==================== ENTIDADES TEMPORALES ====================
+  - check_in_date
+  - check_out_date
+  - duration_stay
+  - check_in_time
+  - check_out_time
+  
+  # ==================== ENTIDADES DE RESERVA ====================
+  - num_guests
+  - num_adults
+  - num_children
+  - child_age
+  - room_type
+  - reservation_code
+  
+  # ==================== ENTIDADES DE PAGO ====================
+  - payment_method
+  - currency
+  - amount
+  - deposit_amount
+  
+  # ==================== SERVICIOS Y PREFERENCIAS ====================
+  - amenity
+  - bed_type
+  - meal_plan
+  - special_request
+  - location_reference
+  - transportation_type
+  - activity
+
+slots:
+  check_in_date:
+    type: text
+    mappings:
+    - type: from_entity
+      entity: check_in_date
+      
+  check_out_date:
+    type: text
+    mappings:
+    - type: from_entity
+      entity: check_out_date
+      
+  num_guests:
+    type: float
+    mappings:
+    - type: from_entity
+      entity: num_guests
+      
+  room_type:
+    type: categorical
+    values:
+      - standard
+      - superior
+      - deluxe
+      - suite
+      - suite_junior
+      - suite_presidencial
+      - individual
+      - doble
+      - triple
+      - familiar
+    mappings:
+    - type: from_entity
+      entity: room_type
+      
+  reservation_code:
+    type: text
+    mappings:
+    - type: from_entity
+      entity: reservation_code
+      
+  payment_method:
+    type: categorical
+    values:
+      - credit_card
+      - debit_card
+      - cash
+      - bank_transfer
+      - paypal
+    mappings:
+    - type: from_entity
+      entity: payment_method
+      
+  language:
+    type: categorical
+    values:
+      - es
+      - en
+      - pt
+    mappings:
+    - type: from_text
+      intent: [greeting]
+    influence_conversation: true
+
+# Respuestas para cada idioma
+responses:
+  utter_greet:
+    - text: "¡Hola! Bienvenido al Hotel Sunset. ¿En qué puedo ayudarte?"
+      language: es
+    - text: "Hello! Welcome to Hotel Sunset. How may I assist you today?"
+      language: en
+    - text: "Olá! Bem-vindo ao Hotel Sunset. Como posso ajudá-lo hoje?"
+      language: pt
+
+  utter_ask_check_in_date:
+    - text: "¿Para qué fecha deseas reservar?"
+      language: es
+    - text: "What date would you like to check in?"
+      language: en
+    - text: "Para qual data você gostaria de reservar?"
+      language: pt
+
+  utter_ask_num_guests:
+    - text: "¿Cuántas personas se hospedarán?"
+      language: es
+    - text: "How many guests will be staying?"
+      language: en
+    - text: "Quantas pessoas vão se hospedar?"
+      language: pt
+
+  utter_confirm_availability:
+    - text: "Tenemos disponibilidad para {check_in_date} al {check_out_date} para {num_guests} personas. ¿Deseas proceder con la reserva?"
+      language: es
+    - text: "We have availability from {check_in_date} to {check_out_date} for {num_guests} guests. Would you like to proceed with the booking?"
+      language: en
+    - text: "Temos disponibilidade de {check_in_date} a {check_out_date} para {num_guests} pessoas. Gostaria de fazer a reserva?"
+      language: pt
+
+  utter_goodbye:
+    - text: "¡Gracias por contactarnos! Si necesitas algo más, no dudes en escribirnos."
+      language: es
+    - text: "Thank you for contacting us! If you need anything else, don't hesitate to reach out."
+      language: en
+    - text: "Obrigado por entrar em contato! Se precisar de mais alguma coisa, não hesite em nos escrever."
+      language: pt
+
+  utter_default:
+    - text: "Lo siento, no he entendido. ¿Podrías reformular tu consulta?"
+      language: es
+    - text: "I'm sorry, I didn't understand. Could you rephrase your question?"
+      language: en
+    - text: "Desculpe, não entendi. Você poderia reformular sua pergunta?"
+      language: pt
+
+session_config:
+  session_expiration_time: 60  # Sesión expira después de 60 minutos
+  carry_over_slots_to_new_session: true  # Mantener slots entre sesiones

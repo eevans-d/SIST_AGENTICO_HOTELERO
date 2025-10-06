@@ -51,29 +51,55 @@ class Orchestrator:
             
             # Graceful degradation: Si NLP falla, usar reglas básicas
             try:
-                nlp_result = await self.nlp_engine.process_message(text)
+                # Detect language from the message if not specified
+                detected_language = await self.nlp_engine.detect_language(text)
+                
+                # Process message with detected/specified language
+                nlp_result = await self.nlp_engine.process_message(text, language=detected_language)
                 intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+                
+                # Store language info in session for continuity
+                message.metadata["detected_language"] = detected_language
+                
             except Exception as nlp_error:
                 logger.warning(f"NLP failed, using rule-based fallback: {nlp_error}")
                 metrics_service.record_nlp_fallback("nlp_service_failure")
                 nlp_fallbacks.inc()
                 
-                # Reglas básicas de fallback
+                # Language detection fallback for rule-based matching
+                detected_language = await self.nlp_engine.detect_language(text)
+                message.metadata["detected_language"] = detected_language
+                
+                # Reglas básicas de fallback (multilingual)
                 text_lower = text.lower()
-                if any(word in text_lower for word in ["disponibilidad", "disponible", "habitacion", "cuarto"]):
+                if any(word in text_lower for word in [
+                    "disponibilidad", "disponible", "habitacion", "cuarto",  # Spanish
+                    "availability", "available", "room", "rooms",             # English
+                    "disponibilidade", "quarto", "quartos"                    # Portuguese
+                ]):
                     intent_name = "check_availability"
-                    nlp_result = {"intent": {"name": "check_availability", "confidence": 0.5}, "entities": []}
-                elif any(word in text_lower for word in ["reservar", "reserva", "reservacion", "booking"]):
+                    nlp_result = {"intent": {"name": "check_availability", "confidence": 0.5}, "entities": [], "language": detected_language}
+                elif any(word in text_lower for word in [
+                    "reservar", "reserva", "reservacion",     # Spanish
+                    "book", "booking", "reserve", "reservation",  # English
+                    "reservar", "reserva"                     # Portuguese
+                ]):
                     intent_name = "make_reservation"
-                    nlp_result = {"intent": {"name": "make_reservation", "confidence": 0.5}, "entities": []}
-                elif any(word in text_lower for word in ["precio", "costo", "tarifa", "valor"]):
+                    nlp_result = {"intent": {"name": "make_reservation", "confidence": 0.5}, "entities": [], "language": detected_language}
+                elif any(word in text_lower for word in [
+                    "precio", "costo", "tarifa", "valor",     # Spanish
+                    "price", "cost", "rate", "pricing",      # English
+                    "preço", "custo", "tarifa"               # Portuguese
+                ]):
                     intent_name = "pricing_info"
-                    nlp_result = {"intent": {"name": "pricing_info", "confidence": 0.5}, "entities": []}
+                    nlp_result = {"intent": {"name": "pricing_info", "confidence": 0.5}, "entities": [], "language": detected_language}
                 else:
                     intent_name = "unknown"
-                    nlp_result = {"intent": {"name": "unknown", "confidence": 0.0}, "entities": []}
+                    nlp_result = {"intent": {"name": "unknown", "confidence": 0.0}, "entities": [], "language": detected_language}
+                    
+                    # Return multilingual error message
                     return {
-                        "response": "Disculpa, estoy teniendo problemas técnicos. ¿Puedes decirme si quieres: consultar disponibilidad, hacer una reserva, o información de precios?"
+                        "response": self._get_technical_error_message(detected_language)
                     }
             
             # Métrica de negocio: registrar intent detectado
@@ -88,12 +114,16 @@ class Orchestrator:
             enhanced_fallback = await ff_service.is_enabled("nlp.fallback.enhanced", default=True)
             # Registrar categoría de confianza
             metrics_service.record_nlp_confidence(confidence)
+            
+            # Get language from NLP result or message metadata
+            response_language = nlp_result.get("language", message.metadata.get("detected_language", "es"))
+            
             if enhanced_fallback and confidence < 0.45:
                 # Respuesta de bajo nivel de confianza agresiva
                 metrics_service.record_nlp_fallback("very_low_confidence")
                 nlp_fallbacks.inc()  # Métrica de negocio: fallback detectado
                 return {
-                    "response": "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: disponibilidad, precios, información del hotel?"
+                    "response": self._get_low_confidence_message(response_language)
                 }
             elif enhanced_fallback and confidence < 0.75:
                 message.metadata["low_confidence"] = True
@@ -159,6 +189,58 @@ class Orchestrator:
 
         else:
             return "No entendí tu consulta. ¿Podrías reformularla?"
+    
+    def _get_technical_error_message(self, language: str = "es") -> str:
+        """
+        Return technical error message in the appropriate language.
+        
+        Args:
+            language: ISO language code (es, en, pt)
+            
+        Returns:
+            Localized error message
+        """
+        if language == "en":
+            return (
+                "Sorry, I'm having technical issues. Can you tell me if you want to: "
+                "check availability, make a reservation, or get pricing information?"
+            )
+        elif language == "pt":
+            return (
+                "Desculpe, estou com problemas técnicos. Você pode me dizer se quer: "
+                "verificar disponibilidade, fazer uma reserva ou obter informações de preços?"
+            )
+        else:  # Spanish (default)
+            return (
+                "Disculpa, estoy teniendo problemas técnicos. ¿Puedes decirme si quieres: "
+                "consultar disponibilidad, hacer una reserva, o información de precios?"
+            )
+    
+    def _get_low_confidence_message(self, language: str = "es") -> str:
+        """
+        Return low confidence clarification message in the appropriate language.
+        
+        Args:
+            language: ISO language code (es, en, pt)
+            
+        Returns:
+            Localized clarification message
+        """
+        if language == "en":
+            return (
+                "I'm not sure I understood. Can you rephrase or choose an option: "
+                "availability, pricing, hotel information?"
+            )
+        elif language == "pt":
+            return (
+                "Não tenho certeza se entendi. Você pode reformular ou escolher uma opção: "
+                "disponibilidade, preços, informações do hotel?"
+            )
+        else:  # Spanish (default)
+            return (
+                "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: "
+                "disponibilidad, precios, información del hotel?"
+            )
 
 
 # Prometheus metrics (module-level)
