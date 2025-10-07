@@ -19,6 +19,7 @@ from ..exceptions.audio_exceptions import (
     AudioValidationError
 )
 from .audio_metrics import AudioMetrics
+from .audio_cache_service import AudioCacheService
 
 
 class WhisperSTT:
@@ -299,6 +300,7 @@ class AudioProcessor:
     def __init__(self):
         self.stt = WhisperSTT()
         self.tts = ESpeakTTS()
+        self.cache = AudioCacheService()
         self._temp_files_cleanup_timeout = 300  # 5 minutos
 
     @asynccontextmanager
@@ -489,21 +491,50 @@ class AudioProcessor:
                 "total_processing_time": total_time
             }
 
-    async def generate_audio_response(self, text: str) -> Optional[bytes]:
+    async def generate_audio_response(self, text: str, content_type: Optional[str] = None) -> Optional[bytes]:
         """
-        Genera respuesta de audio con manejo seguro de archivos temporales.
+        Genera respuesta de audio con manejo de caché y archivos temporales seguros.
+        
+        Args:
+            text: Texto a convertir en audio
+            content_type: Tipo de contenido para determinar estrategias de caché
         """
         if not settings.audio_enabled:
             logger.info("Audio processing disabled, TTS unavailable")
             return None
-            
+        
+        # Intentar obtener desde caché primero
+        cached_audio = await self.cache.get(text, voice=self.tts.voice, content_type=content_type)
+        if cached_audio:
+            audio_data, metadata = cached_audio
+            logger.info(f"Audio cache hit for text: '{text[:50]}...' (hits: {metadata.get('hits', 0)})")
+            AudioMetrics.record_cache_operation("get", "hit")
+            return audio_data
+        
+        AudioMetrics.record_cache_operation("get", "miss")
+        
         try:
+            # Generar audio usando TTS
             audio_data = await self.tts.synthesize(text)
             
             if audio_data:
+                # Guardar en caché para uso futuro
+                await self.cache.set(
+                    text=text,
+                    audio_data=audio_data,
+                    voice=self.tts.voice,
+                    content_type=content_type,
+                    metadata={
+                        "created_at": time.time(),
+                        "size_bytes": len(audio_data),
+                        "tts_engine": "espeak",
+                        "voice": self.tts.voice
+                    }
+                )
+                
                 AudioMetrics.record_operation("audio_response_generation", "success")
                 AudioMetrics.record_file_size("generated_audio", len(audio_data))
-                logger.info(f"Generated audio response: {len(audio_data)} bytes for text: '{text[:50]}...'")
+                logger.info(f"Generated and cached audio response: {len(audio_data)} bytes for text: '{text[:50]}...'")
             else:
                 AudioMetrics.record_operation("audio_response_generation", "failed")
                 logger.warning("TTS synthesis returned no data")
@@ -515,3 +546,32 @@ class AudioProcessor:
             AudioMetrics.record_operation("audio_response_generation", "error")
             AudioMetrics.record_error("audio_response_generation_failed")
             return None
+    
+    async def get_cache_stats(self) -> dict:
+        """
+        Obtiene estadísticas de la caché de audio.
+        """
+        return await self.cache.get_stats()
+    
+    async def clear_audio_cache(self) -> int:
+        """
+        Limpia la caché de audio.
+        
+        Returns:
+            Número de entradas eliminadas
+        """
+        return await self.cache.clear_cache()
+    
+    async def remove_from_cache(self, text: str, voice: Optional[str] = None) -> bool:
+        """
+        Elimina una entrada específica de la caché.
+        
+        Args:
+            text: Texto de la entrada a eliminar
+            voice: Voz específica (usa la actual si no se especifica)
+        
+        Returns:
+            True si se eliminó la entrada, False si no existía
+        """
+        voice_to_use = voice or self.tts.voice
+        return await self.cache.delete(text, voice_to_use)

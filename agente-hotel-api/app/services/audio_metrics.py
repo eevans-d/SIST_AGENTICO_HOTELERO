@@ -39,6 +39,23 @@ audio_file_size_bytes = Histogram(
     buckets=[1024, 10240, 102400, 1048576, 10485760]  # 1KB to 10MB
 )
 
+# Métricas específicas para cache
+audio_cache_operations_total = Counter(
+    'audio_cache_operations_total',
+    'Total number of audio cache operations',
+    ['operation', 'result']
+)
+
+audio_cache_size_entries = Gauge(
+    'audio_cache_size_entries',
+    'Number of entries in audio cache'
+)
+
+audio_cache_memory_bytes = Gauge(
+    'audio_cache_memory_bytes',
+    'Memory used by audio cache in bytes'
+)
+
 
 class AudioMetrics:
     """
@@ -74,3 +91,18 @@ class AudioMetrics:
     def record_file_size(file_type: str, size: int):
         """Record audio file size"""
         audio_file_size_bytes.labels(file_type=file_type).observe(size)
+    
+    @staticmethod
+    def record_cache_operation(operation: str, result: str):
+        """Record audio cache operation"""
+        audio_cache_operations_total.labels(operation=operation, result=result).inc()
+    
+    @staticmethod
+    def update_cache_size(entries: int):
+        """Update cache size in entries"""
+        audio_cache_size_entries.set(entries)
+    
+    @staticmethod
+    def update_cache_memory(bytes_used: int):
+        """Update cache memory usage"""
+        audio_cache_memory_bytes.set(bytes_used)

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi import HTTPException
 from ..services.dynamic_tenant_service import dynamic_tenant_service
+from ..services.audio_processor import AudioProcessor
 from ..models.tenant import Tenant, TenantUserIdentifier
 from ..core.database import AsyncSessionFactory
 from sqlalchemy import select
@@ -104,7 +105,42 @@ async def update_tenant_status(tenant_id: str, body: dict):
         tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
-        tenant.status = status
+        tenant.status = status  # type: ignore[assignment]
         await session.commit()
     await dynamic_tenant_service.refresh()
     return {"status": "updated", "tenant_id": tenant_id, "new_status": status}
+
+
+# Endpoints para gestión de caché de audio
+@router.get("/audio-cache/stats")
+@limit("60/minute")
+async def get_audio_cache_stats(request: Request):
+    """Obtiene estadísticas de la caché de audio."""
+    audio_processor = AudioProcessor()
+    return await audio_processor.get_cache_stats()
+
+
+@router.delete("/audio-cache")
+@limit("10/minute")
+async def clear_audio_cache(request: Request):
+    """Limpia toda la caché de audio."""
+    audio_processor = AudioProcessor()
+    deleted_count = await audio_processor.clear_audio_cache()
+    return {
+        "status": "cache_cleared",
+        "deleted_entries": deleted_count
+    }
+
+
+@router.delete("/audio-cache/entry")
+@limit("30/minute")
+async def remove_cache_entry(request: Request, text: str, voice: str = "default"):
+    """Elimina una entrada específica de la caché."""
+    audio_processor = AudioProcessor()
+    removed = await audio_processor.remove_from_cache(text, voice)
+    return {
+        "status": "entry_removed" if removed else "entry_not_found",
+        "text": text,
+        "voice": voice,
+        "removed": removed
+    }

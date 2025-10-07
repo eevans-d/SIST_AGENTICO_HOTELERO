@@ -297,7 +297,9 @@ class Orchestrator:
             if respond_with_audio:
                 try:
                     # Generar audio con el texto de respuesta
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    audio_data = await self.audio_processor.generate_audio_response(
+                        response_text, content_type="availability_response"
+                    )
                     
                     if audio_data:
                         logger.info("Generated audio response for availability check", 
@@ -352,7 +354,9 @@ class Orchestrator:
             if message.tipo == "audio":
                 try:
                     # Generar respuesta de audio
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    audio_data = await self.audio_processor.generate_audio_response(
+                        response_text, content_type="reservation_instructions"
+                    )
                     
                     if audio_data:
                         logger.info("Generated audio response for reservation instructions",
@@ -383,7 +387,9 @@ class Orchestrator:
             if message.tipo == "audio":
                 try:
                     # Generar respuesta de audio
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    audio_data = await self.audio_processor.generate_audio_response(
+                        response_text, content_type="hotel_location"
+                    )
                     
                     if audio_data is None:
                         # Si no se pudo generar audio, responder solo con ubicación
@@ -445,7 +451,9 @@ class Orchestrator:
                     )
                     
                     # Generar respuesta de audio
-                    audio_data = await self.audio_processor.generate_audio_response(audio_text)
+                    audio_data = await self.audio_processor.generate_audio_response(
+                        audio_text, content_type="room_options"
+                    )
                     
                     if audio_data:
                         logger.info("Generated audio response for room options",
