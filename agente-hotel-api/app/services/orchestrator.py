@@ -502,6 +502,151 @@ class Orchestrator:
                         "emoji": self.template_service.get_reaction("payment_received")
                     }
                 }
+        
+        elif intent == "guest_services":
+            # Información sobre servicios para huéspedes
+            response_text = self.template_service.get_response("guest_services")
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for guest services inquiry",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for guest services: {e}")
+            
+            # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+            
+        elif intent == "hotel_amenities":
+            # Información sobre amenidades del hotel
+            response_text = self.template_service.get_response("hotel_amenities")
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for hotel amenities inquiry",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for hotel amenities: {e}")
+            
+            # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+            
+        elif intent == "check_in_info":
+            # Información sobre proceso de check-in
+            response_text = self.template_service.get_response("check_in_info")
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for check-in info",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for check-in info: {e}")
+            
+            # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+            
+        elif intent == "check_out_info":
+            # Información sobre proceso de check-out
+            response_text = self.template_service.get_response("check_out_info")
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for check-out info",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for check-out info: {e}")
+            
+            # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+            
+        elif intent == "cancellation_policy":
+            # Información sobre política de cancelación
+            response_text = self.template_service.get_response("cancellation_policy")
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for cancellation policy",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for cancellation policy: {e}")
+            
+            # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
             
         # Si llegamos aquí, devolver respuesta por defecto
         default_text = "No entendí tu consulta. ¿Podrías reformularla?"

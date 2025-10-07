@@ -1,0 +1,181 @@
+# Docker Compose para ambiente de Staging
+# Este archivo extiende la configuración base con ajustes específicos para staging
+
+version: '3.8'
+
+services:
+  agente-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_ENV=staging
+    image: agente-hotel-api:staging
+    container_name: agente-api-staging
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=staging
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      # Base de datos
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-agente_hotel}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_password}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # PMS
+      - PMS_TYPE=qloapps
+      - PMS_BASE_URL=${PMS_BASE_URL}
+      - PMS_API_KEY=${PMS_API_KEY}
+      - PMS_HOTEL_ID=${PMS_HOTEL_ID:-1}
+      - CHECK_PMS_IN_READINESS=true
+      # WhatsApp
+      - WHATSAPP_API_VERSION=v18.0
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+    networks:
+      - frontend_network
+      - backend_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres-staging
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-agente_hotel}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Puerto diferente para evitar conflictos
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-staging
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"  # Puerto diferente para evitar conflictos
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-staging
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9091:9090"  # Puerto diferente para evitar conflictos
+    networks:
+      - backend_network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-staging
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_DOMAIN=staging.agente-hotel.com
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"  # Puerto diferente para evitar conflictos
+    networks:
+      - backend_network
+      - frontend_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager-staging
+    volumes:
+      - ./docker/alertmanager/config.yml:/etc/alertmanager/config.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9094:9093"  # Puerto diferente para evitar conflictos
+    networks:
+      - backend_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Nginx para exponer los servicios con SSL
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-staging
+    volumes:
+      - ./nginx/sites-enabled:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+    ports:
+      - "8443:443"  # Puerto diferente para evitar conflictos
+    networks:
+      - frontend_network
+    depends_on:
+      - agente-api
+      - grafana
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: postgres_data_staging
+  redis_data:
+    name: redis_data_staging
+  prometheus_data:
+    name: prometheus_data_staging
+  grafana_data:
+    name: grafana_data_staging
+  alertmanager_data:
+    name: alertmanager_data_staging
+
+networks:
+  frontend_network:
+    name: frontend_network_staging
+  backend_network:
+    name: backend_network_staging

@@ -162,6 +162,54 @@ Se han agregado pruebas para verificar:
 3. **Mensajes de seguimiento**: Patrón para combinar audio con otros tipos de mensajes
 4. **Consistencia**: Mantener una experiencia coherente en toda la conversación
 
+### Intents Adicionales con Soporte de Audio (Expansión Continua)
+
+Como parte del desarrollo continuo, se han agregado más intents con soporte completo de audio:
+
+#### 4. `guest_services`
+
+- **Tipo de Respuesta**: `audio` o `text`
+- **Comportamiento**: Proporciona información sobre servicios para huéspedes (WiFi, desayuno, limpieza, etc.)
+- **Patrón**: Responde con audio cuando recibe mensaje de voz, texto para mensajes escritos
+
+#### 5. `hotel_amenities`
+
+- **Tipo de Respuesta**: `audio` o `text`
+- **Comportamiento**: Información sobre amenidades del hotel (piscina, gimnasio, restaurante, etc.)
+- **Patrón**: Responde con audio cuando recibe mensaje de voz, texto para mensajes escritos
+
+#### 6. `check_in_info`
+
+- **Tipo de Respuesta**: `audio` o `text`
+- **Comportamiento**: Información sobre el proceso de check-in (horarios, documentos necesarios)
+- **Patrón**: Responde con audio cuando recibe mensaje de voz, texto para mensajes escritos
+
+#### 7. `check_out_info`
+
+- **Tipo de Respuesta**: `audio` o `text`
+- **Comportamiento**: Información sobre el proceso de check-out (horarios, extensiones)
+- **Patrón**: Responde con audio cuando recibe mensaje de voz, texto para mensajes escritos
+
+#### 8. `cancellation_policy`
+
+- **Tipo de Respuesta**: `audio` o `text`
+- **Comportamiento**: Información sobre política de cancelación del hotel
+- **Patrón**: Responde con audio cuando recibe mensaje de voz, texto para mensajes escritos
+
+### Plantillas de Respuesta
+
+Todos estos nuevos intents utilizan plantillas de texto bien estructuradas:
+
+```python
+TEXT_TEMPLATES = {
+    "guest_services": "Nuestros servicios para huéspedes incluyen: WiFi gratuito, desayuno continental de 7:00 a 10:00, servicio de limpieza diario, recepción 24 horas, y servicio de lavandería. ¿Necesitas información específica sobre algún servicio?",
+    "hotel_amenities": "Nuestras amenidades incluyen: piscina al aire libre, gimnasio con equipos modernos, restaurante con comida internacional, bar, centro de negocios, estacionamiento gratuito, y spa con tratamientos relajantes. ¿Te interesa conocer más detalles de alguna?",
+    "check_in_info": "El check-in es a partir de las 15:00 horas. Necesitarás tu documento de identidad y la confirmación de reserva. Si llegas antes, podemos guardar tu equipaje sin costo adicional. ¿Tienes alguna consulta específica?",
+    "check_out_info": "El check-out es hasta las 12:00 horas. Puedes solicitar extensión hasta las 14:00 por un cargo adicional del 50% de la tarifa diaria. También ofrecemos servicio de guardado de equipaje si tu vuelo es más tarde.",
+    "cancellation_policy": "Nuestra política de cancelación permite cancelación gratuita hasta 24 horas antes del check-in. Cancelaciones posteriores tienen un cargo del 50% de la primera noche. Para reservas no reembolsables, no se permiten cancelaciones."
+}
+```
+
 ## Consideraciones Futuras
 
 - Añadir soporte para otras respuestas combinadas como "audio_with_image" o "audio_with_buttons"

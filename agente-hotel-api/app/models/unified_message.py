@@ -10,9 +10,9 @@ class UnifiedMessage:
     canal: str  # "whatsapp" | "gmail"
     user_id: str  # teléfono o email
     timestamp_iso: str
-    tipo: str  # "text" | "audio" | "image"
+    tipo: str  # "text" | "audio" | "image" | "interactive" | "location" | "reaction"
     texto: Optional[str]
     media_url: Optional[str] = None
-    metadata: dict = field(default_factory=dict)  # confidence_stt, duration_sec
+    metadata: dict = field(default_factory=dict)  # confidence_stt, duration_sec, interactive_data
     # Groundwork multi-tenant (opcional, no obligatorio en fase actual)
     tenant_id: Optional[str] = None

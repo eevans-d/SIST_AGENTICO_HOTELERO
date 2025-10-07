@@ -3,7 +3,7 @@
 import hashlib
 import hmac
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import httpx
 import structlog
@@ -19,6 +19,7 @@ from ..exceptions.whatsapp_exceptions import (
     WhatsAppWebhookError,
     WhatsAppNetworkError,
 )
+from ..services.audio_processor import AudioProcessor
 
 logger = structlog.get_logger(__name__)
 
@@ -80,6 +81,7 @@ class WhatsAppMetaClient:
         )
         
         self.client = httpx.AsyncClient(timeout=timeout_config, limits=limits)
+        self.audio_processor = AudioProcessor()
         
         logger.info("whatsapp.client.initialized", phone_number_id=self.phone_number_id)
 
@@ -331,13 +333,14 @@ class WhatsAppMetaClient:
             
             media_bytes = download_response.content
             media_size = len(media_bytes)
+            content_type = download_response.headers.get("content-type")
             
             whatsapp_media_downloads.labels(status="success").inc()
             logger.info(
                 "whatsapp.download_media.success",
                 media_id=media_id,
                 size_bytes=media_size,
-                content_type=download_response.headers.get("content-type")
+                content_type=content_type
             )
             
             return media_bytes
@@ -415,6 +418,85 @@ class WhatsAppMetaClient:
         
         return is_valid
 
+    async def process_audio_message(self, media_id: str) -> Dict[str, Any]:
+        """
+        Procesa un mensaje de audio recibido, descargándolo y transcribiéndolo.
+        
+        Args:
+            media_id: ID del archivo de audio de WhatsApp
+            
+        Returns:
+            Diccionario con los resultados de la transcripción:
+                - text: Texto transcrito
+                - confidence: Nivel de confianza (0.0-1.0)
+                - success: Si fue exitoso
+                - language: Idioma detectado
+                - error: Mensaje de error (si ocurrió)
+        """
+        logger.info("whatsapp.process_audio_message.start", media_id=media_id)
+        
+        try:
+            # Descargar el audio desde WhatsApp
+            audio_bytes = await self.download_media(media_id)
+            
+            if not audio_bytes:
+                logger.warning("whatsapp.process_audio_message.no_audio", media_id=media_id)
+                return {
+                    "text": "",
+                    "confidence": 0.0,
+                    "success": False,
+                    "error": "No se pudo descargar el audio",
+                    "language": "unknown"
+                }
+            
+            # Crear una URL temporal para pasar al procesador de audio
+            # En producción, podríamos guardar en S3/blob storage y usar esa URL
+            # Para esta implementación, usamos directamente los bytes del audio
+            
+            # Pasar a audio_processor para transcribir
+            from tempfile import NamedTemporaryFile
+            from pathlib import Path
+            import os
+            
+            # Guardar audio en archivo temporal
+            with NamedTemporaryFile(suffix=".ogg", delete=False) as temp_file:
+                temp_path = Path(temp_file.name)
+                temp_file.write(audio_bytes)
+            
+            try:
+                # Convertir a WAV para la transcripción
+                with NamedTemporaryFile(suffix=".wav", delete=False) as wav_file:
+                    wav_path = Path(wav_file.name)
+                
+                await self.audio_processor._convert_to_wav(temp_path, wav_path)
+                
+                # Transcribir
+                transcription = await self.audio_processor.stt.transcribe(wav_path)
+                
+                logger.info("whatsapp.process_audio_message.success", 
+                           media_id=media_id,
+                           text_length=len(transcription["text"]),
+                           confidence=transcription.get("confidence", 0))
+                
+                return transcription
+                
+            finally:
+                # Limpiar archivos temporales
+                if temp_path.exists():
+                    os.unlink(temp_path)
+                if 'wav_path' in locals() and wav_path.exists():
+                    os.unlink(wav_path)
+            
+        except Exception as e:
+            logger.error("whatsapp.process_audio_message.error", media_id=media_id, error=str(e))
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "success": False,
+                "error": str(e),
+                "language": "unknown"
+            }
+        
     def _handle_error_response(
         self,
         status_code: int,
@@ -461,6 +543,399 @@ class WhatsAppMetaClient:
                 context=error_data
             )
 
+    async def send_interactive_message(
+        self,
+        to: str,
+        header_text: Optional[str] = None,
+        body_text: str = "",
+        footer_text: Optional[str] = None,
+        action_buttons: Optional[List[Dict[str, str]]] = None,
+        list_sections: Optional[List[Dict[str, Any]]] = None,
+        list_button_text: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send interactive message with buttons or list.
+        
+        Args:
+            to: Recipient phone number (E.164 format)
+            header_text: Optional header text
+            body_text: Body text (required)
+            footer_text: Optional footer text
+            action_buttons: List of button objects, each with "id" and "title"
+                Example: [{"id": "btn1", "title": "Yes"}, {"id": "btn2", "title": "No"}]
+            list_sections: List of section objects with "title" and "rows" for list messages
+                Example: [{"title": "Section 1", "rows": [{"id": "id1", "title": "Option 1", "description": "Desc 1"}]}]
+            list_button_text: Button text for list messages (e.g., "View options")
+                
+        Returns:
+            API response with message_id
+            
+        Raises:
+            WhatsAppAuthError: Authentication failed
+            WhatsAppRateLimitError: Rate limit exceeded
+            WhatsAppError: Other API errors
+        """
+        endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        # Validate that we have either buttons or list, not both
+        if action_buttons and list_sections:
+            raise ValueError("Cannot send both buttons and list in the same message")
+        
+        # Prepare interactive content
+        interactive = {
+            "type": "button" if action_buttons else "list",
+            "body": {"text": body_text}
+        }
+        
+        # Add optional header
+        if header_text:
+            interactive["header"] = {"type": "text", "text": header_text}
+        
+        # Add optional footer
+        if footer_text:
+            interactive["footer"] = {"text": footer_text}
+        
+        # Add buttons if provided
+        if action_buttons:
+            buttons = []
+            for button in action_buttons:
+                buttons.append({
+                    "type": "reply",
+                    "reply": {
+                        "id": button["id"],
+                        "title": button["title"]
+                    }
+                })
+            interactive["action"] = {"buttons": buttons}
+        
+        # Add list if provided
+        elif list_sections:
+            sections = []
+            for section in list_sections:
+                sections.append({
+                    "title": section["title"],
+                    "rows": section["rows"]
+                })
+            interactive["action"] = {
+                "button": list_button_text or "Ver opciones",
+                "sections": sections
+            }
+        
+        # Prepare payload
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "interactive",
+            "interactive": interactive
+        }
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        logger.info("whatsapp.send_interactive_message.start", 
+                   to=to, 
+                   interactive_type=interactive["type"])
+        
+        try:
+            with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
+                response = await self.client.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                message_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="interactive", status="success").inc()
+                logger.info("whatsapp.send_interactive_message.success", 
+                           to=to, 
+                           message_id=message_id,
+                           interactive_type=interactive["type"])
+                
+                return result
+            
+            # Handle error responses
+            error_data = response.json() if response.text else {}
+            self._handle_error_response(response.status_code, error_data, "send_interactive_message")
+            
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="interactive", status="timeout").inc()
+            logger.error("whatsapp.send_interactive_message.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending interactive message: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="interactive", status="network_error").inc()
+            logger.error("whatsapp.send_interactive_message.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="interactive", status="error").inc()
+            logger.error("whatsapp.send_interactive_message.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+        
+    async def send_audio_message(
+        self,
+        to: str,
+        audio_data: bytes,
+        filename: str = "audio.ogg"
+    ) -> Dict[str, Any]:
+        """
+        Envía un mensaje de audio a un número de WhatsApp.
+        
+        Args:
+            to: Número de teléfono del destinatario (formato E.164)
+            audio_data: Bytes del archivo de audio (OGG con codec Vorbis)
+            filename: Nombre del archivo de audio (debe terminar en .ogg)
+            
+        Returns:
+            Respuesta de la API con message_id
+            
+        Raises:
+            WhatsAppAuthError: Error de autenticación
+            WhatsAppRateLimitError: Límite de tasa excedido
+            WhatsAppError: Otros errores de API
+        """
+        # Paso 1: Subir el archivo a la API de WhatsApp
+        endpoint = f"{self.base_url}/{self.phone_number_id}/media"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "audio/ogg"
+        }
+        
+        logger.info("whatsapp.send_audio_message.start", to=to, filename=filename, size_bytes=len(audio_data))
+        
+        try:
+            # Subir el archivo
+            with whatsapp_api_latency.labels(endpoint="media", method="POST").time():
+                upload_response = await self.client.post(
+                    endpoint,
+                    content=audio_data,
+                    headers=headers,
+                    params={"messaging_product": "whatsapp"}
+                )
+            
+            if upload_response.status_code != 200:
+                error_data = upload_response.json() if upload_response.text else {}
+                self._handle_error_response(upload_response.status_code, error_data, "upload_audio")
+            
+            upload_result = upload_response.json()
+            media_id = upload_result.get("id")
+            
+            if not media_id:
+                whatsapp_messages_sent.labels(type="audio", status="upload_failed").inc()
+                logger.error("whatsapp.send_audio_message.no_media_id", to=to)
+                raise WhatsAppMediaError("No media ID in upload response")
+            
+            # Paso 2: Enviar el mensaje con el ID del medio
+            message_endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+            message_payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "audio",
+                "audio": {"id": media_id}
+            }
+            
+            with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
+                message_response = await self.client.post(
+                    message_endpoint,
+                    json=message_payload,
+                    headers={"Authorization": f"Bearer {self.access_token}"}
+                )
+            
+            if message_response.status_code == 200:
+                result = message_response.json()
+                message_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="audio", status="success").inc()
+                logger.info("whatsapp.send_audio_message.success", to=to, message_id=message_id)
+                
+                return result
+            
+            # Manejar errores
+            error_data = message_response.json() if message_response.text else {}
+            self._handle_error_response(message_response.status_code, error_data, "send_audio_message")
+            
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="audio", status="timeout").inc()
+            logger.error("whatsapp.send_audio_message.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending audio message: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="audio", status="network_error").inc()
+            logger.error("whatsapp.send_audio_message.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="audio", status="error").inc()
+            logger.error("whatsapp.send_audio_message.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+    
+    async def send_location_message(
+        self,
+        to: str,
+        latitude: float,
+        longitude: float,
+        name: Optional[str] = None,
+        address: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send location message to WhatsApp number.
+        
+        Args:
+            to: Recipient phone number (E.164 format)
+            latitude: Location latitude
+            longitude: Location longitude
+            name: Optional location name
+            address: Optional location address
+                
+        Returns:
+            API response with message_id
+            
+        Raises:
+            WhatsAppAuthError: Authentication failed
+            WhatsAppRateLimitError: Rate limit exceeded
+            WhatsAppError: Other API errors
+        """
+        endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        location = {
+            "latitude": latitude,
+            "longitude": longitude
+        }
+        
+        # Add optional fields if provided
+        if name:
+            location["name"] = name  # type: ignore
+        if address:
+            location["address"] = address  # type: ignore
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "location",
+            "location": location
+        }
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        logger.info("whatsapp.send_location_message.start", 
+                   to=to, 
+                   latitude=latitude,
+                   longitude=longitude)
+        
+        try:
+            with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
+                response = await self.client.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                message_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="location", status="success").inc()
+                logger.info("whatsapp.send_location_message.success", to=to, message_id=message_id)
+                
+                return result
+            
+            # Handle error responses
+            error_data = response.json() if response.text else {}
+            self._handle_error_response(response.status_code, error_data, "send_location_message")
+            
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="location", status="timeout").inc()
+            logger.error("whatsapp.send_location_message.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending location message: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="location", status="network_error").inc()
+            logger.error("whatsapp.send_location_message.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="location", status="error").inc()
+            logger.error("whatsapp.send_location_message.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+    
+    async def send_reaction(
+        self, 
+        to: str, 
+        message_id: str, 
+        emoji: str
+    ) -> Dict[str, Any]:
+        """
+        Send reaction to a message.
+        
+        Args:
+            to: Recipient phone number (E.164 format)
+            message_id: ID of the message to react to
+            emoji: Emoji to react with
+                
+        Returns:
+            API response with message_id
+            
+        Raises:
+            WhatsAppAuthError: Authentication failed
+            WhatsAppRateLimitError: Rate limit exceeded
+            WhatsAppError: Other API errors
+        """
+        endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "reaction",
+            "reaction": {
+                "message_id": message_id,
+                "emoji": emoji
+            }
+        }
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        logger.info("whatsapp.send_reaction.start", 
+                   to=to, 
+                   message_id=message_id,
+                   emoji=emoji)
+        
+        try:
+            with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
+                response = await self.client.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                reaction_msg_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="reaction", status="success").inc()
+                logger.info("whatsapp.send_reaction.success", 
+                           to=to, 
+                           original_message_id=message_id,
+                           reaction_message_id=reaction_msg_id)
+                
+                return result
+            
+            # Handle error responses
+            error_data = response.json() if response.text else {}
+            self._handle_error_response(response.status_code, error_data, "send_reaction")
+            
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="reaction", status="timeout").inc()
+            logger.error("whatsapp.send_reaction.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending reaction: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="reaction", status="network_error").inc()
+            logger.error("whatsapp.send_reaction.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="reaction", status="error").inc()
+            logger.error("whatsapp.send_reaction.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+    
     async def close(self):
         """Close HTTP client connection pool."""
         await self.client.aclose()

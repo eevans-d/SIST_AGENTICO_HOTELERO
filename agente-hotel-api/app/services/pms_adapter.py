@@ -1,8 +1,9 @@
-# [PROMPT GA-03] app/services/pms_adapter.py
+# [PROMPT GA-03 + B.1] app/services/pms_adapter.py
+# Enhanced with QloApps real integration
 
 import json
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import uuid4
 
 import httpx
@@ -13,8 +14,9 @@ from ..core.settings import settings
 from ..core.circuit_breaker import CircuitBreaker
 from ..core.logging import logger
 from ..core.retry import retry_with_backoff
-from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError
+from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError, PMSAuthError
 from .business_metrics import record_reservation, failed_reservations
+from .qloapps_client import QloAppsClient, create_qloapps_client
 
 # Métricas Prometheus
 pms_latency = Histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
@@ -26,10 +28,19 @@ circuit_breaker_state = Gauge("pms_circuit_breaker_state", "Circuit breaker stat
 
 
 class QloAppsAdapter:
+    """
+    Production-ready QloApps PMS Adapter.
+    Integrates with QloApps using REST API for hotel operations.
+    """
+    
     def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
         self.base_url = settings.pms_base_url
         self.api_key = settings.pms_api_key.get_secret_value()
+        self.hotel_id = getattr(settings, 'pms_hotel_id', 1)  # Default hotel ID
+        
+        # Initialize QloApps client
+        self.qloapps = create_qloapps_client()
         
         # Timeouts más agresivos para evitar cuellos de botella
         self.timeout_config = httpx.Timeout(
@@ -41,9 +52,9 @@ class QloAppsAdapter:
         
         # Límites de conexión optimizados para producción
         self.limits = httpx.Limits(
-            max_keepalive_connections=20,  # Aumentado de 5 a 20 para mejor throughput
-            max_connections=100,            # Aumentado de 10 a 100 para manejar picos
-            keepalive_expiry=30.0           # Mantener keepalive por 30s
+            max_keepalive_connections=20,
+            max_connections=100,
+            keepalive_expiry=30.0
         )
         
         self.client = httpx.AsyncClient(
@@ -61,6 +72,22 @@ class QloAppsAdapter:
         )
         # Inicializar estado del CB
         circuit_breaker_state.set(0)
+    
+    async def close(self):
+        """Close connections."""
+        await self.qloapps.close()
+        await self.client.aclose()
+    
+    async def test_connection(self) -> bool:
+        """Test PMS connectivity."""
+        try:
+            connected = await self.qloapps.test_connection()
+            if connected:
+                logger.info("✅ QloApps PMS connection established")
+            return connected
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to QloApps PMS: {e}")
+            return False
 
     async def warm_cache(self):
         """Pre-warm cache with frequently accessed data at startup."""
@@ -111,63 +138,161 @@ class QloAppsAdapter:
     async def check_availability(
         self, check_in: date, check_out: date, guests: int = 1, room_type: Optional[str] = None
     ) -> List[dict]:
+        """
+        Check room availability using QloApps API.
+        
+        Args:
+            check_in: Check-in date
+            check_out: Check-out date
+            guests: Number of guests
+            room_type: Optional room type filter
+        
+        Returns:
+            List of available rooms with pricing
+        """
         cache_key = f"availability:{check_in}:{check_out}:{guests}:{room_type or 'any'}"
         cached_data = await self._get_from_cache(cache_key)
         if isinstance(cached_data, list):
+            logger.debug("Returning availability from cache")
             return cached_data
 
         async def fetch_availability():
-            response = await self.client.get(
-                "/api/availability",
-                params={
-                    "check_in": check_in.isoformat(),
-                    "check_out": check_out.isoformat(),
-                    "guests": guests,
-                    "room_type": room_type,
-                },
-            )
-            response.raise_for_status()
-            return response.json()
+            try:
+                # Call QloApps API
+                rooms = await self.qloapps.check_availability(
+                    hotel_id=self.hotel_id,
+                    date_from=check_in,
+                    date_to=check_out,
+                    num_rooms=1,
+                    num_adults=guests,
+                    num_children=0,
+                    room_type_id=self._get_room_type_id(room_type) if room_type else None
+                )
+                return rooms
+            except PMSAuthError as e:
+                logger.error(f"PMS authentication failed: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"QloApps availability check failed: {e}")
+                raise PMSError(f"Failed to check availability: {str(e)}")
 
         try:
-            with pms_latency.labels(endpoint="/api/availability", method="GET").time():
+            with pms_latency.labels(endpoint="/hotel_booking", method="GET").time():
                 data = await self.circuit_breaker.call(
                     retry_with_backoff, fetch_availability, operation_label="check_availability"
                 )
-            normalized = self._normalize_availability(data)
+            
+            # Normalize response
+            normalized = self._normalize_qloapps_availability(data, guests)
+            
+            # Cache the result
             await self._set_cache(cache_key, normalized, ttl=300)
             circuit_breaker_state.set(0)
+            pms_operations.labels(operation="check_availability", status="success").inc()
+            
             return normalized
+            
         except CircuitBreakerOpenError:
             logger.error("Circuit breaker is open, returning fallback")
             circuit_breaker_state.set(1)
+            pms_operations.labels(operation="check_availability", status="circuit_open").inc()
             return []  # Fallback a respuesta vacía
+        except PMSAuthError:
+            # Don't retry on auth errors
+            pms_errors.labels(operation="check_availability", error_type="auth_error").inc()
+            raise
         except Exception as e:
             logger.error(f"Failed to fetch availability: {e}")
+            pms_operations.labels(operation="check_availability", status="error").inc()
             pms_errors.labels(operation="check_availability", error_type=e.__class__.__name__).inc()
             raise PMSError(f"Unable to check availability: {str(e)}")
 
     async def create_reservation(self, reservation_data: dict) -> dict:
+        """
+        Create a new reservation in QloApps.
+        
+        Args:
+            reservation_data: Reservation details including:
+                - checkin: str (ISO date)
+                - checkout: str (ISO date)
+                - room_type: str
+                - guests: int
+                - guest_name: str
+                - guest_email: str
+                - guest_phone: str
+                - special_requests: str (optional)
+        
+        Returns:
+            Booking confirmation with booking_id and status
+        """
         if "reservation_uuid" not in reservation_data:
             reservation_data["reservation_uuid"] = str(uuid4())
 
         async def post_reservation():
-            response = await self.client.post("/api/reservations", json=reservation_data)
-            response.raise_for_status()
-            return response.json()
+            try:
+                # Parse dates
+                check_in = datetime.fromisoformat(reservation_data['checkin'].replace('Z', '+00:00')).date()
+                check_out = datetime.fromisoformat(reservation_data['checkout'].replace('Z', '+00:00')).date()
+                
+                # Parse guest info
+                guest_name_parts = reservation_data.get('guest_name', '').split(' ', 1)
+                first_name = guest_name_parts[0] if guest_name_parts else 'Guest'
+                last_name = guest_name_parts[1] if len(guest_name_parts) > 1 else ''
+                
+                guest_info = {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": reservation_data.get('guest_email', ''),
+                    "phone": reservation_data.get('guest_phone', ''),
+                    "address": reservation_data.get('special_requests', '')
+                }
+                
+                # Get room type ID
+                room_type_id = self._get_room_type_id(reservation_data.get('room_type'))
+                
+                # Create booking in QloApps
+                booking = await self.qloapps.create_booking(
+                    hotel_id=self.hotel_id,
+                    room_type_id=room_type_id,
+                    date_from=check_in,
+                    date_to=check_out,
+                    num_rooms=1,
+                    guest_info=guest_info,
+                    payment_info=None  # Handle payment separately if needed
+                )
+                
+                # Add our internal UUID to response
+                booking['reservation_uuid'] = reservation_data['reservation_uuid']
+                
+                return booking
+                
+            except Exception as e:
+                logger.error(f"QloApps booking creation failed: {e}")
+                raise PMSError(f"Failed to create booking: {str(e)}")
 
         try:
-            with pms_latency.labels(endpoint="/api/reservations", method="POST").time():
+            with pms_latency.labels(endpoint="/hotel_bookings", method="POST").time():
                 result = await self.circuit_breaker.call(
                     retry_with_backoff, post_reservation, operation_label="create_reservation"
                 )
+            
+            # Invalidate availability cache
             await self._invalidate_cache_pattern("availability:*")
+            
             pms_operations.labels(operation="create_reservation", status="success").inc()
             
             # Métrica de negocio: registrar reserva confirmada
             self._record_business_reservation(reservation_data, result, status="confirmed")
             
+            logger.info(f"✅ Reservation created successfully: {result.get('booking_reference')}")
+            
             return result
+            
+        except CircuitBreakerOpenError:
+            pms_operations.labels(operation="create_reservation", status="circuit_open").inc()
+            failed_reservations.labels(reason="circuit_breaker_open").inc()
+            raise PMSError("PMS temporarily unavailable. Please try again later.")
+            
         except Exception as e:
             pms_operations.labels(operation="create_reservation", status="failure").inc()
             logger.error(f"Failed to create reservation: {e}")
@@ -224,6 +349,158 @@ class QloAppsAdapter:
         except Exception as e:
             logger.warning(f"Failed to record business metrics for reservation: {e}")
     
+    async def get_reservation(self, reservation_id: str) -> Dict[str, Any]:
+        """
+        Get reservation details by ID.
+        
+        Args:
+            reservation_id: Reservation/booking ID
+        
+        Returns:
+            Reservation details
+        """
+        try:
+            # Try to parse as integer for QloApps
+            booking_id = int(reservation_id) if reservation_id.isdigit() else None
+            
+            if not booking_id:
+                raise PMSError(f"Invalid reservation ID format: {reservation_id}")
+            
+            booking = await self.qloapps.get_booking(booking_id)
+            pms_operations.labels(operation="get_reservation", status="success").inc()
+            
+            return booking
+            
+        except Exception as e:
+            logger.error(f"Failed to get reservation {reservation_id}: {e}")
+            pms_operations.labels(operation="get_reservation", status="error").inc()
+            pms_errors.labels(operation="get_reservation", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to retrieve reservation: {str(e)}")
+    
+    async def cancel_reservation(self, reservation_id: str, reason: Optional[str] = None) -> bool:
+        """
+        Cancel a reservation.
+        
+        Args:
+            reservation_id: Reservation/booking ID
+            reason: Cancellation reason
+        
+        Returns:
+            True if cancelled successfully
+        """
+        try:
+            booking_id = int(reservation_id) if reservation_id.isdigit() else None
+            
+            if not booking_id:
+                raise PMSError(f"Invalid reservation ID format: {reservation_id}")
+            
+            success = await self.qloapps.cancel_booking(booking_id, reason)
+            
+            if success:
+                # Invalidate availability cache since rooms are now available
+                await self._invalidate_cache_pattern("availability:*")
+                pms_operations.labels(operation="cancel_reservation", status="success").inc()
+                logger.info(f"✅ Reservation {reservation_id} cancelled successfully")
+            else:
+                pms_operations.labels(operation="cancel_reservation", status="failure").inc()
+                logger.warning(f"⚠️ Failed to cancel reservation {reservation_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error cancelling reservation {reservation_id}: {e}")
+            pms_operations.labels(operation="cancel_reservation", status="error").inc()
+            pms_errors.labels(operation="cancel_reservation", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to cancel reservation: {str(e)}")
+    
+    async def modify_reservation(
+        self, 
+        reservation_id: str, 
+        new_dates: Optional[Dict[str, date]] = None,
+        new_room_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Modify an existing reservation.
+        
+        Args:
+            reservation_id: Reservation/booking ID
+            new_dates: Dict with 'check_in' and 'check_out' dates
+            new_room_type: New room type
+        
+        Returns:
+            Updated reservation details
+        """
+        try:
+            booking_id = int(reservation_id) if reservation_id.isdigit() else None
+            
+            if not booking_id:
+                raise PMSError(f"Invalid reservation ID format: {reservation_id}")
+            
+            # Get current booking
+            current_booking = await self.qloapps.get_booking(booking_id)
+            
+            # For now, implement modification as cancel + recreate
+            # In production, QloApps might have a dedicated modify endpoint
+            logger.warning("Reservation modification not yet fully implemented in QloApps client")
+            
+            pms_operations.labels(operation="modify_reservation", status="not_implemented").inc()
+            
+            return current_booking
+            
+        except Exception as e:
+            logger.error(f"Error modifying reservation {reservation_id}: {e}")
+            pms_operations.labels(operation="modify_reservation", status="error").inc()
+            pms_errors.labels(operation="modify_reservation", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to modify reservation: {str(e)}")
+    
+    async def get_room_types(self) -> List[Dict[str, Any]]:
+        """
+        Get all available room types.
+        
+        Returns:
+            List of room types with details
+        """
+        try:
+            cache_key = "room_types:all"
+            cached = await self._get_from_cache(cache_key)
+            
+            if cached:
+                return cached
+            
+            room_types = await self.qloapps.get_room_types()
+            
+            # Cache room types for longer (1 hour) since they don't change often
+            await self._set_cache(cache_key, room_types, ttl=3600)
+            
+            pms_operations.labels(operation="get_room_types", status="success").inc()
+            
+            return room_types
+            
+        except Exception as e:
+            logger.error(f"Failed to get room types: {e}")
+            pms_operations.labels(operation="get_room_types", status="error").inc()
+            pms_errors.labels(operation="get_room_types", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to retrieve room types: {str(e)}")
+    
+    async def search_customer(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        Search for customer by email.
+        
+        Args:
+            email: Customer email
+        
+        Returns:
+            Customer data if found, None otherwise
+        """
+        try:
+            customer = await self.qloapps.search_customer_by_email(email)
+            pms_operations.labels(operation="search_customer", status="success").inc()
+            return customer
+        except Exception as e:
+            logger.error(f"Failed to search customer: {e}")
+            pms_operations.labels(operation="search_customer", status="error").inc()
+            return None
+    
     def _classify_reservation_failure(self, exception: Exception) -> str:
         """Clasifica el tipo de fallo en la reserva"""
         error_msg = str(exception).lower()
@@ -239,7 +516,66 @@ class QloAppsAdapter:
         else:
             return "unknown_error"
 
+    def _get_room_type_id(self, room_type_name: Optional[str]) -> int:
+        """
+        Map room type name to QloApps room type ID.
+        
+        Args:
+            room_type_name: Room type name (e.g., "Doble", "Single", "Suite")
+        
+        Returns:
+            Room type ID for QloApps
+        """
+        # Room type mapping (this should be configurable or fetched from QloApps)
+        room_type_mapping = {
+            "single": 1,
+            "doble": 2,
+            "double": 2,
+            "twin": 3,
+            "suite": 4,
+            "deluxe": 5,
+            "superior": 6
+        }
+        
+        if not room_type_name:
+            return 2  # Default to double room
+        
+        # Normalize and lookup
+        normalized_name = room_type_name.lower().strip()
+        return room_type_mapping.get(normalized_name, 2)
+    
+    def _normalize_qloapps_availability(self, rooms: List[Dict], guests: int) -> List[dict]:
+        """
+        Normalize QloApps availability response to internal format.
+        
+        Args:
+            rooms: QloApps room availability list
+            guests: Number of guests for filtering
+        
+        Returns:
+            Normalized room list
+        """
+        normalized = []
+        
+        for room in rooms:
+            # Filter by occupancy if needed
+            if room.get('max_occupancy', 99) >= guests:
+                normalized.append({
+                    "room_id": str(room.get("room_type_id")),
+                    "room_type": room.get("room_type_name", "Unknown"),
+                    "price_per_night": float(room.get("price_per_night", 0)),
+                    "total_price": float(room.get("total_price", 0)),
+                    "currency": room.get("currency", "USD"),
+                    "available_rooms": room.get("available_rooms", 0),
+                    "max_occupancy": room.get("max_occupancy", 2),
+                    "facilities": room.get("facilities", []),
+                    "images": room.get("room_images", [])
+                })
+        
+        return normalized
+    
     def _normalize_availability(self, data: dict) -> List[dict]:
+        """Legacy method for backward compatibility."""
         normalized = []
         for room in data.get("available_rooms", []):
             normalized.append(

@@ -7,15 +7,24 @@ from typing import Optional
 import asyncio
 from contextlib import asynccontextmanager
 import time
-# import whisper
+
 from ..core.logging import logger
-from ..exceptions.audio_exceptions import AudioDownloadError, AudioConversionError, AudioTranscriptionError, AudioSynthesisError
+from ..core.settings import settings
+from ..exceptions.audio_exceptions import (
+    AudioDownloadError, 
+    AudioConversionError, 
+    AudioTranscriptionError, 
+    AudioSynthesisError,
+    AudioTimeoutError,
+    AudioValidationError
+)
 from .audio_metrics import AudioMetrics
 
 
 class WhisperSTT:
-    def __init__(self, model_name: str = "base"):
-        self.model_name = model_name
+    def __init__(self, model_name: Optional[str] = None):
+        self.model_name = model_name or settings.whisper_model
+        self.language = settings.whisper_language
         self.model = None
         self._model_loaded = False
         
@@ -130,10 +139,10 @@ class WhisperSTT:
 
 
 class ESpeakTTS:
-    def __init__(self, voice: str = "es", speed: int = 150, pitch: int = 50):
-        self.voice = voice
-        self.speed = speed  # words per minute
-        self.pitch = pitch  # 0-99
+    def __init__(self, voice: Optional[str] = None, speed: Optional[int] = None, pitch: Optional[int] = None):
+        self.voice = voice or settings.espeak_voice
+        self.speed = speed or settings.espeak_speed  # words per minute
+        self.pitch = pitch or settings.espeak_pitch  # 0-99
         self._espeak_available = None
         
     async def _check_espeak_availability(self) -> bool:
@@ -202,26 +211,32 @@ class ESpeakTTS:
                 "pipe:1"  # Output to stdout
             ]
             
-            # Crear procesos pipe
+            # Crear procesos pipe de forma secuencial para evitar errores de StreamReader
             espeak_process = await asyncio.create_subprocess_exec(
                 *espeak_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             
+            # Leer la salida de eSpeak
+            espeak_stdout, espeak_stderr = await espeak_process.communicate()
+            
+            if espeak_process.returncode != 0:
+                error_msg = f"eSpeak failed: {espeak_stderr.decode()}"
+                logger.error(error_msg)
+                AudioMetrics.record_error("espeak_synthesis_failed")
+                raise AudioSynthesisError(error_msg)
+            
+            # Ahora procesar con FFmpeg
             ffmpeg_process = await asyncio.create_subprocess_exec(
                 *ffmpeg_cmd,
-                stdin=espeak_process.stdout,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             
-            # Cerrar stdout de espeak para permitir EOF
-            espeak_process.stdout.close()
-            
-            # Esperar a que ambos procesos terminen
-            espeak_stdout, espeak_stderr = await espeak_process.communicate()
-            ffmpeg_stdout, ffmpeg_stderr = await ffmpeg_process.communicate()
+            # Enviar datos de eSpeak a FFmpeg
+            ffmpeg_stdout, ffmpeg_stderr = await ffmpeg_process.communicate(input=espeak_stdout)
             
             synthesis_time = time.time() - start_time
             
@@ -321,22 +336,52 @@ class AudioProcessor:
         """
         Descarga un archivo de audio desde una URL y lo guarda en la ruta especificada.
         """
-        import aiohttp
+        try:
+            import aiohttp
+        except ImportError:
+            logger.error("aiohttp not installed for audio downloads")
+            AudioMetrics.record_error("aiohttp_not_installed") 
+            raise AudioDownloadError("aiohttp required for audio downloads")
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=settings.audio_timeout_seconds)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(audio_url) as response:
                     if response.status != 200:
                         raise AudioDownloadError(f"Failed to download audio. HTTP Status: {response.status}")
 
-                    with open(destination, "wb") as f:
-                        while chunk := await response.content.read(1024):
-                            f.write(chunk)
+                    # Check content length if available
+                    content_length = response.headers.get('content-length')
+                    if content_length:
+                        size_mb = int(content_length) / (1024 * 1024)
+                        if size_mb > settings.audio_max_size_mb:
+                            raise AudioValidationError(f"Audio file too large: {size_mb:.1f}MB > {settings.audio_max_size_mb}MB")
 
-            logger.info(f"Audio downloaded successfully to {destination}")
+                    AudioMetrics.increment_temp_files()
+                    try:
+                        with open(destination, "wb") as f:
+                            bytes_written = 0
+                            async for chunk in response.content.iter_chunked(8192):
+                                f.write(chunk)
+                                bytes_written += len(chunk)
+                                
+                                # Check size during download
+                                if bytes_written > settings.audio_max_size_mb * 1024 * 1024:
+                                    raise AudioValidationError(f"Audio file too large during download: >{settings.audio_max_size_mb}MB")
+                        
+                        AudioMetrics.record_file_size("downloaded_audio", bytes_written)
+                        logger.info(f"Audio downloaded successfully to {destination}, size: {bytes_written} bytes")
+                        
+                    finally:
+                        AudioMetrics.decrement_temp_files()
+
+        except asyncio.TimeoutError:
+            AudioMetrics.record_error("download_timeout")
+            raise AudioTimeoutError(f"Audio download timeout after {settings.audio_timeout_seconds}s")
         except Exception as e:
             logger.error(f"Error downloading audio from {audio_url}: {e}")
-            raise AudioDownloadError(f"An error occurred while downloading audio.")
+            AudioMetrics.record_error("download_failed")
+            raise AudioDownloadError(f"Audio download failed: {str(e)}")
 
     async def _convert_to_wav(self, input_file: Path, output_file: Path):
         """
@@ -344,62 +389,129 @@ class AudioProcessor:
         """
         try:
             cmd = [
-                "ffmpeg", "-i", str(input_file), "-ar", "16000", "-ac", "1",
-                "-c:a", "pcm_s16le", "-y", str(output_file)
+                "ffmpeg", "-i", str(input_file), 
+                "-ar", "16000",  # Sample rate 16kHz (optimal for Whisper)
+                "-ac", "1",      # Mono channel  
+                "-c:a", "pcm_s16le",  # 16-bit PCM
+                "-y",            # Overwrite output
+                str(output_file)
             ]
 
-            process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            start_time = time.time()
+            process = await asyncio.wait_for(
+                asyncio.create_subprocess_exec(
+                    *cmd, 
+                    stdout=asyncio.subprocess.PIPE, 
+                    stderr=asyncio.subprocess.PIPE
+                ),
+                timeout=settings.audio_timeout_seconds
             )
 
-            stdout, stderr = await process.communicate()
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=settings.audio_timeout_seconds  
+            )
+            
+            conversion_time = time.time() - start_time
 
             if process.returncode != 0:
-                raise AudioConversionError(f"FFmpeg conversion failed. Return code: {process.returncode}")
+                error_msg = f"FFmpeg conversion failed. Return code: {process.returncode}. Error: {stderr.decode()}"
+                logger.error(error_msg)
+                AudioMetrics.record_error("ffmpeg_conversion_failed")
+                raise AudioConversionError(error_msg)
 
-            logger.info(f"Audio converted successfully: {input_file} -> {output_file}")
+            # Record metrics
+            output_size = output_file.stat().st_size if output_file.exists() else 0
+            AudioMetrics.record_file_size("converted_wav", output_size)
+            AudioMetrics.record_operation_duration("audio_conversion", conversion_time)
+            AudioMetrics.record_operation("audio_conversion", "success")
+            
+            logger.info(f"Audio converted successfully: {input_file} -> {output_file} in {conversion_time:.2f}s")
 
+        except asyncio.TimeoutError:
+            AudioMetrics.record_error("conversion_timeout")
+            raise AudioTimeoutError(f"Audio conversion timeout after {settings.audio_timeout_seconds}s")
         except FileNotFoundError:
+            AudioMetrics.record_error("ffmpeg_not_found")
             raise AudioConversionError("FFmpeg not found. Please install FFmpeg.")
         except Exception as e:
             logger.error(f"Error converting audio {input_file} to {output_file}: {e}")
-            raise AudioConversionError(f"An error occurred during audio conversion.")
+            AudioMetrics.record_error("conversion_failed")
+            AudioMetrics.record_operation("audio_conversion", "error")
+            raise AudioConversionError(f"Audio conversion failed: {str(e)}")
 
     async def transcribe_whatsapp_audio(self, audio_url: str) -> dict:
         """
         Transcribe audio de WhatsApp con manejo seguro de archivos temporales.
         """
+        if not settings.audio_enabled:
+            logger.info("Audio processing disabled, returning mock response")
+            return {
+                "text": "Audio processing está deshabilitado en configuración.",
+                "confidence": 0.0,
+                "success": False,
+                "language": "es",
+                "duration": 0.0
+            }
+            
+        start_time = time.time()
         try:
             async with self._temporary_file(suffix=".ogg") as audio_temp:
                 async with self._temporary_file(suffix=".wav") as wav_temp:
+                    # Download and convert audio
                     await self._download_audio(audio_url, audio_temp)
                     await self._convert_to_wav(audio_temp, wav_temp)
+                    
+                    # Transcribe with Whisper
                     result = await self.stt.transcribe(wav_temp)
+                    
+                    # Add processing time to result
+                    total_time = time.time() - start_time
+                    result["total_processing_time"] = total_time
+                    
+                    # Record overall success metrics
+                    AudioMetrics.record_operation_duration("whatsapp_audio_pipeline", total_time)
+                    AudioMetrics.record_operation("whatsapp_audio_pipeline", "success")
+                    
                     return result
                     
         except Exception as e:
-            logger.error(f"Error transcribing audio: {e}")
+            total_time = time.time() - start_time
+            logger.error(f"Error transcribing WhatsApp audio: {e}")
+            AudioMetrics.record_operation("whatsapp_audio_pipeline", "error")
+            AudioMetrics.record_error("whatsapp_transcription_failed")
+            
             return {
                 "text": "",
                 "confidence": 0.0,
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "total_processing_time": total_time
             }
 
     async def generate_audio_response(self, text: str) -> Optional[bytes]:
         """
         Genera respuesta de audio con manejo seguro de archivos temporales.
         """
+        if not settings.audio_enabled:
+            logger.info("Audio processing disabled, TTS unavailable")
+            return None
+            
         try:
-            async with self._temporary_file(suffix=".ogg") as output_temp:
-                audio_data = await self.tts.synthesize(text)
+            audio_data = await self.tts.synthesize(text)
+            
+            if audio_data:
+                AudioMetrics.record_operation("audio_response_generation", "success")
+                AudioMetrics.record_file_size("generated_audio", len(audio_data))
+                logger.info(f"Generated audio response: {len(audio_data)} bytes for text: '{text[:50]}...'")
+            else:
+                AudioMetrics.record_operation("audio_response_generation", "failed")
+                logger.warning("TTS synthesis returned no data")
                 
-                if output_temp.exists():
-                    with open(output_temp, "rb") as f:
-                        audio_data = f.read()
-                
-                return audio_data
+            return audio_data
                 
         except Exception as e:
-            logger.error(f"Error generating audio: {e}")
+            logger.error(f"Error generating audio response: {e}")
+            AudioMetrics.record_operation("audio_response_generation", "error")
+            AudioMetrics.record_error("audio_response_generation_failed")
             return None

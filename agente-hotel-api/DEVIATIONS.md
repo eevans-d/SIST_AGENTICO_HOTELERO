@@ -32,3 +32,19 @@
 - **Documentación:** Se ha actualizado `docs/AUDIO_RESPONSES.md` con patrones de diseño, implementación y casos de uso.
 - **Pruebas:** Creadas pruebas en `tests/unit/test_audio_response_types.py` y `tests/unit/test_audio_follow_up_webhook.py`.
 - **Estado:** Completamente implementado y documentado; cumple los requisitos de la Fase E.4.1 del proyecto.
+
+## E-04.2: Extensión de Audio a Intents Adicionales (7 de octubre, 2025)
+
+- **Mejora:** Se extendió el soporte de respuestas de audio a intents adicionales del sistema hotelero.
+- **Detalles:**
+  - Se añadió soporte de audio para el intent `guest_services` (información sobre servicios para huéspedes).
+  - Se implementó respuesta de audio para `hotel_amenities` (amenidades del hotel).
+  - Se añadió soporte de audio para `check_in_info` (información sobre proceso de check-in).
+  - Se implementó respuesta de audio para `check_out_info` (información sobre proceso de check-out).
+  - Se añadió soporte de audio para `cancellation_policy` (política de cancelación).
+  - Todos los nuevos intents siguen el patrón consistente: respuesta de audio para mensajes de voz, texto para mensajes escritos.
+- **Plantillas:** Se añadieron nuevas plantillas de texto en `TemplateService` para todos los intents nuevos.
+- **Patrones:** Se mantiene consistencia en el manejo de errores con degradación elegante a respuestas de texto.
+- **Documentación:** Se actualizó `docs/AUDIO_RESPONSES.md` con los nuevos intents y sus comportamientos.
+- **Pruebas:** Creadas pruebas exhaustivas en `tests/unit/test_extended_audio_intents.py`.
+- **Estado:** Completamente implementado y probado; amplía significativamente la cobertura de respuestas de audio del sistema.

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     pms_base_url: str = "http://localhost:8080"
     pms_api_key: SecretStr = SecretStr("dev-pms-key")
     pms_timeout: int = 30
+    pms_hotel_id: int = 1  # Default hotel ID in QloApps
 
     # WhatsApp Meta Cloud
     whatsapp_access_token: SecretStr = SecretStr("dev-whatsapp-token")
@@ -70,11 +71,26 @@ class Settings(BaseSettings):
     redis_pool_size: int = 20
     redis_password: Optional[SecretStr] = None
 
+    # Audio Processing Settings
+    audio_enabled: bool = True
+    tts_engine: TTSEngine = TTSEngine.ESPEAK
+    
+    # Whisper STT Configuration
+    whisper_model: str = "base"  # tiny, base, small, medium, large
+    whisper_language: str = "es"  # Spanish by default
+    
+    # eSpeak TTS Configuration 
+    espeak_voice: str = "es"
+    espeak_speed: int = 150  # words per minute
+    espeak_pitch: int = 50   # 0-99
+    
+    # Audio Processing Limits
+    audio_max_size_mb: int = 25  # WhatsApp limit
+    audio_timeout_seconds: int = 30
+    
     # Operational Settings
     environment: Environment = Environment.DEV
     log_level: LogLevel = LogLevel.INFO
-    audio_enabled: bool = True
-    tts_engine: TTSEngine = TTSEngine.ESPEAK
     secret_key: SecretStr = SecretStr("generate_secure_key_here")
     # Health/Readiness toggles
     check_pms_in_readiness: bool = False

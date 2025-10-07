@@ -65,3 +65,4 @@ agente-hotel-api/.cache/
 # Playbook runtime reports (keep local only)
 .playbook/*.json
 .playbook/*_report.json
+*.code-workspace

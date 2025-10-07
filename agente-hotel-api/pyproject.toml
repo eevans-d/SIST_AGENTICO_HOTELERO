@@ -22,6 +22,10 @@ prometheus-client = "^0.20.0"
 slowapi = "^0.1.9"
 bleach = "^6.1.0"
 python-multipart = "^0.0.9"
+# Audio processing dependencies
+openai-whisper = "^20231117"
+aiohttp = "^3.9.0"
+aiofiles = "^23.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.2"
