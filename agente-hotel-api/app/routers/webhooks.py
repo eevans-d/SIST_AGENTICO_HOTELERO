@@ -66,6 +66,9 @@ async def handle_whatsapp_webhook(request: Request):
     - Text messages
     - Audio messages (for STT processing)
     - Media messages (images, videos, documents)
+    - Interactive messages (buttons, lists)
+    - Location messages
+    - Reaction messages
     - Button replies
     - Template status updates
     
@@ -79,7 +82,7 @@ async def handle_whatsapp_webhook(request: Request):
     2. Parse JSON payload
     3. Normalize to UnifiedMessage
     4. Process via Orchestrator
-    5. Return response
+    5. Return response based on message type
     """
     # Validaciones básicas de cabeceras/payload
     ctype = request.headers.get("content-type", "").lower()
@@ -147,8 +150,101 @@ async def handle_whatsapp_webhook(request: Request):
         # Payload sin mensajes o error de normalización; acuse de recibo sin procesar
         return {"status": "ok"}
 
+    # Procesar el mensaje con el orquestador
     result = await orchestrator.handle_unified_message(unified)
-    return result
+    
+    # Obtener cliente de WhatsApp para enviar respuestas
+    from ..services.whatsapp_client import WhatsAppMetaClient
+    
+    whatsapp_client = WhatsAppMetaClient()
+    
+    try:
+        # Comprobar el tipo de respuesta para determinar qué método usar
+        if "response_type" in result:
+            response_type = result.get("response_type")
+            content = result.get("content", {})
+            original_message = result.get("original_message")
+            
+            if response_type == "interactive_buttons" and original_message:
+                # Enviar mensaje interactivo con botones
+                await whatsapp_client.send_interactive_message(
+                    to=original_message.user_id,
+                    header_text=content.get("header_text"),
+                    body_text=content.get("body_text", ""),
+                    footer_text=content.get("footer_text"),
+                    action_buttons=content.get("action_buttons")
+                )
+                
+            elif response_type == "interactive_list" and original_message:
+                # Enviar mensaje interactivo con lista
+                await whatsapp_client.send_interactive_message(
+                    to=original_message.user_id,
+                    header_text=content.get("header_text"),
+                    body_text=content.get("body_text", ""),
+                    footer_text=content.get("footer_text"),
+                    list_sections=content.get("list_sections"),
+                    list_button_text=content.get("list_button_text")
+                )
+                
+            elif response_type == "location" and original_message:
+                # Enviar mensaje de ubicación
+                await whatsapp_client.send_location_message(
+                    to=original_message.user_id,
+                    latitude=content.get("latitude", 0),
+                    longitude=content.get("longitude", 0),
+                    name=content.get("name"),
+                    address=content.get("address")
+                )
+                
+            elif response_type == "audio_with_location" and original_message:
+                # Enviar primero el mensaje de audio
+                if content.get("audio_data"):
+                    # Enviar el mensaje de audio
+                    await whatsapp_client.send_audio_message(
+                        to=original_message.user_id,
+                        audio_data=content.get("audio_data")
+                    )
+                    
+                    # Si hay texto, enviarlo como mensaje separado
+                    if text := content.get("text"):
+                        await whatsapp_client.send_message(
+                            to=original_message.user_id,
+                            text=text
+                        )
+                
+                # Luego enviar la ubicación
+                location = content.get("location", {})
+                if location:
+                    await whatsapp_client.send_location_message(
+                        to=original_message.user_id,
+                        latitude=location.get("latitude", 0),
+                        longitude=location.get("longitude", 0),
+                        name=location.get("name"),
+                        address=location.get("address")
+                    )
+                
+            elif response_type == "reaction" and original_message:
+                # Enviar reacción a un mensaje
+                await whatsapp_client.send_reaction(
+                    to=original_message.user_id,
+                    message_id=content.get("message_id", ""),
+                    emoji=content.get("emoji", "👍")
+                )
+                
+        elif "response" in result and unified:
+            # Respuesta de texto tradicional
+            await whatsapp_client.send_message(
+                to=unified.user_id,
+                text=result.get("response", "")
+            )
+            
+    except Exception as e:
+        logger.error("whatsapp.webhook.send_response_error", error=str(e))
+    finally:
+        await whatsapp_client.close()
+    
+    # Siempre devolver OK al webhook para confirmar recepción
+    return {"status": "ok"}
 
 
 @router.post("/gmail")

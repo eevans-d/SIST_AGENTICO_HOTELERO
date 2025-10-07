@@ -93,6 +93,13 @@ class Orchestrator:
                 ]):
                     intent_name = "pricing_info"
                     nlp_result = {"intent": {"name": "pricing_info", "confidence": 0.5}, "entities": [], "language": detected_language}
+                elif any(word in text_lower for word in [
+                    "ubicacion", "ubicación", "dirección", "direccion", "llegar", "mapa",   # Spanish
+                    "location", "address", "map", "directions", "where",                    # English
+                    "localização", "endereço", "mapa", "direções"                          # Portuguese
+                ]):
+                    intent_name = "hotel_location"
+                    nlp_result = {"intent": {"name": "hotel_location", "confidence": 0.5}, "entities": [], "language": detected_language}
                 else:
                     intent_name = "unknown"
                     nlp_result = {"intent": {"name": "unknown", "confidence": 0.0}, "entities": [], "language": detected_language}
@@ -131,7 +138,75 @@ class Orchestrator:
             
             # Graceful degradation: Manejar fallos de PMS
             try:
-                response_text = await self.handle_intent(nlp_result, session, message)
+                response_data = await self.handle_intent(nlp_result, session, message)
+                response_type = response_data.get("response_type", "text")
+                
+                if response_type == "text":
+                    # Respuesta de texto simple, compatible con el formato anterior
+                    return {"response": response_data.get("content", "")}
+                    
+                elif response_type == "audio":
+                    # Respuesta de audio (texto + audio)
+                    return {
+                        "response_type": "audio",
+                        "content": {
+                            "text": response_data.get("content", ""),
+                            "audio_data": response_data.get("audio_data")
+                        },
+                        "original_message": message
+                    }
+                    
+                elif response_type == "interactive_buttons":
+                    # Respuesta con botones interactivos
+                    return {
+                        "response_type": "interactive_buttons",
+                        "content": response_data.get("content", {}),
+                        "original_message": message
+                    }
+                    
+                elif response_type == "interactive_list":
+                    # Respuesta con lista interactiva
+                    return {
+                        "response_type": "interactive_list",
+                        "content": response_data.get("content", {}),
+                        "original_message": message
+                    }
+                    
+                elif response_type == "location":
+                    # Respuesta con ubicación
+                    return {
+                        "response_type": "location",
+                        "content": response_data.get("content", {}),
+                        "original_message": message
+                    }
+                    
+                elif response_type == "audio_with_location":
+                    # Respuesta combinada de audio + ubicación
+                    # El router deberá manejar esto enviando primero el audio y luego la ubicación
+                    content = response_data.get("content", {})
+                    return {
+                        "response_type": "audio_with_location",
+                        "content": {
+                            "text": content.get("text", ""),
+                            "audio_data": content.get("audio_data"),
+                            "location": content.get("location", {})
+                        },
+                        "original_message": message
+                    }
+                    
+                elif response_type == "reaction":
+                    # Respuesta con reacción a un mensaje
+                    return {
+                        "response_type": "reaction",
+                        "content": response_data.get("content", {}),
+                        "original_message": message
+                    }
+                    
+                else:
+                    # Tipo de respuesta desconocido, usar texto por defecto
+                    logger.warning(f"Unknown response_type: {response_type}, defaulting to text")
+                    return {"response": "Lo siento, no puedo procesar tu solicitud en este momento."}
+                    
             except (PMSError, CircuitBreakerOpenError) as pms_error:
                 logger.error(f"PMS unavailable, degraded response: {pms_error}")
                 orchestrator_degraded_responses.inc()
@@ -143,8 +218,8 @@ class Orchestrator:
                     response_text = "No puedo procesar reservas en este momento por mantenimiento del sistema. Por favor, contacta con recepción al [TELÉFONO] o intenta más tarde."
                 else:
                     response_text = "Disculpa, estoy experimentando dificultades técnicas. ¿Puedes contactar directamente con recepción? Teléfono: [TELÉFONO]"
-            
-            return {"response": response_text}
+                    
+                return {"response": response_text}
         except Exception as e:
             status = "error"
             orchestrator_errors_total.labels(intent=intent_name, error_type=type(e).__name__).inc()
@@ -164,31 +239,247 @@ class Orchestrator:
                 except Exception:  # pragma: no cover
                     pass
 
-    async def handle_intent(self, nlp_result: dict, session: dict, message: UnifiedMessage) -> str:
+    async def handle_intent(self, nlp_result: dict, session: dict, message: UnifiedMessage) -> dict:
+        """
+        Procesa un intent detectado y genera la respuesta apropiada.
+        
+        Args:
+            nlp_result: Resultado del procesamiento NLP con intent y entidades
+            session: Sesión del usuario
+            message: Mensaje unificado original
+            
+        Returns:
+            Diccionario con tipo de respuesta y contenido:
+            {
+                "response_type": "text|audio|interactive|location|reaction",
+                "content": { ... contenido específico del tipo ... }
+            }
+        """
         intent = nlp_result.get("intent", {}).get("name")
+        language = nlp_result.get("language", "es")
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        # Verificar si el mensaje original era de audio
+        respond_with_audio = message.tipo == "audio"
+        
+        # Detectar si es una respuesta a un mensaje interactivo
+        is_interactive_response = False
+        interactive_id = None
+        
+        if message.tipo == "interactive" and message.metadata.get("interactive_data"):
+            is_interactive_response = True
+            interactive_data = message.metadata.get("interactive_data", {})
+            interactive_id = interactive_data.get("id")
+            
+            # Procesar respuesta interactiva según su ID
+            if interactive_id:
+                return await self._handle_interactive_response(interactive_id, session, message)
 
         if intent == "check_availability":
-            # Lógica para extraer entidades y llamar a pms_adapter.check_availability
-            # ...
-            return self.template_service.get_response(
-                "availability_found",
-                checkin="hoy",
-                checkout="mañana",
-                room_type="Doble",
-                guests=2,
-                price=10000,
-                total=20000,
-            )
+            # Comprobar si la feature flag de mensajes interactivos está activada
+            ff_service = await get_feature_flag_service()
+            use_interactive = await ff_service.is_enabled("features.interactive_messages", default=True)
+            
+            # Datos de disponibilidad (simulados - en producción vendrían del PMS)
+            availability_data = {
+                "checkin": "hoy",
+                "checkout": "mañana",
+                "room_type": "Doble",
+                "guests": 2,
+                "price": 10000,
+                "total": 20000
+            }
+            
+            # Preparar mensaje de respuesta de texto
+            response_text = self.template_service.get_response("availability_found", **availability_data)
+            
+            # Si el mensaje original era de audio, responder también con audio
+            if respond_with_audio:
+                try:
+                    # Generar audio con el texto de respuesta
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for availability check", 
+                                   audio_bytes=len(audio_data))
+                        
+                        # No podemos combinar audio con mensajes interactivos en WhatsApp,
+                        # así que en este caso priorizamos el audio
+                        return {
+                            "response_type": "audio",
+                            "content": response_text,
+                            "audio_data": audio_data
+                        }
+                except Exception as e:
+                    # Si falla la generación de audio, continuamos con texto normal
+                    logger.error(f"Failed to generate audio response: {e}")
+            
+            # Si llegamos aquí, usamos respuesta normal (texto o interactiva)
+            if use_interactive:
+                # Respuesta con botones interactivos
+                button_template = self.template_service.get_interactive_buttons(
+                    "availability_confirmation",
+                    **availability_data
+                )
+                
+                return {
+                    "response_type": "interactive_buttons",
+                    "content": button_template
+                }
+            else:
+                # Respuesta de texto tradicional
+                return {
+                    "response_type": "text",
+                    "content": response_text
+                }
 
         elif intent == "make_reservation":
-            # Lógica para validar datos, llamar a lock_service.acquire_lock
-            # ...
-            return self.template_service.get_response(
-                "reservation_instructions", deposit=6000, bank_info="CBU 12345..."
+            # Datos de reserva (simulados)
+            reservation_data = {
+                "deposit": 6000, 
+                "bank_info": "CBU 12345..."
+            }
+            
+            # Actualizar estado de sesión para seguimiento de reserva
+            session["reservation_pending"] = True
+            session["deposit_amount"] = reservation_data["deposit"]
+            await self.session_manager.update_session(message.user_id, session, tenant_id)
+            
+            return {
+                "response_type": "text",
+                "content": self.template_service.get_response("reservation_instructions", **reservation_data)
+            }
+            
+        elif intent == "hotel_location":
+            # Intención de obtener la ubicación del hotel
+            response_text = "Nuestro hotel está ubicado en Av. Principal 123, Centro, Ciudad. ¡Esperamos tu visita!"
+            
+            # Si es un mensaje de audio, responder con audio + ubicación
+            if message.tipo == "audio":
+                # Generar respuesta de audio
+                audio_data = await self.audio_processor.generate_audio_response(response_text)
+                
+                # Obtener respuesta combinada audio + ubicación
+                content = self.template_service.get_audio_with_location(
+                    location_template="hotel_location",
+                    text=response_text,
+                    audio_data=audio_data
+                )
+                
+                return {
+                    "response_type": "audio_with_location",
+                    "content": content
+                }
+            else:
+                # Responder solo con ubicación (mapa)
+                location_data = self.template_service.get_location("hotel_location")
+                
+                return {
+                    "response_type": "location",
+                    "content": location_data
+                }
+            
+        elif intent == "show_room_options":
+            # Enviar lista interactiva con opciones de habitaciones
+            room_options = self.template_service.get_interactive_list(
+                "room_options",
+                checkin="01/01/2023",
+                checkout="05/01/2023",
+                price_single=8000,
+                price_double=12000,
+                price_prem_single=15000,
+                price_prem_double=20000
             )
-
-        else:
-            return "No entendí tu consulta. ¿Podrías reformularla?"
+            
+            return {
+                "response_type": "interactive_list",
+                "content": room_options
+            }
+            
+        elif intent == "payment_confirmation" and message.tipo == "image":
+            # Si el usuario envía una imagen de comprobante de pago y tiene una reserva pendiente
+            if session.get("reservation_pending"):
+                # Simular la confirmación del pago
+                # En un caso real, procesaríamos la imagen y confirmaríamos con el PMS
+                
+                # Responder con una reacción positiva al comprobante
+                return {
+                    "response_type": "reaction",
+                    "content": {
+                        "message_id": message.message_id,
+                        "emoji": self.template_service.get_reaction("payment_received")
+                    }
+                }
+            
+        # Si llegamos aquí, devolver respuesta por defecto
+        return {
+            "response_type": "text",
+            "content": "No entendí tu consulta. ¿Podrías reformularla?"
+        }
+    
+    async def _handle_interactive_response(self, interactive_id: str, session: dict, message: UnifiedMessage) -> dict:
+        """
+        Procesa respuestas a mensajes interactivos basadas en su ID.
+        
+        Args:
+            interactive_id: ID del elemento interactivo seleccionado
+            session: Sesión del usuario
+            message: Mensaje unificado original
+            
+        Returns:
+            Respuesta formateada según el ID interactivo
+        """
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        if interactive_id == "confirm_reservation":
+            # Usuario confirmó que quiere reservar después de ver disponibilidad
+            reservation_data = {
+                "deposit": 6000, 
+                "bank_info": "CBU 12345..."
+            }
+            
+            # Actualizar estado de sesión para seguimiento de reserva
+            session["reservation_pending"] = True
+            session["deposit_amount"] = reservation_data["deposit"]
+            await self.session_manager.update_session(message.user_id, session, tenant_id)
+            
+            return {
+                "response_type": "text",
+                "content": self.template_service.get_response("reservation_instructions", **reservation_data)
+            }
+            
+        elif interactive_id == "more_options":
+            # Usuario quiere ver más opciones de habitaciones
+            room_options = self.template_service.get_interactive_list(
+                "room_options",
+                checkin="01/01/2023",
+                checkout="05/01/2023",
+                price_single=8000,
+                price_double=12000,
+                price_prem_single=15000,
+                price_prem_double=20000
+            )
+            
+            return {
+                "response_type": "interactive_list",
+                "content": room_options
+            }
+            
+        elif interactive_id == "transfer_request":
+            # Usuario solicitó servicio de transfer
+            session["transfer_requested"] = True
+            await self.session_manager.update_session(message.user_id, session, tenant_id)
+            
+            return {
+                "response_type": "text",
+                "content": "Perfecto. Hemos registrado tu solicitud de transfer. ¿A qué hora llegas?"
+            }
+            
+        # ID interactivo desconocido, enviar mensaje genérico
+        return {
+            "response_type": "text",
+            "content": "Gracias por tu selección. Un representante procesará tu solicitud."
+        }
     
     def _get_technical_error_message(self, language: str = "es") -> str:
         """
