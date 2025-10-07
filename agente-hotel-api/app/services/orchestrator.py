@@ -345,9 +345,34 @@ class Orchestrator:
             session["deposit_amount"] = reservation_data["deposit"]
             await self.session_manager.update_session(message.user_id, session, tenant_id)
             
+            # Preparar texto de respuesta
+            response_text = self.template_service.get_response("reservation_instructions", **reservation_data)
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    # Generar respuesta de audio
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for reservation instructions",
+                                   audio_bytes=len(audio_data))
+                        
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    # Si falla la generación de audio, continuamos con texto normal
+                    logger.error(f"Failed to generate audio response for reservation: {e}")
+            
+            # Respuesta de texto tradicional
             return {
                 "response_type": "text",
-                "content": self.template_service.get_response("reservation_instructions", **reservation_data)
+                "content": response_text
             }
             
         elif intent == "hotel_location":
@@ -356,15 +381,33 @@ class Orchestrator:
             
             # Si es un mensaje de audio, responder con audio + ubicación
             if message.tipo == "audio":
-                # Generar respuesta de audio
-                audio_data = await self.audio_processor.generate_audio_response(response_text)
-                
-                # Obtener respuesta combinada audio + ubicación
-                content = self.template_service.get_audio_with_location(
-                    location_template="hotel_location",
-                    text=response_text,
-                    audio_data=audio_data
-                )
+                try:
+                    # Generar respuesta de audio
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data is None:
+                        # Si no se pudo generar audio, responder solo con ubicación
+                        logger.warning("Could not generate audio for location response")
+                        location_data = self.template_service.get_location("hotel_location")
+                        return {
+                            "response_type": "location",
+                            "content": location_data
+                        }
+                    
+                    # Obtener respuesta combinada audio + ubicación
+                    content = self.template_service.get_audio_with_location(
+                        location_template="hotel_location",
+                        text=response_text,
+                        audio_data=audio_data
+                    )
+                except Exception as e:
+                    # Si hay error en la generación de audio, responder solo con ubicación
+                    logger.error(f"Error generating audio for location response: {e}")
+                    location_data = self.template_service.get_location("hotel_location")
+                    return {
+                        "response_type": "location",
+                        "content": location_data
+                    }
                 
                 return {
                     "response_type": "audio_with_location",
@@ -380,15 +423,64 @@ class Orchestrator:
                 }
             
         elif intent == "show_room_options":
+            # Preparar datos para opciones de habitaciones
+            room_data = {
+                "checkin": "01/01/2023",
+                "checkout": "05/01/2023",
+                "price_single": 8000,
+                "price_double": 12000,
+                "price_prem_single": 15000,
+                "price_prem_double": 20000
+            }
+            
+            # Si el mensaje original era de audio, primero responder con audio
+            if message.tipo == "audio":
+                try:
+                    # Crear texto de resumen para la respuesta de audio
+                    audio_text = (
+                        f"Tenemos varias opciones de habitaciones disponibles del {room_data['checkin']} "
+                        f"al {room_data['checkout']}. Habitación individual desde ${room_data['price_single']}, "
+                        f"doble desde ${room_data['price_double']}, y habitaciones premium desde "
+                        f"${room_data['price_prem_single']}. Te envío los detalles completos."
+                    )
+                    
+                    # Generar respuesta de audio
+                    audio_data = await self.audio_processor.generate_audio_response(audio_text)
+                    
+                    if audio_data:
+                        logger.info("Generated audio response for room options",
+                                  audio_bytes=len(audio_data))
+                        
+                        # Primero enviamos el audio
+                        logger.info("Sending audio response before interactive list for room options")
+                        
+                        # Luego vamos a enviar la lista interactiva en un segundo mensaje
+                        # Nota: En WhatsApp no podemos combinar audio con mensajes interactivos en un solo mensaje
+                        room_options = self.template_service.get_interactive_list(
+                            "room_options",
+                            **room_data
+                        )
+                        
+                        # Primero enviamos el audio y luego indicamos que hay que enviar la lista
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": audio_text,
+                                "audio_data": audio_data,
+                                "follow_up": {
+                                    "type": "interactive_list",
+                                    "content": room_options
+                                }
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio for room options: {e}")
+                    # Si hay error, continuamos con la lista interactiva normal
+            
             # Enviar lista interactiva con opciones de habitaciones
             room_options = self.template_service.get_interactive_list(
                 "room_options",
-                checkin="01/01/2023",
-                checkout="05/01/2023",
-                price_single=8000,
-                price_double=12000,
-                price_prem_single=15000,
-                price_prem_double=20000
+                **room_data
             )
             
             return {
@@ -412,9 +504,29 @@ class Orchestrator:
                 }
             
         # Si llegamos aquí, devolver respuesta por defecto
+        default_text = "No entendí tu consulta. ¿Podrías reformularla?"
+        
+        # Si el mensaje original era de audio, responder con audio también
+        if message.tipo == "audio":
+            try:
+                audio_data = await self.audio_processor.generate_audio_response(default_text)
+                
+                if audio_data:
+                    logger.info("Generated audio response for fallback message")
+                    return {
+                        "response_type": "audio",
+                        "content": {
+                            "text": default_text,
+                            "audio_data": audio_data
+                        }
+                    }
+            except Exception as e:
+                logger.error(f"Failed to generate audio for fallback response: {e}")
+        
+        # Respuesta de texto por defecto
         return {
             "response_type": "text",
-            "content": "No entendí tu consulta. ¿Podrías reformularla?"
+            "content": default_text
         }
     
     async def _handle_interactive_response(self, interactive_id: str, session: dict, message: UnifiedMessage) -> dict:

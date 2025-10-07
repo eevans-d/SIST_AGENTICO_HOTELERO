@@ -17,3 +17,18 @@
 - **Documentación:** Se actualizó `docs/WHATSAPP_AUDIO_INTEGRATION.md` con detalles de la implementación.
 - **Pruebas:** Se crearon pruebas en `tests/unit/test_location_handler.py` y `tests/unit/test_audio_location_webhook.py`.
 - **Estado:** Completa y probada; cumple requisitos de la Fase E.4 del proyecto.
+
+## E-04.1: Expansión de Capacidades de Audio (7 de octubre, 2025)
+
+- **Mejora:** Se extendió el soporte de respuestas de audio a más intents del sistema.
+- **Detalles:**
+  - Se mejoró el manejo del intent `make_reservation` para responder con audio cuando recibe mensajes de voz.
+  - Se actualizó el intent `show_room_options` para enviar audio explicativo seguido de opciones interactivas.
+  - Se implementó respuesta de audio para el caso fallback por defecto cuando el mensaje original es de voz.
+  - Se añadió el tipo de respuesta `audio` con soporte para mensajes de seguimiento (`follow_up`).
+- **Mejoras de Resiliencia:**
+  - Se implementó manejo de errores robusto para todos los casos de generación de audio.
+  - Se añadió degradación elegante en caso de fallo en la generación de audio.
+- **Documentación:** Pendiente de actualizar en `docs/AUDIO_RESPONSES.md` con patrones de diseño y casos de uso.
+- **Pruebas:** Se requieren pruebas adicionales para los nuevos flujos de interacción.
+- **Estado:** Funcional con implementación completa; pendiente de pruebas exhaustivas.

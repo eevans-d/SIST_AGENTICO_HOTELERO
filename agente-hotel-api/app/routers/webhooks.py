@@ -223,6 +223,46 @@ async def handle_whatsapp_webhook(request: Request):
                         address=location.get("address")
                     )
                 
+            elif response_type == "audio" and original_message:
+                # Enviar mensaje de audio
+                # Verificar si content es un diccionario o directamente el texto
+                if isinstance(content, dict):
+                    audio_data = content.get("audio_data")
+                    text = content.get("text", "")
+                else:
+                    # El contenido es el texto y audio_data debería estar en un campo separado
+                    audio_data = result.get("audio_data")
+                    text = content
+                
+                if audio_data:
+                    await whatsapp_client.send_audio_message(
+                        to=original_message.user_id,
+                        audio_data=audio_data
+                    )
+                
+                # Si hay texto, enviarlo como mensaje separado
+                if text:
+                    await whatsapp_client.send_message(
+                        to=original_message.user_id,
+                        text=text
+                    )
+                
+                # Manejar mensaje de seguimiento si existe
+                if follow_up := content.get("follow_up"):
+                    follow_up_type = follow_up.get("type")
+                    follow_up_content = follow_up.get("content", {})
+                    
+                    # Enviamos el mensaje de seguimiento según su tipo
+                    if follow_up_type == "interactive_list":
+                        await whatsapp_client.send_interactive_message(
+                            to=original_message.user_id,
+                            header_text=follow_up_content.get("header_text"),
+                            body_text=follow_up_content.get("body_text", ""),
+                            footer_text=follow_up_content.get("footer_text"),
+                            list_sections=follow_up_content.get("list_sections"),
+                            list_button_text=follow_up_content.get("list_button_text")
+                        )
+            
             elif response_type == "reaction" and original_message:
                 # Enviar reacción a un mensaje
                 await whatsapp_client.send_reaction(
