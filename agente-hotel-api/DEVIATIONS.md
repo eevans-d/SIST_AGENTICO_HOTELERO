@@ -29,6 +29,6 @@
 - **Mejoras de Resiliencia:**
   - Se implementó manejo de errores robusto para todos los casos de generación de audio.
   - Se añadió degradación elegante en caso de fallo en la generación de audio.
-- **Documentación:** Pendiente de actualizar en `docs/AUDIO_RESPONSES.md` con patrones de diseño y casos de uso.
-- **Pruebas:** Se requieren pruebas adicionales para los nuevos flujos de interacción.
-- **Estado:** Funcional con implementación completa; pendiente de pruebas exhaustivas.
+- **Documentación:** Se ha actualizado `docs/AUDIO_RESPONSES.md` con patrones de diseño, implementación y casos de uso.
+- **Pruebas:** Creadas pruebas en `tests/unit/test_audio_response_types.py` y `tests/unit/test_audio_follow_up_webhook.py`.
+- **Estado:** Completamente implementado y documentado; cumple los requisitos de la Fase E.4.1 del proyecto.
