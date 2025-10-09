@@ -3,9 +3,8 @@ Tests unitarios para el servicio de contexto conversacional.
 """
 
 import pytest
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.services.conversation_context import (
     ConversationContext,
@@ -107,7 +106,7 @@ class TestConversationContext:
         mock_redis.get.return_value = json.dumps(existing_context)
         
         # Ejecutar
-        context_id = await context_service.store_context(
+        await context_service.store_context(
             user_id, channel, intent, entities, text
         )
         

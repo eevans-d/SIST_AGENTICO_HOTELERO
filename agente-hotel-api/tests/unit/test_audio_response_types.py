@@ -1,6 +1,5 @@
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from app.services.orchestrator import Orchestrator
 from app.models.unified_message import UnifiedMessage
 
@@ -57,7 +56,7 @@ async def test_make_reservation_with_audio():
     # Verificar que se actualizó la sesión
     session_manager.update_session.assert_called_once()
     assert "reservation_pending" in session
-    assert session["reservation_pending"] == True
+    assert session["reservation_pending"]
 
 
 @pytest.mark.asyncio
@@ -108,7 +107,7 @@ async def test_make_reservation_text_only():
     # Verificar que se actualizó la sesión
     session_manager.update_session.assert_called_once()
     assert "reservation_pending" in session
-    assert session["reservation_pending"] == True
+    assert session["reservation_pending"]
     
     # Verificar que no se llamó al generador de audio
     audio_processor.generate_audio_response.assert_not_called()

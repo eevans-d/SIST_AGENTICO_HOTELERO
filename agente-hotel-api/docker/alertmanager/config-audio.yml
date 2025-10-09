@@ -1,0 +1,187 @@
+# Configuración de AlertManager para sistema de audio
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'agente-hotelero@example.com'
+  smtp_auth_username: 'agente-hotelero@example.com'
+  smtp_auth_password: 'smtp_password'
+
+# Plantillas de notificaciones
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Configuración de routing de alertas
+route:
+  group_by: ['alertname', 'component']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+  
+  # Rutas específicas para componentes de audio
+  routes:
+    # Alertas críticas de audio
+    - match:
+        severity: critical
+        component: audio_.*
+      receiver: 'audio-critical'
+      group_wait: 5s
+      repeat_interval: 30m
+    
+    # Alertas de warning de audio
+    - match:
+        severity: warning
+        component: audio_.*
+      receiver: 'audio-warning'
+      group_wait: 30s
+      repeat_interval: 2h
+    
+    # Alertas de info de audio
+    - match:
+        severity: info
+        component: audio_.*
+      receiver: 'audio-info'
+      group_wait: 5m
+      repeat_interval: 24h
+
+# Inhibiciones - evitar spam de alertas relacionadas
+inhibit_rules:
+  # Si el sistema de audio está caído, inhibir alertas de componentes
+  - source_match:
+      alertname: AudioSystemOutage
+    target_match_re:
+      alertname: Audio.*
+    equal: ['instance']
+  
+  # Si la cache tiene problemas críticos, inhibir warnings de hit rate
+  - source_match:
+      severity: critical
+      component: audio_cache
+    target_match:
+      severity: warning
+      component: audio_cache
+    equal: ['instance']
+
+# Configuración de receivers (destinos de notificaciones)
+receivers:
+  # ================================
+  # Webhook por defecto
+  # ================================
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://webhook-service:5000/alerts'
+        send_resolved: true
+
+  # ================================
+  # Alertas críticas de audio
+  # ================================
+  - name: 'audio-critical'
+    email_configs:
+      - to: 'oncall-audio@example.com'
+        subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }} - Audio System'
+        body: |
+          🚨 **CRITICAL AUDIO ALERT** 🚨
+          
+          **Alert:** {{ .GroupLabels.alertname }}
+          **Component:** {{ .GroupLabels.component }}
+          **Severity:** {{ .CommonLabels.severity }}
+          
+          **Affected Alerts:**
+          {{ range .Alerts }}
+          - **{{ .Annotations.summary }}**
+            Description: {{ .Annotations.description }}
+            Runbook: {{ .Annotations.runbook_url }}
+            Started: {{ .StartsAt }}
+          {{ end }}
+          
+          **Dashboard:** http://grafana:3000/d/audio-system/audio-system-overview
+          **Prometheus:** http://prometheus:9090/alerts
+        headers:
+          Priority: 'high'
+    
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#audio-alerts-critical'
+        title: '🚨 Critical Audio Alert'
+        text: |
+          **Alert:** {{ .GroupLabels.alertname }}
+          **Component:** {{ .GroupLabels.component }}
+          
+          {{ range .Alerts }}
+          • {{ .Annotations.summary }}
+          {{ end }}
+        actions:
+          - type: button
+            text: 'View Dashboard'
+            url: 'http://grafana:3000/d/audio-system/audio-system-overview'
+          - type: button
+            text: 'View Runbook'
+            url: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+
+    # PagerDuty para alertas críticas
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }} - Audio System Critical'
+        details:
+          component: '{{ .GroupLabels.component }}'
+          summary: '{{ (index .Alerts 0).Annotations.summary }}'
+
+  # ================================
+  # Alertas de warning de audio
+  # ================================
+  - name: 'audio-warning'
+    email_configs:
+      - to: 'audio-team@example.com'
+        subject: '⚠️ WARNING: {{ .GroupLabels.alertname }} - Audio System'
+        body: |
+          ⚠️ **AUDIO WARNING** ⚠️
+          
+          **Alert:** {{ .GroupLabels.alertname }}
+          **Component:** {{ .GroupLabels.component }}
+          **Severity:** {{ .CommonLabels.severity }}
+          
+          **Details:**
+          {{ range .Alerts }}
+          - {{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            Runbook: {{ .Annotations.runbook_url }}
+          {{ end }}
+          
+          **Action Required:** Please investigate within 1 hour
+          **Dashboard:** http://grafana:3000/d/audio-system/audio-system-overview
+    
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#audio-alerts'
+        title: '⚠️ Audio Warning'
+        text: |
+          **Alert:** {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          • {{ .Annotations.summary }}
+          {{ end }}
+
+  # ================================
+  # Alertas informativas de audio
+  # ================================
+  - name: 'audio-info'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#audio-monitoring'
+        title: 'ℹ️ Audio Info'
+        text: |
+          **Alert:** {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          • {{ .Annotations.summary }}
+          {{ end }}
+
+# Configuración de tiempo de vida de alertas
+time_intervals:
+  - name: business-hours
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '18:00'
+        weekdays: ['monday:friday']
+        
+  - name: weekend
+    time_intervals:
+      - weekdays: ['saturday', 'sunday']

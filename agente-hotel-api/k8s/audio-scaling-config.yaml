@@ -1,0 +1,282 @@
+# Kubernetes Deployment for Audio System
+# HPA (Horizontal Pod Autoscaler) Configuration
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agente-audio-hpa
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agente-audio-api
+  
+  minReplicas: 3
+  maxReplicas: 20
+  
+  metrics:
+  # CPU utilization
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  # Memory utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  
+  # Custom metrics - Audio cache hit rate
+  - type: Pods
+    pods:
+      metric:
+        name: audio_cache_hit_rate
+      target:
+        type: AverageValue
+        averageValue: "0.8"
+  
+  # Custom metrics - Audio processing latency
+  - type: Pods
+    pods:
+      metric:
+        name: audio_processing_latency_p95
+      target:
+        type: AverageValue
+        averageValue: "100m"  # 100ms
+  
+  # Custom metrics - Connection pool utilization
+  - type: Pods
+    pods:
+      metric:
+        name: audio_pool_utilization
+      target:
+        type: AverageValue
+        averageValue: "0.75"
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+    
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# Vertical Pod Autoscaler Configuration
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: agente-audio-vpa
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agente-audio-api
+  
+  updatePolicy:
+    updateMode: "Auto"
+  
+  resourcePolicy:
+    containerPolicies:
+    - containerName: agente-api
+      minAllowed:
+        cpu: 100m
+        memory: 128Mi
+      maxAllowed:
+        cpu: 2000m
+        memory: 4Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agente-audio-pdb
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: disruption-budget
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: agente-audio
+      tier: api
+
+---
+# Network Policy for Audio Services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agente-audio-network-policy
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: agente-audio
+  
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow traffic from NGINX ingress
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow traffic from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8000  # Metrics endpoint
+  
+  # Allow internal service communication
+  - from:
+    - podSelector:
+        matchLabels:
+          app: agente-audio
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  egress:
+  # Allow access to PostgreSQL
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres-audio
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis-audio
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow external API calls (WhatsApp, PMS, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+  
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# Resource Quotas for the namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: agente-audio-quota
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: resource-quota
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    
+    # Storage
+    requests.storage: 100Gi
+    persistentvolumeclaims: "10"
+    
+    # Objects
+    pods: "50"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
+    
+    # Load balancers
+    services.loadbalancers: "5"
+
+---
+# Limit Range for default resource constraints
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: agente-audio-limits
+  namespace: agente-hotelero
+  labels:
+    app: agente-audio
+    component: limit-range
+spec:
+  limits:
+  # Default for containers
+  - default:
+      cpu: 500m
+      memory: 1Gi
+    defaultRequest:
+      cpu: 100m
+      memory: 256Mi
+    type: Container
+  
+  # Constraints for pods
+  - max:
+      cpu: 4000m
+      memory: 8Gi
+    min:
+      cpu: 50m
+      memory: 64Mi
+    type: Pod
+  
+  # Constraints for PVCs
+  - max:
+      storage: 50Gi
+    min:
+      storage: 1Gi
+    type: PersistentVolumeClaim

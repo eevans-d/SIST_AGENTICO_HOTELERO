@@ -3,10 +3,8 @@ import os
 import asyncio
 import tempfile
 from pathlib import Path
-import sys
 
 from app.services.audio_processor import AudioProcessor
-from app.core.settings import Settings
 from app.core.logging import setup_logging
 
 # Configurar logging para el test
@@ -38,11 +36,11 @@ async def test_full_workflow():
         print(f"2. Audio guardado en archivo temporal: {temp_path}")
         
         # Simular URL para la transcripción (usando file:// para pruebas locales)
-        file_url = f"file://{temp_path}"
+        # file_url = f"file://{temp_path}"  # No usado en esta prueba
         
         # En un caso real usaríamos transcribe_whatsapp_audio con una URL de WhatsApp
         # Para pruebas locales, modificamos para usar el archivo directamente
-        print(f"3. Transcribiendo audio...")
+        print("3. Transcribiendo audio...")
         
         # Creamos archivo WAV temporal para la transcripción
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_file:
@@ -54,7 +52,7 @@ async def test_full_workflow():
         # Transcribir con Whisper
         try:
             result = await processor.stt.transcribe(wav_path)
-            print(f"✅ Transcripción exitosa!")
+            print("✅ Transcripción exitosa!")
             print(f"   Texto: '{result['text']}'")
             print(f"   Confianza: {result['confidence']:.2f}")
             print(f"   Duración: {result['duration']:.2f}s")

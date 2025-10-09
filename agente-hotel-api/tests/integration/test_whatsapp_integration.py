@@ -17,7 +17,6 @@ import httpx
 
 from app.services.whatsapp_client import WhatsAppMetaClient
 from app.exceptions.whatsapp_exceptions import (
-    WhatsAppError,
     WhatsAppAuthError,
     WhatsAppRateLimitError,
     WhatsAppMediaError,

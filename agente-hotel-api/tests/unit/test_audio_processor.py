@@ -4,7 +4,7 @@ import pytest
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from app.services.audio_processor import AudioProcessor, WhisperSTT, ESpeakTTS
 from app.exceptions.audio_exceptions import AudioDownloadError, AudioConversionError
 

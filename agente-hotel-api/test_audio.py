@@ -4,13 +4,13 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from app.services.audio_processor import WhisperSTT, ESpeakTTS, AudioProcessor
+from app.services.audio_processor import WhisperSTT, ESpeakTTS
 from app.core.settings import Settings
 
 # Para realizar pruebas independientes
 async def main():
     settings = Settings()
-    print(f"Configuración de audio:")
+    print("Configuración de audio:")
     print(f"- Audio enabled: {settings.audio_enabled}")
     print(f"- TTS engine: {settings.tts_engine}")
     print(f"- Whisper model: {settings.whisper_model}")

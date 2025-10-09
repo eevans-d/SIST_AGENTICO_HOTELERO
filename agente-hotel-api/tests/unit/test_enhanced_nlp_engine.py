@@ -3,14 +3,14 @@ Tests para EnhancedNLPEngine con características multilingües y contextuales.
 """
 
 import pytest
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.services.enhanced_nlp_engine import (
     EnhancedNLPEngine,
     get_enhanced_nlp_engine
 )
+from app.exceptions.pms_exceptions import CircuitBreakerOpenError
 
 
 @pytest.fixture
@@ -160,7 +160,7 @@ class TestEnhancedNLPEngine:
         result = await nlp_engine.process_message(text, user_id, channel)
         
         # Verificar
-        assert result["context_used"] == True
+        assert result["context_used"]
         assert result["resolutions"]["room_type"] == "suite"
     
     async def test_process_message_cache_hit(self, nlp_engine, mock_redis):
@@ -194,7 +194,7 @@ class TestEnhancedNLPEngine:
         result = await nlp_engine.handle_low_confidence(intent, "es")
         
         # Verificar
-        assert result["requires_human"] == True
+        assert result["requires_human"]
         assert "Disculpa, no estoy seguro" in result["response"]
     
     async def test_handle_low_confidence_medium(self, nlp_engine):
@@ -205,7 +205,7 @@ class TestEnhancedNLPEngine:
         result = await nlp_engine.handle_low_confidence(intent, "es")
         
         # Verificar
-        assert result["requires_human"] == False
+        assert not result["requires_human"]
         assert "¿En qué puedo ayudarte?" in result["response"]
         assert "Consultar disponibilidad" in result["response"]
     
@@ -233,7 +233,7 @@ class TestEnhancedNLPEngine:
         
         # Verificar respuesta de fallback
         assert result["intent"]["name"] == "unknown"
-        assert result["fallback"] == True
+        assert result["fallback"]
     
     async def test_get_models_info(self, nlp_engine):
         """Test para obtener info de modelos."""

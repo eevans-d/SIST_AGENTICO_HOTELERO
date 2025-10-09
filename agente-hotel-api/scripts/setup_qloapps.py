@@ -113,7 +113,7 @@ class QloAppsSetup:
             
             logger.info(f"Check-in: {check_in}")
             logger.info(f"Check-out: {check_out}")
-            logger.info(f"Guests: 2 adults")
+            logger.info("Guests: 2 adults")
             
             rooms = await self.client.check_availability(
                 hotel_id=settings.pms_hotel_id,

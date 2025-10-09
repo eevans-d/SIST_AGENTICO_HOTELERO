@@ -9,7 +9,7 @@ Mejora del motor NLP con:
 
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import asyncio
 import json

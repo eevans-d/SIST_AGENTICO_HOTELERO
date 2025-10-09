@@ -1,0 +1,440 @@
+name: CI/CD Pipeline - Agente Hotelero IA
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: agente-hotelero
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Job 1: Tests de calidad de código
+  code-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Instalar Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Cache dependencias
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Instalar dependencias
+      run: |
+        poetry install --all-extras
+    
+    - name: Análisis de seguridad con Bandit
+      run: |
+        poetry run bandit -r app/ -f json -o bandit-report.json || true
+    
+    - name: Linting con Ruff
+      run: |
+        poetry run ruff check app/ --output-format=github
+    
+    - name: Formateo con Ruff
+      run: |
+        poetry run ruff format app/ --check
+    
+    - name: Verificación de tipos con mypy
+      run: |
+        poetry run mypy app/ --ignore-missing-imports
+    
+    - name: Análisis de dependencias
+      run: |
+        poetry run safety check --json --output safety-report.json || true
+    
+    - name: Subir reportes de seguridad
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  # Job 2: Tests unitarios y de integración
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Instalar Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Cache dependencias
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Instalar dependencias
+      run: |
+        poetry install --all-extras
+    
+    - name: Configurar variables de entorno para tests
+      run: |
+        echo "ENV=test" >> $GITHUB_ENV
+        echo "DEBUG=true" >> $GITHUB_ENV
+        echo "POSTGRES_URL=postgresql+asyncpg://test_user:test_password@localhost:5432/test_db" >> $GITHUB_ENV
+        echo "REDIS_URL=redis://localhost:6379/0" >> $GITHUB_ENV
+        echo "PMS_TYPE=mock" >> $GITHUB_ENV
+        echo "SECRET_KEY=test_secret_key_for_ci" >> $GITHUB_ENV
+        echo "JWT_SECRET_KEY=test_jwt_secret_key_for_ci" >> $GITHUB_ENV
+        echo "ENCRYPTION_KEY=test_encryption_key_32_bytes_long" >> $GITHUB_ENV
+    
+    - name: Ejecutar tests unitarios
+      run: |
+        poetry run pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=html
+    
+    - name: Ejecutar tests de integración
+      run: |
+        poetry run pytest tests/integration/ -v --cov-append --cov=app --cov-report=xml
+    
+    - name: Subir cobertura a Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+    
+    - name: Subir reporte de cobertura
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: htmlcov/
+
+  # Job 3: Tests de seguridad
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Ejecutar Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Subir resultados a GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Análisis de secretos con GitLeaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 4: Construcción de imagen Docker
+  build-image:
+    runs-on: ubuntu-latest
+    needs: [code-quality, tests, security-tests]
+    timeout-minutes: 20
+    
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login al Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extraer metadatos
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+    
+    - name: Construir y push imagen
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.production
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  # Job 5: Tests E2E con imagen construida
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
+    
+    - name: Crear archivo .env para E2E
+      run: |
+        cat > .env.e2e << EOF
+        ENV=test
+        DEBUG=true
+        POSTGRES_PASSWORD=e2e_test_password
+        MYSQL_ROOT_PASSWORD=e2e_mysql_password
+        QLOAPPS_DB_PASSWORD=e2e_qloapps_password
+        SECRET_KEY=e2e_test_secret_key_32_bytes_long
+        ENCRYPTION_KEY=e2e_test_encryption_key_32_bytes
+        JWT_SECRET_KEY=e2e_test_jwt_secret_key_for_ci
+        WHATSAPP_VERIFY_TOKEN=e2e_test_verify_token
+        WHATSAPP_ACCESS_TOKEN=e2e_test_access_token
+        GRAFANA_ADMIN_PASSWORD=e2e_admin_password
+        ADMIN_EMAIL=admin@test.com
+        ADMIN_PASSWORD=e2e_admin_password
+        PMS_TYPE=mock
+        EOF
+    
+    - name: Ejecutar stack completo para E2E
+      run: |
+        export $(cat .env.e2e | xargs)
+        docker-compose -f docker-compose.yml up -d
+        sleep 60  # Esperar a que todos los servicios estén listos
+    
+    - name: Verificar salud de servicios
+      run: |
+        curl -f http://localhost:8000/health/ready || exit 1
+        curl -f http://localhost:3000 || exit 1
+        curl -f http://localhost:9090 || exit 1
+    
+    - name: Ejecutar tests E2E
+      run: |
+        docker run --rm --network host \
+          -e POSTGRES_URL=postgresql+asyncpg://agente_user:e2e_test_password@localhost:5432/agente_db \
+          -e REDIS_URL=redis://localhost:6379/0 \
+          -e API_BASE_URL=http://localhost:8000 \
+          -v $(pwd):/app -w /app \
+          python:3.11-slim bash -c "
+            pip install poetry &&
+            poetry install --no-root &&
+            poetry run pytest tests/e2e/ -v
+          "
+    
+    - name: Capturar logs en caso de fallo
+      if: failure()
+      run: |
+        docker-compose -f docker-compose.yml logs > e2e-logs.txt
+    
+    - name: Subir logs de E2E
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: e2e-logs
+        path: e2e-logs.txt
+    
+    - name: Limpiar entorno E2E
+      if: always()
+      run: |
+        docker-compose -f docker-compose.yml down -v
+
+  # Job 6: Análisis de performance
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Setup k6
+      run: |
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Ejecutar aplicación para tests de performance
+      run: |
+        docker run -d --name agente-perf \
+          -p 8000:8000 \
+          -e ENV=test \
+          -e PMS_TYPE=mock \
+          ${{ needs.build-image.outputs.image-tag }}
+        sleep 30
+    
+    - name: Ejecutar tests de carga
+      run: |
+        k6 run --out json=performance-results.json tests/performance/load-test.js || true
+    
+    - name: Analizar resultados de performance
+      run: |
+        python3 -c "
+        import json
+        with open('performance-results.json') as f:
+            results = [json.loads(line) for line in f if line.strip()]
+        
+        # Extraer métricas clave
+        http_reqs = [r for r in results if r.get('metric') == 'http_reqs']
+        http_req_duration = [r for r in results if r.get('metric') == 'http_req_duration']
+        
+        if http_req_duration:
+            avg_duration = sum(r['data']['value'] for r in http_req_duration) / len(http_req_duration)
+            print(f'Duración promedio de requests: {avg_duration:.2f}ms')
+            
+            if avg_duration > 1000:  # 1 segundo
+                print('WARNING: Performance degradation detected')
+                exit(1)
+        "
+    
+    - name: Subir resultados de performance
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-results
+        path: performance-results.json
+    
+    - name: Limpiar contenedor de performance
+      if: always()
+      run: |
+        docker stop agente-perf || true
+        docker rm agente-perf || true
+
+  # Job 7: Deploy a staging (solo en push a develop)
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-image, e2e-tests, performance-tests]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: staging
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Deploy a staging
+      run: |
+        echo "Deploying to staging environment..."
+        echo "Image: ${{ needs.build-image.outputs.image-tag }}"
+        # Aquí iría la lógica específica de deploy a staging
+        # Por ejemplo, usando kubectl, docker-compose remoto, etc.
+
+  # Job 8: Deploy a producción (solo en release)
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build-image, e2e-tests, performance-tests]
+    if: github.event_name == 'release'
+    environment: production
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+    
+    - name: Deploy a producción
+      run: |
+        echo "Deploying to production environment..."
+        echo "Image: ${{ needs.build-image.outputs.image-tag }}"
+        echo "Release: ${{ github.event.release.tag_name }}"
+        # Aquí iría la lógica específica de deploy a producción
+        # Por ejemplo, usando kubectl, docker-compose remoto, etc.
+
+  # Job 9: Notificaciones
+  notify:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+    - name: Notificar resultado del pipeline
+      run: |
+        if [[ "${{ needs.deploy-staging.result }}" == "success" || "${{ needs.deploy-production.result }}" == "success" ]]; then
+          echo "✅ Pipeline completado exitosamente"
+        else
+          echo "❌ Pipeline falló o fue omitido"
+        fi
+        
+        # Aquí se podrían agregar notificaciones a Slack, email, etc.

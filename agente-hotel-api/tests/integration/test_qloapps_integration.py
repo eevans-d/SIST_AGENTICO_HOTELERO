@@ -7,12 +7,11 @@ These tests validate the real integration with QloApps or use mocks if PMS_TYPE=
 import pytest
 import pytest_asyncio
 from datetime import date, timedelta
-from typing import Dict, List
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.core.settings import settings
 from app.services.qloapps_client import create_qloapps_client
-from app.services.pms_adapter import get_pms_adapter, QloAppsAdapter
+from app.services.pms_adapter import get_pms_adapter
 from app.exceptions.pms_exceptions import PMSError, PMSAuthError
 
 

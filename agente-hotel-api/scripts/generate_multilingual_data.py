@@ -3,13 +3,10 @@ Script para generar dataset multilingüe para Rasa NLU.
 Fase E.5 - Mejora del Motor NLP
 """
 
-import os
 import argparse
 from pathlib import Path
 import yaml
 import json
-import re
-from datetime import datetime
 
 # Intenciones por idioma
 INTENTS = {

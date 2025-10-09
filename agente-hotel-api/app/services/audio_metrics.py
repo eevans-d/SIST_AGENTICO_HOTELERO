@@ -1,7 +1,6 @@
 # Audio Processing Metrics
 
 from prometheus_client import Counter, Histogram, Gauge
-from typing import Dict
 
 # Contadores para operaciones de audio
 audio_operations_total = Counter(
@@ -56,6 +55,41 @@ audio_cache_memory_bytes = Gauge(
     'Memory used by audio cache in bytes'
 )
 
+# Métricas para limpieza automática de caché
+audio_cache_cleanup_total = Counter(
+    'audio_cache_cleanup_total',
+    'Total number of automatic cache cleanup operations',
+    ['status']
+)
+
+audio_cache_cleanup_freed_bytes = Counter(
+    'audio_cache_cleanup_freed_bytes',
+    'Total bytes freed by cache cleanup operations'
+)
+
+audio_cache_cleanup_entries_removed = Counter(
+    'audio_cache_cleanup_entries_removed',
+    'Total number of entries removed by cache cleanup operations'
+)
+
+# Métricas para compresión de caché
+audio_cache_compression_operations_total = Counter(
+    'audio_cache_compression_operations_total',
+    'Total number of audio cache compression operations',
+    ['operation']
+)
+
+audio_cache_compression_bytes_saved = Counter(
+    'audio_cache_compression_bytes_saved',
+    'Total bytes saved by audio cache compression'
+)
+
+audio_cache_compression_ratio = Histogram(
+    'audio_cache_compression_ratio',
+    'Compression ratio achieved in audio cache entries',
+    buckets=[1.1, 1.5, 2.0, 3.0, 4.0, 5.0, 10.0]
+)
+
 
 class AudioMetrics:
     """
@@ -106,3 +140,25 @@ class AudioMetrics:
     def update_cache_memory(bytes_used: int):
         """Update cache memory usage"""
         audio_cache_memory_bytes.set(bytes_used)
+        
+    @staticmethod
+    def record_cache_cleanup(status: str):
+        """Record cache cleanup operation"""
+        audio_cache_cleanup_total.labels(status=status).inc()
+    
+    @staticmethod
+    def record_operation_with_value(metric_name: str, value: float):
+        """Record a metric with a specific value"""
+        if metric_name == "audio_cache_cleanup_freed_mb":
+            audio_cache_cleanup_freed_bytes.inc(value * 1024 * 1024)
+        elif metric_name == "audio_cache_cleanup_entries_removed":
+            audio_cache_cleanup_entries_removed.inc(value)
+        elif metric_name == "audio_cache_compression_bytes_saved":
+            audio_cache_compression_bytes_saved.inc(value)
+        elif metric_name == "audio_cache_compression_ratio":
+            audio_cache_compression_ratio.observe(value)
+    
+    @staticmethod
+    def record_compression_operation(operation: str):
+        """Record audio compression operation"""
+        audio_cache_compression_operations_total.labels(operation=operation).inc()

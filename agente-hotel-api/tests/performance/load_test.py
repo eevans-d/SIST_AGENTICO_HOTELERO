@@ -11,11 +11,10 @@ Uso:
     3. Abrir interfaz web: http://localhost:8089
 """
 
-import json
 import random
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from locust import HttpUser, between, task
 

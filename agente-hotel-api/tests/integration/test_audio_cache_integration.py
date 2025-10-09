@@ -3,7 +3,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from app.services.audio_processor import AudioProcessor
-from app.services.audio_cache_service import AudioCacheService
 
 
 @pytest.fixture

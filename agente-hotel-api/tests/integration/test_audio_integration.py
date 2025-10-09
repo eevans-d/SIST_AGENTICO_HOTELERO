@@ -2,13 +2,10 @@
 
 import pytest
 import asyncio
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from app.services.audio_processor import AudioProcessor
 from app.services.audio_validator import AudioValidator
 from app.services.audio_metrics import AudioMetrics
-from app.exceptions.audio_exceptions import AudioDownloadError, AudioValidationError
 
 
 class TestAudioProcessorIntegration:
@@ -99,9 +96,9 @@ class TestAudioProcessorIntegration:
     async def test_metrics_integration(self, audio_processor):
         """Test que las métricas se registren correctamente"""
         # Mock metrics to track calls
-        with patch.object(AudioMetrics, 'record_operation') as mock_record_op:
-            with patch.object(AudioMetrics, 'record_operation_duration') as mock_record_duration:
-                with patch.object(AudioMetrics, 'record_error') as mock_record_error:
+        with patch.object(AudioMetrics, 'record_operation'):
+            with patch.object(AudioMetrics, 'record_operation_duration'):
+                with patch.object(AudioMetrics, 'record_error'):
                     
                     # Mock failed download to trigger error metrics
                     with patch("aiohttp.ClientSession") as mock_session_class:

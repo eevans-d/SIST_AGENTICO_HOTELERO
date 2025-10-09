@@ -8,7 +8,7 @@ Tests complete flows from webhook to response:
 """
 
 import json
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
@@ -308,7 +308,6 @@ async def test_whatsapp_template_message_flow():
         MockClient.return_value = client_instance
         
         # Create orchestrator with mocked services
-        from app.services.orchestrator import Orchestrator
         
         orchestrator_mock = AsyncMock()
         orchestrator_mock.handle_unified_message.return_value = {

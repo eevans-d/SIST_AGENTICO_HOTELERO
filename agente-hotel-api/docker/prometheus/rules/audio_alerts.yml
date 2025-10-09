@@ -1,0 +1,215 @@
+# Reglas de alertas específicas para el sistema de audio
+groups:
+  - name: audio_system_alerts
+    rules:
+      # ================================
+      # Alertas de Performance de Audio
+      # ================================
+      - alert: AudioCacheHitRateLow
+        expr: |
+          (
+            rate(audio_cache_hits_total[5m]) / 
+            (rate(audio_cache_hits_total[5m]) + rate(audio_cache_misses_total[5m]))
+          ) < 0.7
+        for: 2m
+        labels:
+          severity: warning
+          component: audio_cache
+        annotations:
+          summary: "Audio cache hit rate is below 70%"
+          description: "Audio cache hit rate is {{ $value | humanizePercentage }} for {{ $labels.cache_type }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-cache-low-hit-rate"
+
+      - alert: AudioCacheHitRateCritical
+        expr: |
+          (
+            rate(audio_cache_hits_total[5m]) / 
+            (rate(audio_cache_hits_total[5m]) + rate(audio_cache_misses_total[5m]))
+          ) < 0.5
+        for: 1m
+        labels:
+          severity: critical
+          component: audio_cache
+        annotations:
+          summary: "Audio cache hit rate is critically low"
+          description: "Audio cache hit rate is {{ $value | humanizePercentage }} for {{ $labels.cache_type }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-cache-critical"
+
+      # ================================
+      # Alertas de Latencia de Audio
+      # ================================
+      - alert: AudioProcessingLatencyHigh
+        expr: |
+          histogram_quantile(0.95, rate(audio_cache_operation_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          component: audio_processing
+        annotations:
+          summary: "Audio processing latency is high"
+          description: "95th percentile latency is {{ $value }}s for {{ $labels.operation }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-latency-high"
+
+      - alert: AudioProcessingLatencyCritical
+        expr: |
+          histogram_quantile(0.95, rate(audio_cache_operation_seconds_bucket[5m])) > 2.0
+        for: 1m
+        labels:
+          severity: critical
+          component: audio_processing
+        annotations:
+          summary: "Audio processing latency is critically high"
+          description: "95th percentile latency is {{ $value }}s for {{ $labels.operation }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-latency-critical"
+
+      # ================================
+      # Alertas de Memoria de Audio Cache
+      # ================================
+      - alert: AudioCacheMemoryUsageHigh
+        expr: |
+          audio_cache_memory_bytes / (512 * 1024 * 1024) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: audio_cache
+        annotations:
+          summary: "Audio cache memory usage is high"
+          description: "Audio cache is using {{ $value | humanizePercentage }} of allocated memory"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-cache-memory-high"
+
+      - alert: AudioCacheMemoryUsageCritical
+        expr: |
+          audio_cache_memory_bytes / (512 * 1024 * 1024) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          component: audio_cache
+        annotations:
+          summary: "Audio cache memory usage is critically high"
+          description: "Audio cache is using {{ $value | humanizePercentage }} of allocated memory"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-cache-memory-critical"
+
+      # ================================
+      # Alertas de Pool de Conexiones
+      # ================================
+      - alert: AudioConnectionPoolUnhealthy
+        expr: |
+          audio_pool_health_score < 0.7
+        for: 2m
+        labels:
+          severity: warning
+          component: audio_connections
+        annotations:
+          summary: "Audio connection pool health is degraded"
+          description: "Connection pool health score is {{ $value }} for {{ $labels.service_type }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-connections-unhealthy"
+
+      - alert: AudioConnectionPoolCritical
+        expr: |
+          audio_pool_health_score < 0.5
+        for: 1m
+        labels:
+          severity: critical
+          component: audio_connections
+        annotations:
+          summary: "Audio connection pool is critically unhealthy"
+          description: "Connection pool health score is {{ $value }} for {{ $labels.service_type }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-connections-critical"
+
+      # ================================
+      # Alertas de Tasa de Errores de Audio
+      # ================================
+      - alert: AudioErrorRateHigh
+        expr: |
+          (
+            rate(audio_compression_operations_total{result="error"}[5m]) /
+            rate(audio_compression_operations_total[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: audio_compression
+        annotations:
+          summary: "Audio error rate is high"
+          description: "Audio error rate is {{ $value | humanizePercentage }} for {{ $labels.level }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-error-rate-high"
+
+      - alert: AudioErrorRateCritical
+        expr: |
+          (
+            rate(audio_compression_operations_total{result="error"}[5m]) /
+            rate(audio_compression_operations_total[5m])
+          ) > 0.15
+        for: 1m
+        labels:
+          severity: critical
+          component: audio_compression
+        annotations:
+          summary: "Audio error rate is critically high"
+          description: "Audio error rate is {{ $value | humanizePercentage }} for {{ $labels.level }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-error-rate-critical"
+
+      # ================================
+      # Alertas de Throughput de Audio
+      # ================================
+      - alert: AudioThroughputLow
+        expr: |
+          rate(audio_cache_operation_seconds_count[5m]) < 10
+        for: 5m
+        labels:
+          severity: warning
+          component: audio_processing
+        annotations:
+          summary: "Audio processing throughput is low"
+          description: "Audio operations per second is {{ $value }} for {{ $labels.cache_type }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-throughput-low"
+
+      # ================================
+      # Alertas de Compresión de Audio
+      # ================================
+      - alert: AudioCompressionRatioLow
+        expr: |
+          avg_over_time(audio_compression_ratio[10m]) < 1.5
+        for: 5m
+        labels:
+          severity: info
+          component: audio_compression
+        annotations:
+          summary: "Audio compression ratio is low"
+          description: "Average compression ratio is {{ $value }} for {{ $labels.format }}"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-compression-ratio-low"
+
+  # ================================
+  # Alertas de Correlación de Audio
+  # ================================
+  - name: audio_correlation_alerts
+    rules:
+      - alert: AudioSystemDegraded
+        expr: |
+          (
+            (audio_pool_health_score < 0.8) and
+            (rate(audio_cache_hits_total[5m]) / (rate(audio_cache_hits_total[5m]) + rate(audio_cache_misses_total[5m])) < 0.8)
+          )
+        for: 3m
+        labels:
+          severity: warning
+          component: audio_system
+        annotations:
+          summary: "Multiple audio system components are degraded"
+          description: "Both connection pool and cache performance are below optimal levels"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-system-degraded"
+
+      - alert: AudioSystemOutage
+        expr: |
+          (
+            absent(up{job="agente-api-audio"}) or
+            (up{job="agente-api-audio"} == 0)
+          )
+        for: 1m
+        labels:
+          severity: critical
+          component: audio_system
+        annotations:
+          summary: "Audio system is down"
+          description: "The audio processing service is not responding"
+          runbook_url: "https://docs.agente-hotelero.com/runbooks/audio-system-outage"

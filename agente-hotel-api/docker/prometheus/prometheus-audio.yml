@@ -1,0 +1,95 @@
+# Configuración de Prometheus optimizada para métricas de audio
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'agente-hotelero-audio'
+    replica: 'prometheus-01'
+
+# Configuración de reglas de alertas
+rule_files:
+  - "/etc/prometheus/rules/audio_alerts.yml"
+  - "/etc/prometheus/rules/performance_alerts.yml"
+  - "/etc/prometheus/rules/system_alerts.yml"
+
+# Configuración de AlertManager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Configuración de scraping
+scrape_configs:
+  # ================================
+  # Agente Hotelero API - Métricas de Audio
+  # ================================
+  - job_name: 'agente-api-audio'
+    static_configs:
+      - targets: ['agente-api-optimized:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: true
+    params:
+      format: ['prometheus']
+
+  # ================================
+  # Métricas del Sistema
+  # ================================
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # ================================
+  # PostgreSQL Metrics
+  # ================================
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ================================
+  # Redis Metrics
+  # ================================
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ================================
+  # Prometheus Self-Monitoring
+  # ================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ================================
+  # AlertManager
+  # ================================
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
+  # ================================
+  # Grafana
+  # ================================
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: '/metrics'
+
+# Configuración de almacenamiento remoto (opcional para producción)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint/api/v1/write"
+#     headers:
+#       authorization: "Bearer <token>"
+
+# Configuración de retención
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 10GB

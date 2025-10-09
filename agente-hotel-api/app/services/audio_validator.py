@@ -2,7 +2,7 @@
 
 import mimetypes
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any
 from ..exceptions.audio_exceptions import AudioValidationError
 from ..core.logging import logger
 

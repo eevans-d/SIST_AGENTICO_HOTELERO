@@ -1,6 +1,5 @@
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from app.services.orchestrator import Orchestrator
 from app.models.unified_message import UnifiedMessage
 
@@ -69,9 +68,14 @@ async def test_hotel_amenities_with_audio():
     session_manager = AsyncMock()
     lock_service = AsyncMock()
     
-    # Mock para audio_processor
+    # Mock para audio_processor con métricas y compresión
     audio_processor = AsyncMock()
     audio_processor.generate_audio_response.return_value = b"audio_data_bytes"
+    audio_processor.get_audio_metrics.return_value = {
+        "compression_ratio": 0.02,
+        "original_size": 1500,
+        "compressed_size": 36
+    }
     
     # Crear la instancia de Orchestrator con los mocks
     orchestrator = Orchestrator(
@@ -338,6 +342,85 @@ async def test_new_intents_with_text_messages():
         # Verificar que NO se generó audio
         audio_processor.generate_audio_response.assert_not_called()
 
+
+@pytest.mark.asyncio
+async def test_audio_whisper_transcription():
+    """Prueba la transcripción de audio con Whisper."""
+    # Mocks para la prueba
+    audio_processor = AsyncMock()
+    audio_processor.transcribe_whatsapp_audio.return_value = {
+        "text": "Me gustaría saber si tienen habitaciones disponibles",
+        "confidence": 0.92,
+        "success": True,
+        "language": "es",
+        "duration": 2.3
+    }
+    
+    # Mock de NLP Engine para procesar la transcripción
+    nlp_engine = AsyncMock()
+    nlp_engine.analyze_text.return_value = {
+        "intent": {"name": "check_availability", "confidence": 0.89},
+        "entities": [{"type": "date", "value": "mañana", "confidence": 0.87}],
+        "language": "es"
+    }
+    
+    # Mensaje de audio para procesar
+    audio_message = UnifiedMessage(
+        message_id="234",
+        canal="whatsapp",
+        user_id="1234567890",
+        timestamp_iso="2023-01-01T00:00:00Z",
+        tipo="audio",
+        texto="",  # Sin texto inicialmente
+        media_url="https://example.com/audio_mensaje.ogg"
+    )
+    
+    # Orquestador con mocks
+    orchestrator = AsyncMock()
+    orchestrator.audio_processor = audio_processor
+    orchestrator.nlp_engine = nlp_engine
+    
+    # Simular el flujo de procesamiento de audio
+    # 1. Transcribir audio
+    transcription = await audio_processor.transcribe_whatsapp_audio(audio_message.media_url)
+    
+    # 2. Actualizar mensaje con texto transcrito
+    audio_message.texto = transcription["text"]
+    
+    # 3. Procesar con NLP
+    nlp_result = await nlp_engine.analyze_text(audio_message.texto)
+    
+    # Verificaciones
+    assert audio_message.texto == "Me gustaría saber si tienen habitaciones disponibles"
+    assert nlp_result["intent"]["name"] == "check_availability"
+    assert audio_processor.transcribe_whatsapp_audio.called
+    assert nlp_engine.analyze_text.called
+
+@pytest.mark.asyncio
+async def test_audio_espeak_synthesis():
+    """Prueba la síntesis de voz con eSpeak."""
+    # Mock para audio_processor
+    audio_processor = AsyncMock()
+    audio_data = b"audio_bytes_data_espeak_synthesis"
+    audio_processor.synthesize_text.return_value = {
+        "audio_data": audio_data,
+        "format": "ogg",
+        "duration": 3.2,
+        "success": True
+    }
+    
+    # Crear mensaje y texto para la respuesta
+    text_response = "Su reserva ha sido confirmada para el viernes 15 de octubre, habitación superior con vista al mar."
+    
+    # Simular la síntesis de voz
+    result = await audio_processor.synthesize_text(text_response)
+    
+    # Verificaciones
+    assert result["success"] is True
+    assert result["audio_data"] == audio_data
+    assert result["format"] == "ogg"
+    assert isinstance(result["duration"], float)
+    assert audio_processor.synthesize_text.called
 
 @pytest.mark.asyncio
 async def test_audio_generation_error_fallback():

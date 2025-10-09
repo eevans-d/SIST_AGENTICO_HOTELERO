@@ -1,10 +1,8 @@
 # tests/unit/test_audio_cache_service.py
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from app.services.audio_cache_service import AudioCacheService
-from app.core.settings import settings
 
 
 @pytest.fixture

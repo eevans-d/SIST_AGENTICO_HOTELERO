@@ -5,10 +5,9 @@ Actualización de la Fase E.5 del motor NLP con mejoras significativas.
 
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import asyncio
-from functools import lru_cache
 import json
 
 from prometheus_client import Counter, Gauge, Histogram

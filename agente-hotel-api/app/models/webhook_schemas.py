@@ -3,7 +3,7 @@ Webhook Schema Validation
 Strict Pydantic models for webhook payload validation
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator
 from typing import Literal, Any
 from datetime import datetime
 

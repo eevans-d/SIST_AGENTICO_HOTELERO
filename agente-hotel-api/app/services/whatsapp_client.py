@@ -2,8 +2,7 @@
 
 import hashlib
 import hmac
-import time
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 
 import httpx
 import structlog
@@ -16,7 +15,6 @@ from ..exceptions.whatsapp_exceptions import (
     WhatsAppRateLimitError,
     WhatsAppMediaError,
     WhatsAppTemplateError,
-    WhatsAppWebhookError,
     WhatsAppNetworkError,
 )
 from ..services.audio_processor import AudioProcessor

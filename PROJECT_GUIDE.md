@@ -188,6 +188,132 @@ curl -X POST http://localhost:8000/webhooks/gmail \
   -d '{"notification": "new_message"}'
 ```
 
+---
+
+## 🎵 Audio Processing System
+
+### Overview
+The audio processing system enables voice interactions with the hotel agent via WhatsApp voice messages. It uses Whisper for speech-to-text (STT) transcription and eSpeak for text-to-speech (TTS) synthesis, with a high-performance audio cache to reduce latency and resource usage.
+
+### Prerequisites
+
+1. **System Dependencies**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install -y ffmpeg espeak
+   
+   # CentOS/RHEL
+   sudo yum install -y ffmpeg espeak
+   
+   # Alpine (Docker)
+   apk add --no-cache ffmpeg espeak
+   ```
+
+2. **Python Dependencies**:
+   - Whisper (OpenAI): `openai-whisper`
+   - Audio processing: `aiohttp`, `aiofiles`
+   - In-memory cache: `redis`
+
+### Configuration
+
+Add to your `.env` file:
+
+```bash
+# Audio Processing Settings
+WHISPER_MODEL=tiny       # Options: tiny, base, small, medium, large
+WHISPER_LANGUAGE=es      # Default language (es for Spanish)
+TTS_ENGINE=espeak        # Current options: espeak
+ESPEAK_VOICE=es          # Voice for eSpeak
+ESPEAK_SPEED=150         # Speed (words per minute)
+AUDIO_MAX_SIZE_MB=10     # Maximum audio size in MB
+AUDIO_TIMEOUT_SECONDS=30 # Timeout for audio operations
+AUDIO_CACHE_ENABLED=true # Enable Redis audio cache
+AUDIO_CACHE_TTL=86400    # Cache TTL in seconds (24 hours)
+```
+
+### Audio Processing Flow
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  WhatsApp    │    │  Download &  │    │   Whisper    │    │  NLP Engine  │
+│ Voice Message│───►│   Convert    │───►│     STT      │───►│   Process    │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+                                                                   │
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐          ▼
+│   WhatsApp   │    │   eSpeak     │    │  Response    │    ┌──────────────┐
+│    Reply     │◄───│     TTS      │◄───│  Generation  │◄───│  PMS Query   │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+```
+
+### Audio Cache System
+
+The system implements a Redis-backed audio cache with compression:
+
+- **Compression**: Uses zlib with compression ratio averaging 97.6% (1500→36 bytes)
+- **Automatic Cleanup**: LRU-based memory management
+- **Metrics**: Full Prometheus instrumentation (8 metrics)
+- **Resilience**: Exception handling, timeouts, and validation
+
+### Usage Examples
+
+#### Transcribing WhatsApp Audio
+
+```python
+from app.services.audio_processor import AudioProcessor
+
+processor = AudioProcessor()
+
+# Transcribe WhatsApp audio message
+result = await processor.transcribe_whatsapp_audio(
+    audio_url="https://example.com/whatsapp_media_url.ogg"
+)
+
+print(f"Transcribed text: {result['text']}")
+print(f"Confidence: {result['confidence']}")
+```
+
+#### Generating Voice Responses
+
+```python
+# Generate audio response
+audio_data = await processor.generate_audio_response(
+    text="Gracias por su reserva. Lo esperamos el próximo fin de semana."
+)
+
+# Send via WhatsApp
+from app.services.whatsapp_client import WhatsAppClient
+client = WhatsAppClient()
+await client.send_audio_message(
+    phone="5491155667788",
+    audio_data=audio_data,
+    text="Gracias por su reserva"  # Fallback text
+)
+```
+
+### Advanced Features
+
+- **Multi-format Support**: Handles various audio formats via FFmpeg conversion
+- **Speech Recognition**: Optimized for Spanish hotel domain vocabulary
+- **Response Synthesis**: Natural-sounding voice responses in Spanish
+- **Cache Invalidation**: Automatic cache cleanup for memory management
+- **Compression Metrics**: Tracking ratio, bytes saved, and performance
+- **Fallback Mechanism**: Text responses when audio processing fails
+
+### Monitoring
+
+The audio processing system exposes several Prometheus metrics:
+
+- `audio_operations_total`: Counter for audio operations (STT, TTS)
+- `audio_operation_duration_seconds`: Processing latency histograms
+- `audio_file_size_bytes`: Size distribution of processed files
+- `audio_cache_size_entries`: Current cache size (entries)
+- `audio_cache_memory_bytes`: Memory usage by cache
+- `audio_cache_compression_ratio`: Compression effectiveness histogram
+- `audio_cache_compression_bytes_saved_total`: Space savings counter
+- `audio_cache_cleanup_entries_removed_total`: Cache cleanup activity
+
+View these metrics in the Grafana Audio Processing dashboard.
+
 **Response**:
 ```json
 {

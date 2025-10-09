@@ -3,7 +3,6 @@ Tests para servicio multilingüe del motor NLP.
 """
 
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.multilingual_service import (
@@ -99,7 +98,7 @@ class TestLanguageDetector:
         # Verificar
         assert result["language"] == "es"
         assert result["confidence"] == 0.9
-        assert result["supported"] == True
+        assert result["supported"]
     
     async def test_detect_unsupported_language(self, language_detector):
         """Test para idioma no soportado."""
@@ -114,7 +113,7 @@ class TestLanguageDetector:
         
         # Verificar
         assert result["language"] == "fr"
-        assert result["supported"] == False
+        assert not result["supported"]
     
     async def test_initialize_without_libraries(self, language_detector):
         """Test para inicialización sin librerías externas."""
@@ -131,7 +130,7 @@ class TestLanguageDetector:
                 await language_detector.initialize()
                 
                 # Verificar
-                assert language_detector.loaded == True
+                assert language_detector.loaded
                 assert language_detector.backend == "basic"
                 assert mock_logger.warning.called
 

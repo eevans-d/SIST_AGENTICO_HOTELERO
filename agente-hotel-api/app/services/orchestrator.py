@@ -256,18 +256,15 @@ class Orchestrator:
             }
         """
         intent = nlp_result.get("intent", {}).get("name")
-        language = nlp_result.get("language", "es")
         tenant_id = getattr(message, "tenant_id", None)
         
         # Verificar si el mensaje original era de audio
         respond_with_audio = message.tipo == "audio"
         
         # Detectar si es una respuesta a un mensaje interactivo
-        is_interactive_response = False
         interactive_id = None
         
         if message.tipo == "interactive" and message.metadata.get("interactive_data"):
-            is_interactive_response = True
             interactive_data = message.metadata.get("interactive_data", {})
             interactive_id = interactive_data.get("id")
             

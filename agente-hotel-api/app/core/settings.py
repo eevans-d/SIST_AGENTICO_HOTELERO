@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     audio_cache_enabled: bool = True
     audio_cache_ttl_seconds: int = 86400  # 24 horas por defecto
     audio_cache_max_size_mb: int = 100  # Tamaño máximo de caché en MB
+    audio_cache_compression_enabled: bool = True  # Habilitar compresión para archivos grandes
+    audio_cache_compression_threshold_kb: int = 100  # Comprimir archivos mayores a 100KB
+    audio_cache_compression_level: int = 6  # Nivel de compresión (1-9, donde 9 es máxima compresión)
     
     # Operational Settings
     environment: Environment = Environment.DEV

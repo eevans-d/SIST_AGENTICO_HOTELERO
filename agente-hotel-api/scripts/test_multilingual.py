@@ -8,7 +8,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 # Add app directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))

@@ -4,9 +4,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from app.services.whatsapp_client import WhatsAppMetaClient
 from app.services.audio_processor import AudioProcessor
-from app.core.settings import Settings
 from app.core.logging import setup_logging
 
 # Configurar logging para el test
@@ -17,7 +15,7 @@ async def test_whatsapp_audio_integration():
     print("Iniciando prueba de integración WhatsApp-Audio...")
     
     # Inicializar componentes
-    whatsapp_client = WhatsAppMetaClient()
+    # whatsapp_client = WhatsAppMetaClient()  # No usado en esta prueba
     audio_processor = AudioProcessor()
     
     # 1. Generar un mensaje de audio de prueba
@@ -40,7 +38,7 @@ async def test_whatsapp_audio_integration():
         print(f"2. Audio guardado en archivo temporal: {temp_path}")
         
         # 3. Simular proceso completo usando archivos locales
-        print(f"3. Simulando procesamiento de mensaje de audio...")
+        print("3. Simulando procesamiento de mensaje de audio...")
         
         # Simulamos el procesamiento del audio
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_file:
@@ -52,7 +50,7 @@ async def test_whatsapp_audio_integration():
         # Transcribir con Whisper
         result = await audio_processor.stt.transcribe(wav_path)
         
-        print(f"✅ Transcripción exitosa!")
+        print("✅ Transcripción exitosa!")
         print(f"   Texto: '{result['text']}'")
         print(f"   Confianza: {result['confidence']:.2f}")
         print(f"   Duración: {result['duration']:.2f}s")

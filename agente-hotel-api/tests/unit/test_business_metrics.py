@@ -6,7 +6,6 @@ Verifica que todas las funciones auxiliares funcionen correctamente.
 """
 
 import pytest
-from datetime import datetime, timedelta
 from app.services.business_metrics import (
     record_reservation,
     failed_reservations,

@@ -1,9 +1,9 @@
-# [PROMPT 2.6] app/services/audio_processor.py
+# [PROMPT 2.6] app/services/audio_processor.py - OPTIMIZED
 
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 import asyncio
 from contextlib import asynccontextmanager
 import time
@@ -20,19 +20,53 @@ from ..exceptions.audio_exceptions import (
 )
 from .audio_metrics import AudioMetrics
 from .audio_cache_service import AudioCacheService
+from .audio_cache_optimizer import AudioCacheOptimizer, AudioCacheType, CacheStrategy
+from .audio_compression_optimizer import (
+    AudioCompressionOptimizer, 
+    CompressionLevel, 
+    NetworkConditions
+)
+from .audio_connection_pool import (
+    AudioConnectionManager, 
+    ServiceType, 
+    ConnectionConfig
+)
 
 
-class WhisperSTT:
-    def __init__(self, model_name: Optional[str] = None):
+class OptimizedWhisperSTT:
+    """
+    Versión optimizada de WhisperSTT con caché inteligente y gestión de recursos.
+    """
+    
+    def __init__(
+        self, 
+        model_name: Optional[str] = None,
+        cache_optimizer: Optional[AudioCacheOptimizer] = None
+    ):
         self.model_name = model_name or settings.whisper_model
         self.language = settings.whisper_language
         self.model = None
         self._model_loaded = False
+        self.cache_optimizer = cache_optimizer
         
     async def _load_model(self):
-        """Carga el modelo Whisper de forma lazy"""
+        """Carga el modelo Whisper de forma lazy con caché inteligente"""
         if self._model_loaded:
             return
+        
+        # Verificar caché primero
+        if self.cache_optimizer:
+            cached_model = await self.cache_optimizer.get(
+                f"whisper_model_{self.model_name}",
+                AudioCacheType.STT_MODEL,
+                CacheStrategy.ADAPTIVE
+            )
+            
+            if cached_model:
+                self.model = cached_model
+                self._model_loaded = True
+                logger.info(f"Whisper model loaded from cache: {self.model_name}")
+                return
             
         try:
             # Importar whisper solo cuando se necesite
@@ -52,6 +86,16 @@ class WhisperSTT:
             AudioMetrics.record_operation_duration("model_load", load_time)
             AudioMetrics.record_operation("model_load", "success")
             
+            # Guardar en caché
+            if self.cache_optimizer:
+                await self.cache_optimizer.set(
+                    f"whisper_model_{self.model_name}",
+                    self.model,
+                    AudioCacheType.STT_MODEL,
+                    ttl=3600,  # 1 hora
+                    strategy=CacheStrategy.ADAPTIVE
+                )
+            
             self._model_loaded = True
             
         except ImportError:
@@ -64,53 +108,78 @@ class WhisperSTT:
             raise AudioTranscriptionError(f"Failed to load Whisper model: {str(e)}")
 
     async def transcribe(self, audio_file: Path) -> dict:
-        """Transcribe audio file using Whisper"""
+        """Transcribe audio file using Whisper con caché inteligente"""
         await self._load_model()
+        
+        # Generar clave de caché basada en hash del archivo
+        cache_key = f"transcription_{audio_file.stat().st_size}_{audio_file.stat().st_mtime}"
+        
+        # Verificar caché de transcripción
+        if self.cache_optimizer:
+            cached_result = await self.cache_optimizer.get(
+                cache_key,
+                AudioCacheType.TRANSCRIPTION,
+                CacheStrategy.LRU
+            )
+            
+            if cached_result:
+                logger.debug(f"Transcription loaded from cache: {cache_key}")
+                return cached_result
         
         start_time = time.time()
         
         # Si Whisper no está disponible, usar mock
         if self._model_loaded == "mock":
             logger.debug("Using mock transcription (Whisper not available)")
-            return {
+            result = {
                 "text": "Hola, quisiera saber si tienen disponibilidad para el fin de semana.",
                 "confidence": 0.9,
                 "success": True,
                 "language": "es",
                 "duration": 0.1
             }
+        else:
+            try:
+                # Ejecutar transcripción en thread pool
+                loop = asyncio.get_event_loop()
+                whisper_result = await loop.run_in_executor(
+                    None, self.model.transcribe, str(audio_file)
+                )
+                
+                transcription_time = time.time() - start_time
+                
+                # Procesar resultado
+                result = {
+                    "text": whisper_result["text"].strip(),
+                    "confidence": self._calculate_confidence(whisper_result),
+                    "success": True,
+                    "language": whisper_result.get("language", "unknown"),
+                    "duration": transcription_time
+                }
+                
+                logger.info(f"Transcription completed in {transcription_time:.2f}s: {result['text'][:50]}...")
+                AudioMetrics.record_operation_duration("transcription", transcription_time)
+                AudioMetrics.record_operation("transcription", "success")
+                
+            except Exception as e:
+                transcription_time = time.time() - start_time
+                logger.error(f"Error transcribing audio: {e}")
+                AudioMetrics.record_operation("transcription", "error")
+                AudioMetrics.record_error("transcription_failed")
+                
+                raise AudioTranscriptionError(f"Transcription failed: {str(e)}")
         
-        try:
-            # Ejecutar transcripción en thread pool
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self.model.transcribe, str(audio_file)
+        # Guardar resultado en caché
+        if self.cache_optimizer:
+            await self.cache_optimizer.set(
+                cache_key,
+                result,
+                AudioCacheType.TRANSCRIPTION,
+                ttl=1800,  # 30 minutos
+                strategy=CacheStrategy.LRU
             )
-            
-            transcription_time = time.time() - start_time
-            
-            # Procesar resultado
-            processed_result = {
-                "text": result["text"].strip(),
-                "confidence": self._calculate_confidence(result),
-                "success": True,
-                "language": result.get("language", "unknown"),
-                "duration": transcription_time
-            }
-            
-            logger.info(f"Transcription completed in {transcription_time:.2f}s: {processed_result['text'][:50]}...")
-            AudioMetrics.record_operation_duration("transcription", transcription_time)
-            AudioMetrics.record_operation("transcription", "success")
-            
-            return processed_result
-            
-        except Exception as e:
-            transcription_time = time.time() - start_time
-            logger.error(f"Error transcribing audio: {e}")
-            AudioMetrics.record_operation("transcription", "error")
-            AudioMetrics.record_error("transcription_failed")
-            
-            raise AudioTranscriptionError(f"Transcription failed: {str(e)}")
+        
+        return result
     
     def _calculate_confidence(self, whisper_result: dict) -> float:
         """Calculate confidence score from Whisper result"""
@@ -296,12 +365,87 @@ class ESpeakTTS:
             return False
 
 
-class AudioProcessor:
-    def __init__(self):
-        self.stt = WhisperSTT()
+class OptimizedAudioProcessor:
+    """
+    Procesador de audio optimizado con caché inteligente, compresión adaptiva 
+    y gestión de conexiones mejorada.
+    """
+    
+    def __init__(
+        self, 
+        redis_client=None,
+        enable_compression: bool = True,
+        enable_connection_pooling: bool = True
+    ):
+        # Optimizadores
+        self.cache_optimizer = AudioCacheOptimizer(
+            redis_client=redis_client,
+            max_memory_mb=512,
+            default_ttl=3600
+        ) if redis_client else None
+        
+        self.compression_optimizer = AudioCompressionOptimizer() if enable_compression else None
+        
+        self.connection_manager = AudioConnectionManager(
+            redis_client=redis_client
+        ) if enable_connection_pooling else None
+        
+        # Servicios STT/TTS optimizados
+        self.stt = OptimizedWhisperSTT(cache_optimizer=self.cache_optimizer)
         self.tts = ESpeakTTS()
         self.cache = AudioCacheService()
+        
+        # Configuración
         self._temp_files_cleanup_timeout = 300  # 5 minutos
+        self._started = False
+    
+    async def start(self):
+        """Inicia los servicios optimizados."""
+        if self._started:
+            return
+        
+        # Iniciar optimizadores
+        if self.cache_optimizer:
+            await self.cache_optimizer.start()
+        
+        if self.connection_manager:
+            # Registrar servicios de audio externos si están configurados
+            if hasattr(settings, 'external_stt_url') and settings.external_stt_url:
+                await self.connection_manager.register_service(
+                    ServiceType.STT_SERVICE,
+                    ConnectionConfig(
+                        base_url=settings.external_stt_url,
+                        max_connections=10,
+                        timeout_seconds=30.0
+                    )
+                )
+            
+            if hasattr(settings, 'external_tts_url') and settings.external_tts_url:
+                await self.connection_manager.register_service(
+                    ServiceType.TTS_SERVICE,
+                    ConnectionConfig(
+                        base_url=settings.external_tts_url,
+                        max_connections=10,
+                        timeout_seconds=30.0
+                    )
+                )
+        
+        self._started = True
+        logger.info("OptimizedAudioProcessor iniciado con todas las optimizaciones")
+    
+    async def stop(self):
+        """Detiene los servicios optimizados."""
+        if not self._started:
+            return
+        
+        if self.cache_optimizer:
+            await self.cache_optimizer.stop()
+        
+        if self.connection_manager:
+            await self.connection_manager.shutdown_all()
+        
+        self._started = False
+        logger.info("OptimizedAudioProcessor detenido")
 
     @asynccontextmanager
     async def _temporary_file(self, suffix: str = ".tmp", cleanup_timeout: Optional[int] = None):
@@ -309,7 +453,6 @@ class AudioProcessor:
         Context manager para manejo seguro de archivos temporales con cleanup automático.
         Previene memory leaks asegurando que archivos temporales se eliminen.
         """
-        timeout = cleanup_timeout or self._temp_files_cleanup_timeout
         temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
         temp_file = Path(temp_path)
         
@@ -334,9 +477,14 @@ class AudioProcessor:
             except Exception as e:
                 logger.error(f"Error in temp file cleanup: {e}")
 
-    async def _download_audio(self, audio_url: str, destination: Path):
+    async def _download_audio_optimized(
+        self, 
+        audio_url: str, 
+        destination: Path,
+        network_conditions: Optional[NetworkConditions] = None
+    ):
         """
-        Descarga un archivo de audio desde una URL y lo guarda en la ruta especificada.
+        Descarga optimizada de audio con compresión adaptiva.
         """
         try:
             import aiohttp
@@ -346,6 +494,12 @@ class AudioProcessor:
             raise AudioDownloadError("aiohttp required for audio downloads")
 
         try:
+            # Usar connection pool si está disponible
+            if self.connection_manager:
+                # Intentar usar pool de conexiones para descargas
+                # Esto sería para servicios externos de audio, no para URLs arbitrarias
+                pass
+            
             timeout = aiohttp.ClientTimeout(total=settings.audio_timeout_seconds)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(audio_url) as response:
@@ -371,6 +525,12 @@ class AudioProcessor:
                                 if bytes_written > settings.audio_max_size_mb * 1024 * 1024:
                                     raise AudioValidationError(f"Audio file too large during download: >{settings.audio_max_size_mb}MB")
                         
+                        # Aplicar compresión si está habilitada
+                        if self.compression_optimizer:
+                            await self._apply_download_compression(
+                                destination, network_conditions
+                            )
+                        
                         AudioMetrics.record_file_size("downloaded_audio", bytes_written)
                         logger.info(f"Audio downloaded successfully to {destination}, size: {bytes_written} bytes")
                         
@@ -380,6 +540,47 @@ class AudioProcessor:
         except asyncio.TimeoutError:
             AudioMetrics.record_error("download_timeout")
             raise AudioTimeoutError(f"Audio download timeout after {settings.audio_timeout_seconds}s")
+        except Exception as e:
+            AudioMetrics.record_error("download_failed")
+            raise AudioDownloadError(f"Failed to download audio: {str(e)}")
+    
+    async def _apply_download_compression(
+        self,
+        file_path: Path,
+        network_conditions: Optional[NetworkConditions] = None
+    ):
+        """
+        Aplica compresión al archivo descargado si es beneficioso.
+        """
+        if not self.compression_optimizer:
+            return
+        
+        try:
+            with open(file_path, "rb") as f:
+                original_data = f.read()
+            
+            # Comprimir solo si el archivo es grande (>500KB)
+            if len(original_data) > 500 * 1024:
+                compressed_data, metadata = await self.compression_optimizer.compress_audio(
+                    original_data,
+                    network_conditions=network_conditions,
+                    max_size_kb=1024  # Máximo 1MB
+                )
+                
+                # Usar versión comprimida solo si es significativamente menor
+                if metadata["compression_ratio"] > 1.5:
+                    with open(file_path, "wb") as f:
+                        f.write(compressed_data)
+                    
+                    logger.info(
+                        f"Audio comprimido: {metadata['original_size']} -> "
+                        f"{metadata['compressed_size']} bytes "
+                        f"(ratio: {metadata['compression_ratio']:.2f})"
+                    )
+        
+        except Exception as e:
+            logger.warning(f"Error aplicando compresión a descarga: {e}")
+            # No fallar si la compresión falla
         except Exception as e:
             logger.error(f"Error downloading audio from {audio_url}: {e}")
             AudioMetrics.record_error("download_failed")
@@ -504,10 +705,21 @@ class AudioProcessor:
             return None
         
         # Intentar obtener desde caché primero
-        cached_audio = await self.cache.get(text, voice=self.tts.voice, content_type=content_type)
-        if cached_audio:
-            audio_data, metadata = cached_audio
-            logger.info(f"Audio cache hit for text: '{text[:50]}...' (hits: {metadata.get('hits', 0)})")
+        cached_result = await self.cache.get(text, voice=self.tts.voice, content_type=content_type)
+        if cached_result:
+            audio_data, metadata = cached_result
+            is_compressed = metadata.get('compressed', False)
+            hits = metadata.get('hits', 0)
+            
+            # Log con información detallada si está comprimido
+            if is_compressed:
+                compression_ratio = metadata.get('compression_ratio', 0)
+                original_size = metadata.get('original_size', 0)
+                saved_kb = (original_size - len(audio_data)) / 1024
+                logger.info(f"Audio cache hit (comprimido) para texto: '{text[:50]}...' (hits: {hits}, ratio: {compression_ratio}x, ahorro: {saved_kb:.1f}KB)")
+            else:
+                logger.info(f"Audio cache hit para texto: '{text[:50]}...' (hits: {hits})")
+                
             AudioMetrics.record_cache_operation("get", "hit")
             return audio_data
         
@@ -551,7 +763,7 @@ class AudioProcessor:
         """
         Obtiene estadísticas de la caché de audio.
         """
-        return await self.cache.get_stats()
+        return await self.cache.get_cache_stats()
     
     async def clear_audio_cache(self) -> int:
         """
@@ -574,4 +786,29 @@ class AudioProcessor:
             True si se eliminó la entrada, False si no existía
         """
         voice_to_use = voice or self.tts.voice
-        return await self.cache.delete(text, voice_to_use)
+        return await self.cache.invalidate(text, voice_to_use)
+
+
+# Alias para compatibilidad hacia atrás
+# La clase original AudioProcessor ahora es un alias de OptimizedAudioProcessor
+class AudioProcessor(OptimizedAudioProcessor):
+    """
+    Clase AudioProcessor original - ahora es un alias de OptimizedAudioProcessor
+    para mantener compatibilidad con código existente.
+    """
+    
+    def __init__(self, redis_client=None):
+        # Usar configuración conservadora para compatibilidad
+        super().__init__(
+            redis_client=redis_client,
+            enable_compression=False,  # Deshabilitado por defecto para compatibilidad
+            enable_connection_pooling=False  # Deshabilitado por defecto para compatibilidad
+        )
+        
+        # Mantener referencia a componentes para compatibilidad
+        self.stt = self.stt
+        self.tts = self.tts
+        self.cache = self.cache
+        
+        # Método _download_audio para compatibilidad
+        self._download_audio = self._download_audio_optimized

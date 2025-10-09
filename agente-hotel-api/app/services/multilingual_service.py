@@ -3,7 +3,7 @@ Servicio para el soporte multilingüe del motor NLP.
 Permite detectar idioma y gestionar modelos NLP específicos por idioma.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from enum import Enum
 import asyncio
 from functools import lru_cache
@@ -148,7 +148,7 @@ class LanguageDetector:
         )
         
         # Obtener top language y confianza
-        languages = [l.replace('__label__', '') for l in predictions[0]]
+        languages = [lang.replace('__label__', '') for lang in predictions[0]]
         confidences = predictions[1].tolist()
         
         return {
@@ -175,8 +175,8 @@ class LanguageDetector:
             "language": langs[0].lang,
             "confidence": langs[0].prob,
             "alternatives": [
-                {"language": l.lang, "confidence": l.prob}
-                for l in langs[1:3] if l.prob > 0.05
+                {"language": lang.lang, "confidence": lang.prob}
+                for lang in langs[1:3] if lang.prob > 0.05
             ]
         }
         

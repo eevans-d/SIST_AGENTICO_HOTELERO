@@ -1,6 +1,6 @@
 # [PROMPT 2.7] app/services/template_service.py
 
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any
 
 # Plantillas de texto simple
 TEXT_TEMPLATES = {

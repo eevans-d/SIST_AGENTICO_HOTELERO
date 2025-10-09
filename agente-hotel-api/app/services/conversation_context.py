@@ -3,13 +3,12 @@ Servicio para el procesamiento del contexto conversacional y gestión de referen
 Permite mantener y recuperar información contextual de conversaciones previas.
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Set
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 import json
 
 from ..core.logging import logger
 from ..core.redis_client import get_redis
-from ..models.unified_message import UnifiedMessage
 
 
 class ConversationContext:

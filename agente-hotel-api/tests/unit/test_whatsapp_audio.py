@@ -1,7 +1,5 @@
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, Mock, patch
-from pathlib import Path
 
 from app.services.whatsapp_client import WhatsAppMetaClient
 

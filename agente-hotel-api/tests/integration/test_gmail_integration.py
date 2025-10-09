@@ -10,10 +10,10 @@ Tests the complete Gmail integration flow:
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-from app.services.gmail_client import GmailIMAPClient, GmailAuthError, GmailConnectionError
+from app.services.gmail_client import GmailIMAPClient, GmailAuthError
 from app.services.message_gateway import MessageGateway
 from app.models.unified_message import UnifiedMessage
 

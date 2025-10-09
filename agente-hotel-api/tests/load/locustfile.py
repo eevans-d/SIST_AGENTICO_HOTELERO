@@ -14,7 +14,6 @@ Uso:
 
 from locust import HttpUser, task, between, events
 import random
-import json
 from datetime import datetime, timedelta
 
 

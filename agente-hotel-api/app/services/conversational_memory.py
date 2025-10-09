@@ -8,15 +8,13 @@ Este módulo proporciona funcionalidades para:
 4. Gestionar "follow-up questions" sin repetir toda la información
 """
 
-import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 import json
 import re
 
 from prometheus_client import Counter, Histogram, Gauge
 from ..core.logging import logger
-from ..core.settings import settings
 from ..core.redis_client import get_redis_client
 
 # Métricas para monitoreo

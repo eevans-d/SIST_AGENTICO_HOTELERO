@@ -1,0 +1,675 @@
+# Configuración de Kubernetes para Agente Hotelero IA System
+# Este directorio contiene los manifiestos para deployment en Kubernetes
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agente-hotelero
+  labels:
+    name: agente-hotelero
+    purpose: hotel-ai-agent
+
+---
+# ConfigMap para configuración de la aplicación
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agente-config
+  namespace: agente-hotelero
+data:
+  ENV: "production"
+  LOG_LEVEL: "INFO"
+  PMS_TYPE: "qloapps"
+  MONITORING_ENABLED: "true"
+  BUSINESS_INTELLIGENCE_ENABLED: "true"
+  ADVANCED_ALERTING_ENABLED: "true"
+  PERFORMANCE_MONITORING_ENABLED: "true"
+  HEALTH_CHECKS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+
+---
+# Secret para credenciales sensibles
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agente-secrets
+  namespace: agente-hotelero
+type: Opaque
+stringData:
+  postgres-password: "CHANGEME_POSTGRES_PASSWORD"
+  mysql-root-password: "CHANGEME_MYSQL_PASSWORD"
+  qloapps-db-password: "CHANGEME_QLOAPPS_PASSWORD"
+  secret-key: "CHANGEME_SECRET_KEY_32_BYTES_LONG"
+  encryption-key: "CHANGEME_ENCRYPTION_KEY_32_BYTES"
+  jwt-secret-key: "CHANGEME_JWT_SECRET_KEY_FOR_PROD"
+  whatsapp-verify-token: "CHANGEME_WHATSAPP_VERIFY"
+  whatsapp-access-token: "CHANGEME_WHATSAPP_ACCESS"
+  grafana-admin-password: "CHANGEME_GRAFANA_PASSWORD"
+  admin-email: "admin@hotel.com"
+  admin-password: "CHANGEME_ADMIN_PASSWORD"
+
+---
+# PersistentVolume para PostgreSQL
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: agente-hotelero
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: fast-ssd
+
+---
+# PersistentVolume para MySQL
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: agente-hotelero
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: fast-ssd
+
+---
+# PersistentVolume para QloApps
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qloapps-pvc
+  namespace: agente-hotelero
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+
+---
+# Deployment PostgreSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: agente-hotelero
+  labels:
+    app: postgres
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_DB
+          value: "agente_db"
+        - name: POSTGRES_USER
+          value: "agente_user"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: postgres-password
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF8 --locale=C"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - agente_user
+            - -d
+            - agente_db
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - agente_user
+            - -d
+            - agente_db
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+# Service PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: agente-hotelero
+  labels:
+    app: postgres
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+
+---
+# Deployment Redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: agente-hotelero
+  labels:
+    app: redis
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "512mb"
+        - --maxmemory-policy
+        - "allkeys-lru"
+        ports:
+        - containerPort: 6379
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+
+---
+# Service Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: agente-hotelero
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+
+---
+# Deployment MySQL para QloApps
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: agente-hotelero
+  labels:
+    app: mysql
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+        component: database
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: mysql-root-password
+        - name: MYSQL_DATABASE
+          value: "qloapps_db"
+        - name: MYSQL_USER
+          value: "qloapps_user"
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: qloapps-db-password
+        args:
+        - --default-authentication-plugin=mysql_native_password
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+      volumes:
+      - name: mysql-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+
+---
+# Service MySQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: agente-hotelero
+  labels:
+    app: mysql
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+  selector:
+    app: mysql
+
+---
+# Deployment QloApps
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qloapps
+  namespace: agente-hotelero
+  labels:
+    app: qloapps
+    component: pms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qloapps
+  template:
+    metadata:
+      labels:
+        app: qloapps
+        component: pms
+    spec:
+      containers:
+      - name: qloapps
+        image: webkul/qloapps:latest
+        env:
+        - name: DB_SERVER
+          value: "mysql"
+        - name: DB_NAME
+          value: "qloapps_db"
+        - name: DB_USER
+          value: "qloapps_user"
+        - name: DB_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: qloapps-db-password
+        - name: PS_INSTALL_AUTO
+          value: "1"
+        - name: PS_ERASE_DB
+          value: "0"
+        - name: PS_DOMAIN
+          value: "hotel.local"
+        - name: PS_FOLDER_ADMIN
+          value: "admin"
+        - name: ADMIN_MAIL
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: admin-email
+        - name: ADMIN_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: admin-password
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: qloapps-storage
+          mountPath: /var/www/html
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: qloapps-storage
+        persistentVolumeClaim:
+          claimName: qloapps-pvc
+
+---
+# Service QloApps
+apiVersion: v1
+kind: Service
+metadata:
+  name: qloapps
+  namespace: agente-hotelero
+  labels:
+    app: qloapps
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: qloapps
+
+---
+# Deployment Aplicación Principal
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agente-api
+  namespace: agente-hotelero
+  labels:
+    app: agente-api
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: agente-api
+  template:
+    metadata:
+      labels:
+        app: agente-api
+        component: api
+    spec:
+      containers:
+      - name: agente-api
+        image: ghcr.io/your-org/agente-hotelero:latest
+        env:
+        - name: ENV
+          valueFrom:
+            configMapKeyRef:
+              name: agente-config
+              key: ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: agente-config
+              key: LOG_LEVEL
+        - name: DEBUG
+          value: "false"
+        - name: POSTGRES_URL
+          value: "postgresql+asyncpg://agente_user:$(POSTGRES_PASSWORD)@postgres:5432/agente_db"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: postgres-password
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        - name: PMS_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: agente-config
+              key: PMS_TYPE
+        - name: PMS_BASE_URL
+          value: "http://qloapps"
+        - name: WHATSAPP_VERIFY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: whatsapp-verify-token
+        - name: WHATSAPP_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: whatsapp-access-token
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: secret-key
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: encryption-key
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agente-secrets
+              key: jwt-secret-key
+        - name: MONITORING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: agente-config
+              key: MONITORING_ENABLED
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+
+---
+# Service Aplicación Principal
+apiVersion: v1
+kind: Service
+metadata:
+  name: agente-api
+  namespace: agente-hotelero
+  labels:
+    app: agente-api
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: agente-api
+
+---
+# HorizontalPodAutoscaler para la aplicación
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agente-api-hpa
+  namespace: agente-hotelero
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agente-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Ingress para exposición externa
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agente-api-ingress
+  namespace: agente-hotelero
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - api.hotel.com
+    secretName: agente-api-tls
+  rules:
+  - host: api.hotel.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agente-api
+            port:
+              number: 8000
+
+---
+# NetworkPolicy para seguridad de red
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agente-network-policy
+  namespace: agente-hotelero
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: qloapps
+    ports:
+    - protocol: TCP
+      port: 80

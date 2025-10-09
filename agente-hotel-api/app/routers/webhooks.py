@@ -393,6 +393,6 @@ async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
     except GmailClientError as e:
         logger.error("gmail.webhook.client_error", extra={"error": str(e)})
         return {"status": "error", "message": str(e)}
-    except Exception as e:
+    except Exception:
         logger.exception("gmail.webhook.unexpected_error")
         return {"status": "error", "message": "Internal server error"}

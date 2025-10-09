@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from app.services.audio_processor import WhisperSTT, ESpeakTTS, AudioProcessor
-from app.exceptions.audio_exceptions import AudioDownloadError, AudioConversionError
+from app.services.audio_processor import AudioProcessor
 
 
 @pytest_asyncio.fixture

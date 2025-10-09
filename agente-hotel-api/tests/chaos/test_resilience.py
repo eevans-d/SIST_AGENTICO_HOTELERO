@@ -14,7 +14,6 @@ from app.services.orchestrator import Orchestrator
 from app.services.pms_adapter import QloAppsAdapter
 from app.services.session_manager import SessionManager
 from app.services.lock_service import LockService
-from app.services.nlp_engine import NLPEngine
 from app.models.unified_message import UnifiedMessage
 from app.exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
 from datetime import datetime

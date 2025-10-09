@@ -144,3 +144,18 @@ async def remove_cache_entry(request: Request, text: str, voice: str = "default"
         "voice": voice,
         "removed": removed
     }
+
+
+@router.post("/audio-cache/cleanup")
+@limit("5/minute")
+async def trigger_audio_cache_cleanup(request: Request):
+    """Ejecuta manualmente la limpieza de caché basada en tamaño."""
+    from ..services.audio_cache_service import get_audio_cache_service
+    
+    cache_service = await get_audio_cache_service()
+    cleanup_result = await cache_service._check_and_cleanup_cache()
+    
+    return {
+        "status": "cleanup_triggered",
+        "result": cleanup_result
+    }

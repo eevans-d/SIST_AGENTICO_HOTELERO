@@ -7,7 +7,7 @@ Enhanced with multilingual support (ES, EN, PT)
 import os
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from prometheus_client import Counter, Gauge, Histogram

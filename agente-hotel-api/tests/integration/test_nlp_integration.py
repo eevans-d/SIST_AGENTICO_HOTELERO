@@ -4,7 +4,7 @@ Integration Tests for NLP Engine with Rasa
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock
 from datetime import datetime, timedelta
 
 from app.services.nlp_engine import NLPEngine

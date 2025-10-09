@@ -8,9 +8,8 @@ Cubre los siguientes aspectos:
 """
 
 import pytest
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 from app.services.conversational_memory import ConversationalMemory
 from app.services.multilingual_processor import MultilingualProcessor

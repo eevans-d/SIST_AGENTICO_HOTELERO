@@ -16,7 +16,7 @@ from ..core.logging import logger
 from ..core.retry import retry_with_backoff
 from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError, PMSAuthError
 from .business_metrics import record_reservation, failed_reservations
-from .qloapps_client import QloAppsClient, create_qloapps_client
+from .qloapps_client import create_qloapps_client
 
 # Métricas Prometheus
 pms_latency = Histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])

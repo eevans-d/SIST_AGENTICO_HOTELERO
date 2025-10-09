@@ -10,14 +10,12 @@ Este módulo proporciona capacidades para:
 
 import os
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from pathlib import Path
-import json
 import re
 
 from prometheus_client import Counter, Histogram, Gauge
 from ..core.logging import logger
-from ..core.settings import settings
 from ..core.circuit_breaker import CircuitBreaker
 
 # Métricas para monitoreo
