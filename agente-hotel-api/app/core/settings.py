@@ -79,6 +79,21 @@ class Settings(BaseSettings):
     whisper_model: str = "base"  # tiny, base, small, medium, large
     whisper_language: str = "es"  # Spanish by default
     
+    # Hotel Location Settings (for sharing location feature)
+    hotel_latitude: float = -34.6037  # Default: Buenos Aires (configurable per tenant)
+    hotel_longitude: float = -58.3816
+    hotel_name: str = "Hotel Ejemplo"
+    hotel_address: str = "Av. 9 de Julio 1000, Buenos Aires, Argentina"
+    
+    # Business Hours Settings (for time-differentiated responses)
+    business_hours_start: int = 9  # 9 AM
+    business_hours_end: int = 21  # 9 PM
+    business_hours_timezone: str = "America/Argentina/Buenos_Aires"
+    
+    # Room Images Settings (for photo sending feature)
+    room_images_enabled: bool = True
+    room_images_base_url: str = "https://example.com/images/rooms/"  # S3 or local NGINX
+    
     # eSpeak TTS Configuration 
     espeak_voice: str = "es"
     espeak_speed: int = 150  # words per minute

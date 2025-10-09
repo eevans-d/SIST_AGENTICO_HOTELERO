@@ -14,6 +14,25 @@ TEXT_TEMPLATES = {
     "check_in_info": "El check-in es a partir de las 15:00 horas. Necesitarás tu documento de identidad y la confirmación de reserva. Si llegas antes, podemos guardar tu equipaje sin costo adicional. ¿Tienes alguna consulta específica?",
     "check_out_info": "El check-out es hasta las 12:00 horas. Puedes solicitar extensión hasta las 14:00 por un cargo adicional del 50% de la tarifa diaria. También ofrecemos servicio de guardado de equipaje si tu vuelo es más tarde.",
     "cancellation_policy": "Nuestra política de cancelación permite cancelación gratuita hasta 24 horas antes del check-in. Cancelaciones posteriores tienen un cargo del 50% de la primera noche. Para reservas no reembolsables, no se permiten cancelaciones.",
+    
+    # NEW: After-hours templates
+    "after_hours_standard": "Gracias por contactarnos. 🌙\n\nActualmente estamos fuera de horario de atención.\nNuestro horario es: {business_hours}\n\nTe responderemos mañana a las {next_open_time}.\n\n¿Es urgente? Responde 'URGENTE' y te derivamos con personal de guardia.",
+    "after_hours_weekend": "Gracias por tu mensaje. 😊\n\nHoy es fin de semana y nuestro horario es reducido.\nTe responderemos el lunes a primera hora.\n\nPara emergencias, responde 'URGENTE'.",
+    "escalated_to_staff": "Entendido, derivando tu consulta al personal de guardia. ⚡\nAlguien te contactará en breve.",
+    
+    # NEW: Location request response
+    "location_info": "📍 Aquí está nuestra ubicación:",
+    
+    # NEW: Image sending
+    "room_photo_caption": "✨ {room_type}\n💰 ${price}/noche\n👥 Capacidad: {guests} persona(s)\n\n¿Te gusta? ¡Reservala ahora!",
+    
+    # NEW: Late checkout templates
+    "late_checkout_available": "¡Perfecto! Late checkout disponible hasta las {checkout_time} ✅\n\n💰 Cargo adicional: ${fee} (50% tarifa diaria)\n\n¿Confirmas el late checkout?",
+    "late_checkout_not_available": "Lo siento, no hay disponibilidad para late checkout. 😔\n\nLa habitación está reservada para otro huésped.\n\nHorario estándar de checkout: {standard_time}\n\n¿Necesitas guardar equipaje? Ofrecemos servicio gratuito.",
+    "late_checkout_confirmed": "¡Listo! ✅ Late checkout confirmado hasta las {checkout_time}.\n\n💰 Cargo: ${fee}\n\nSe agregará a tu cuenta. ¡Disfruta tu estadía extendida!",
+    "late_checkout_no_booking": "Para solicitar late checkout, necesito tu número de reserva.\n\n¿Podrías compartirlo?",
+    "late_checkout_already_day": "El horario de checkout ya pasó. 😅\n\nPara extensiones de último momento, contacta a recepción directamente al [TELÉFONO].",
+    "late_checkout_free": "¡Buenas noticias! 🎉\n\nLate checkout hasta las {checkout_time} sin cargo adicional.\n\n¿Lo confirmas?",
 }
 
 # Plantillas para botones interactivos

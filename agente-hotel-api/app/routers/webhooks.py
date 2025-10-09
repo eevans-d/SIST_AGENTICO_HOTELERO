@@ -187,8 +187,9 @@ async def handle_whatsapp_webhook(request: Request):
                 )
                 
             elif response_type == "location" and original_message:
-                # Enviar mensaje de ubicación
-                await whatsapp_client.send_location_message(
+                # Enviar mensaje de ubicación usando el nuevo método send_location
+                content = result.get("content", {})
+                await whatsapp_client.send_location(
                     to=original_message.user_id,
                     latitude=content.get("latitude", 0),
                     longitude=content.get("longitude", 0),
@@ -212,10 +213,10 @@ async def handle_whatsapp_webhook(request: Request):
                             text=text
                         )
                 
-                # Luego enviar la ubicación
+                # Luego enviar la ubicación usando el nuevo método send_location
                 location = content.get("location", {})
                 if location:
-                    await whatsapp_client.send_location_message(
+                    await whatsapp_client.send_location(
                         to=original_message.user_id,
                         latitude=location.get("latitude", 0),
                         longitude=location.get("longitude", 0),
@@ -262,6 +263,73 @@ async def handle_whatsapp_webhook(request: Request):
                             list_sections=follow_up_content.get("list_sections"),
                             list_button_text=follow_up_content.get("list_button_text")
                         )
+            
+            # Feature 3: Manejo de response types con imágenes
+            elif response_type == "text_with_image" and original_message:
+                # Enviar texto y luego imagen
+                text = result.get("content", "")
+                if text:
+                    await whatsapp_client.send_message(
+                        to=original_message.user_id,
+                        text=text
+                    )
+                
+                # Enviar imagen si existe
+                image_url = result.get("image_url")
+                if image_url:
+                    caption = result.get("image_caption", "")
+                    await whatsapp_client.send_image(
+                        to=original_message.user_id,
+                        image_url=image_url,
+                        caption=caption
+                    )
+            
+            elif response_type == "audio_with_image" and original_message:
+                # Enviar audio primero
+                audio_data = result.get("audio_data")
+                if audio_data:
+                    await whatsapp_client.send_audio_message(
+                        to=original_message.user_id,
+                        audio_data=audio_data
+                    )
+                
+                # Enviar texto si existe
+                text = result.get("content", "")
+                if text:
+                    await whatsapp_client.send_message(
+                        to=original_message.user_id,
+                        text=text
+                    )
+                
+                # Enviar imagen si existe
+                image_url = result.get("image_url")
+                if image_url:
+                    caption = result.get("image_caption", "")
+                    await whatsapp_client.send_image(
+                        to=original_message.user_id,
+                        image_url=image_url,
+                        caption=caption
+                    )
+            
+            elif response_type == "interactive_buttons_with_image" and original_message:
+                # Enviar imagen primero
+                image_url = result.get("image_url")
+                if image_url:
+                    caption = result.get("image_caption", "")
+                    await whatsapp_client.send_image(
+                        to=original_message.user_id,
+                        image_url=image_url,
+                        caption=caption
+                    )
+                
+                # Luego enviar botones interactivos
+                await whatsapp_client.send_interactive_message(
+                    to=original_message.user_id,
+                    header_text=content.get("header_text"),
+                    body_text=content.get("body_text", ""),
+                    footer_text=content.get("footer_text"),
+                    action_buttons=content.get("action_buttons")
+                )
             
             elif response_type == "reaction" and original_message:
                 # Enviar reacción a un mensaje

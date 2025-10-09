@@ -1,6 +1,7 @@
 # [PROMPT 2.7] app/services/orchestrator.py
 
 import time
+from datetime import datetime
 from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
@@ -18,6 +19,13 @@ from .business_metrics import (
 )
 from ..exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
 from ..core.logging import logger
+from ..core.settings import settings
+from ..utils.business_hours import (
+    is_business_hours,
+    get_next_business_open_time,
+    format_business_hours
+)
+from ..utils.room_images import get_room_image_url, validate_image_url
 
 
 class Orchestrator:
@@ -261,6 +269,137 @@ class Orchestrator:
         # Verificar si el mensaje original era de audio
         respond_with_audio = message.tipo == "audio"
         
+        # ============================================================
+        # FEATURE 2: BUSINESS HOURS CHECK
+        # ============================================================
+        # Check if message contains "URGENTE" keyword for after-hours escalation
+        text_lower = (message.texto or "").lower()
+        is_urgent = "urgente" in text_lower or "urgent" in text_lower or "emergency" in text_lower
+        
+        # Check if we're within business hours
+        in_business_hours = is_business_hours()
+        
+        logger.info(
+            "orchestrator.business_hours_check",
+            in_business_hours=in_business_hours,
+            is_urgent=is_urgent,
+            intent=intent,
+            user_id=message.user_id
+        )
+        
+        # If outside business hours and not an urgent request
+        if not in_business_hours and not is_urgent:
+            # Get next opening time for the message
+            next_open = get_next_business_open_time()
+            business_hours_str = format_business_hours()
+            
+            # Check if it's weekend
+            current_time = datetime.now()
+            is_weekend = current_time.weekday() >= 5  # Saturday=5, Sunday=6
+            
+            # Choose appropriate template
+            template_key = "after_hours_weekend" if is_weekend else "after_hours_standard"
+            
+            response_text = self.template_service.get_response(
+                template_key,
+                business_hours=business_hours_str,
+                next_open_time=next_open.strftime("%H:%M")
+            )
+            
+            logger.info(
+                "orchestrator.after_hours_response",
+                template=template_key,
+                next_open_time=next_open.isoformat(),
+                user_id=message.user_id
+            )
+            
+            # Return after-hours response
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        # If urgent request outside business hours, escalate
+        if not in_business_hours and is_urgent:
+            response_text = self.template_service.get_response("escalated_to_staff")
+            
+            logger.warning(
+                "orchestrator.urgent_after_hours_escalation",
+                user_id=message.user_id,
+                intent=intent,
+                text_preview=message.texto[:100] if message.texto else ""
+            )
+            
+            # TODO: Implement actual escalation logic (notify staff, create ticket, etc.)
+            # For now, just send acknowledgment message
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        # ============================================================
+        # END BUSINESS HOURS CHECK
+        # ============================================================
+        
+        # ============================================================
+        # FEATURE 4: LATE CHECKOUT CONFIRMATION
+        # ============================================================
+        # Check if user is confirming a pending late checkout
+        if session.get("pending_late_checkout") and intent in ["affirm", "yes", "confirm"]:
+            pending_lc = session["pending_late_checkout"]
+            booking_id = pending_lc.get("booking_id")
+            checkout_time = pending_lc.get("checkout_time")
+            fee = pending_lc.get("fee", 0)
+            
+            try:
+                logger.info(
+                    "confirming_late_checkout",
+                    booking_id=booking_id,
+                    checkout_time=checkout_time,
+                    fee=fee
+                )
+                
+                # Confirm late checkout with PMS
+                confirmation = await self.pms_adapter.confirm_late_checkout(
+                    reservation_id=str(booking_id),
+                    checkout_time=checkout_time
+                )
+                
+                if confirmation["success"]:
+                    response_text = self.template_service.get_response(
+                        "late_checkout_confirmed",
+                        checkout_time=checkout_time,
+                        fee=fee
+                    )
+                    
+                    # Clear pending late checkout from session
+                    del session["pending_late_checkout"]
+                    await self.session_manager.update_session(message.user_id, session, tenant_id)
+                    
+                    logger.info(
+                        "late_checkout_confirmed_success",
+                        booking_id=booking_id,
+                        checkout_time=checkout_time
+                    )
+                else:
+                    response_text = "Lo siento, no pudimos confirmar el late checkout. Por favor, contacta a recepción."
+                    
+            except Exception as e:
+                logger.error(
+                    "late_checkout_confirmation_failed",
+                    booking_id=booking_id,
+                    error=str(e)
+                )
+                response_text = "Hubo un error al confirmar el late checkout. Por favor, contacta a recepción."
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        # ============================================================
+        # END LATE CHECKOUT CONFIRMATION
+        # ============================================================
+        
         # Detectar si es una respuesta a un mensaje interactivo
         interactive_id = None
         
@@ -290,6 +429,46 @@ class Orchestrator:
             # Preparar mensaje de respuesta de texto
             response_text = self.template_service.get_response("availability_found", **availability_data)
             
+            # Feature 3: Preparar imagen de habitación si está habilitada
+            room_image_url = None
+            room_image_caption = None
+            if settings.room_images_enabled:
+                try:
+                    # Obtener URL de imagen basada en el tipo de habitación
+                    room_type = availability_data.get("room_type", "")
+                    room_image_url = get_room_image_url(room_type)
+                    
+                    if room_image_url and validate_image_url(room_image_url):
+                        # Preparar caption personalizado para la imagen
+                        room_image_caption = self.template_service.get_response(
+                            "room_photo_caption",
+                            room_type=room_type,
+                            price=availability_data.get("price", 0),
+                            guests=availability_data.get("guests", 2)
+                        )
+                        
+                        logger.info(
+                            "room_image.prepared",
+                            room_type=room_type,
+                            image_url=room_image_url,
+                            has_caption=bool(room_image_caption)
+                        )
+                    else:
+                        logger.warning(
+                            "room_image.invalid_or_not_found",
+                            room_type=room_type,
+                            url=room_image_url
+                        )
+                        room_image_url = None
+                except Exception as e:
+                    # No fallar la respuesta si la imagen falla - es un feature adicional
+                    logger.warning(
+                        "room_image.preparation_failed",
+                        error=str(e),
+                        room_type=availability_data.get("room_type", "")
+                    )
+                    room_image_url = None
+            
             # Si el mensaje original era de audio, responder también con audio
             if respond_with_audio:
                 try:
@@ -304,10 +483,13 @@ class Orchestrator:
                         
                         # No podemos combinar audio con mensajes interactivos en WhatsApp,
                         # así que en este caso priorizamos el audio
+                        # Si hay imagen, la incluimos en la respuesta
                         return {
-                            "response_type": "audio",
+                            "response_type": "audio_with_image" if room_image_url else "audio",
                             "content": response_text,
-                            "audio_data": audio_data
+                            "audio_data": audio_data,
+                            "image_url": room_image_url,
+                            "image_caption": room_image_caption
                         }
                 except Exception as e:
                     # Si falla la generación de audio, continuamos con texto normal
@@ -321,15 +503,20 @@ class Orchestrator:
                     **availability_data
                 )
                 
+                # Si hay imagen, incluirla junto con los botones interactivos
                 return {
-                    "response_type": "interactive_buttons",
-                    "content": button_template
+                    "response_type": "interactive_buttons_with_image" if room_image_url else "interactive_buttons",
+                    "content": button_template,
+                    "image_url": room_image_url,
+                    "image_caption": room_image_caption
                 }
             else:
-                # Respuesta de texto tradicional
+                # Respuesta de texto tradicional con imagen opcional
                 return {
-                    "response_type": "text",
-                    "content": response_text
+                    "response_type": "text_with_image" if room_image_url else "text",
+                    "content": response_text,
+                    "image_url": room_image_url,
+                    "image_caption": room_image_caption
                 }
 
         elif intent == "make_reservation":
@@ -376,9 +563,24 @@ class Orchestrator:
                 "content": response_text
             }
             
-        elif intent == "hotel_location":
+        elif intent == "hotel_location" or intent == "ask_location":
             # Intención de obtener la ubicación del hotel
-            response_text = "Nuestro hotel está ubicado en Av. Principal 123, Centro, Ciudad. ¡Esperamos tu visita!"
+            # Usar template de ubicación con datos de configuración
+            response_text = self.template_service.get_response("location_info")
+            
+            # Obtener coordenadas desde settings
+            latitude = settings.hotel_latitude
+            longitude = settings.hotel_longitude
+            hotel_name = settings.hotel_name
+            hotel_address = settings.hotel_address
+            
+            logger.info(
+                "Sending hotel location",
+                latitude=latitude,
+                longitude=longitude,
+                hotel_name=hotel_name,
+                intent=intent
+            )
             
             # Si es un mensaje de audio, responder con audio + ubicación
             if message.tipo == "audio":
@@ -391,38 +593,52 @@ class Orchestrator:
                     if audio_data is None:
                         # Si no se pudo generar audio, responder solo con ubicación
                         logger.warning("Could not generate audio for location response")
-                        location_data = self.template_service.get_location("hotel_location")
                         return {
                             "response_type": "location",
-                            "content": location_data
+                            "content": {
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "name": hotel_name,
+                                "address": hotel_address
+                            }
                         }
                     
-                    # Obtener respuesta combinada audio + ubicación
-                    content = self.template_service.get_audio_with_location(
-                        location_template="hotel_location",
-                        text=response_text,
-                        audio_data=audio_data
-                    )
+                    # Responder con audio + ubicación
+                    return {
+                        "response_type": "audio_with_location",
+                        "content": {
+                            "text": response_text,
+                            "audio_data": audio_data,
+                            "location": {
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "name": hotel_name,
+                                "address": hotel_address
+                            }
+                        }
+                    }
                 except Exception as e:
                     # Si hay error en la generación de audio, responder solo con ubicación
                     logger.error(f"Error generating audio for location response: {e}")
-                    location_data = self.template_service.get_location("hotel_location")
                     return {
                         "response_type": "location",
-                        "content": location_data
+                        "content": {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "name": hotel_name,
+                            "address": hotel_address
+                        }
                     }
-                
-                return {
-                    "response_type": "audio_with_location",
-                    "content": content
-                }
             else:
                 # Responder solo con ubicación (mapa)
-                location_data = self.template_service.get_location("hotel_location")
-                
                 return {
                     "response_type": "location",
-                    "content": location_data
+                    "content": {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "name": hotel_name,
+                        "address": hotel_address
+                    }
                 }
             
         elif intent == "show_room_options":
@@ -648,6 +864,108 @@ class Orchestrator:
                     logger.error(f"Failed to generate audio response for cancellation policy: {e}")
             
             # Respuesta de texto por defecto
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        elif intent == "late_checkout":
+            # Feature 4: Solicitud de late checkout
+            logger.info("late_checkout_request", user_id=message.user_id, tenant_id=tenant_id)
+            
+            # Check if user has an active booking in session
+            booking_id = session.get("booking_id") or session.get("reservation_id")
+            
+            if not booking_id:
+                # No booking ID in session - ask for it
+                response_text = self.template_service.get_response("late_checkout_no_booking")
+                
+                # Update session to expect booking ID
+                session["awaiting_booking_id_for"] = "late_checkout"
+                await self.session_manager.update_session(message.user_id, session, tenant_id)
+                
+                return {
+                    "response_type": "text",
+                    "content": response_text
+                }
+            
+            try:
+                # Check late checkout availability
+                logger.info(
+                    "checking_late_checkout_availability",
+                    booking_id=booking_id,
+                    user_id=message.user_id
+                )
+                
+                availability = await self.pms_adapter.check_late_checkout_availability(
+                    reservation_id=str(booking_id),
+                    requested_checkout_time="14:00"  # Default to 2pm
+                )
+                
+                if availability["available"]:
+                    # Late checkout is available
+                    fee = availability["fee"]
+                    checkout_time = availability.get("requested_time", "14:00")
+                    
+                    # Check if it's free (no next booking and policy allows)
+                    if fee == 0:
+                        response_text = self.template_service.get_response(
+                            "late_checkout_free",
+                            checkout_time=checkout_time
+                        )
+                    else:
+                        response_text = self.template_service.get_response(
+                            "late_checkout_available",
+                            checkout_time=checkout_time,
+                            fee=fee
+                        )
+                    
+                    # Store late checkout request in session for confirmation
+                    session["pending_late_checkout"] = {
+                        "booking_id": booking_id,
+                        "checkout_time": checkout_time,
+                        "fee": fee
+                    }
+                    await self.session_manager.update_session(message.user_id, session, tenant_id)
+                    
+                else:
+                    # Not available - room has next booking
+                    response_text = self.template_service.get_response(
+                        "late_checkout_not_available",
+                        standard_time="12:00"
+                    )
+                
+                logger.info(
+                    "late_checkout_check_complete",
+                    booking_id=booking_id,
+                    available=availability["available"],
+                    fee=availability.get("fee", 0)
+                )
+                
+            except Exception as e:
+                logger.error(
+                    "late_checkout_check_failed",
+                    booking_id=booking_id,
+                    error=str(e)
+                )
+                response_text = "Lo siento, hubo un error al verificar la disponibilidad de late checkout. Por favor, contacta a recepción."
+            
+            # Si el mensaje original era de audio, responder con audio también
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    
+                    if audio_data:
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for late checkout: {e}")
+            
             return {
                 "response_type": "text",
                 "content": response_text

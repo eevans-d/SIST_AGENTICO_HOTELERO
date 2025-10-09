@@ -144,6 +144,215 @@ class WhatsAppMetaClient:
         # This line should never be reached due to _handle_error_response raising
         raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
 
+    async def send_location(
+        self,
+        to: str,
+        latitude: float,
+        longitude: float,
+        name: str,
+        address: str
+    ) -> Dict[str, Any]:
+        """
+        Send location message to WhatsApp number.
+        
+        Args:
+            to: Recipient phone number (E.164 format, e.g., "14155552671")
+            latitude: Location latitude
+            longitude: Location longitude
+            name: Location name (e.g., "Hotel Ejemplo")
+            address: Location address
+            
+        Returns:
+            API response with message_id
+            
+        Raises:
+            WhatsAppAuthError: Authentication failed
+            WhatsAppRateLimitError: Rate limit exceeded
+            WhatsAppError: Other API errors
+            
+        Example:
+            ```python
+            await client.send_location(
+                to="14155552671",
+                latitude=-34.6037,
+                longitude=-58.3816,
+                name="Hotel Ejemplo",
+                address="Av. 9 de Julio 1000, Buenos Aires"
+            )
+            ```
+        """
+        endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "location",
+            "location": {
+                "latitude": latitude,
+                "longitude": longitude,
+                "name": name,
+                "address": address
+            }
+        }
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        logger.info(
+            "whatsapp.send_location.start",
+            to=to,
+            latitude=latitude,
+            longitude=longitude,
+            name=name
+        )
+        
+        try:
+            with whatsapp_api_latency.labels(endpoint="messages/location", method="POST").time():
+                response = await self.client.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                message_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="location", status="success").inc()
+                logger.info(
+                    "whatsapp.send_location.success",
+                    to=to,
+                    message_id=message_id,
+                    name=name
+                )
+                
+                return result
+            
+            # Handle error responses
+            error_data = response.json() if response.text else {}
+            self._handle_error_response(response.status_code, error_data, "send_location")
+            
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="location", status="timeout").inc()
+            logger.error("whatsapp.send_location.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending location: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="location", status="network_error").inc()
+            logger.error("whatsapp.send_location.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="location", status="error").inc()
+            logger.error("whatsapp.send_location.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+
+    async def send_image(
+        self,
+        to: str,
+        image_url: str,
+        caption: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send image message to WhatsApp number.
+        
+        Args:
+            to: Recipient phone number (E.164 format, e.g., "14155552671")
+            image_url: Publicly accessible URL of the image (HTTPS required)
+            caption: Optional image caption (max 1024 characters)
+            
+        Returns:
+            API response with message_id
+            
+        Raises:
+            WhatsAppAuthError: Authentication failed
+            WhatsAppMediaError: Image URL invalid or inaccessible
+            WhatsAppRateLimitError: Rate limit exceeded
+            WhatsAppError: Other API errors
+            
+        Note:
+            - Image must be publicly accessible via HTTPS
+            - Supported formats: JPEG, PNG
+            - Max file size: 5MB
+            - For local files, upload to S3/CDN first
+            
+        Example:
+            ```python
+            await client.send_image(
+                to="14155552671",
+                image_url="https://example.com/room-deluxe.jpg",
+                caption="Habitación Deluxe con vista al mar"
+            )
+            ```
+        """
+        endpoint = f"{self.base_url}/{self.phone_number_id}/messages"
+        
+        image_payload = {"link": image_url}
+        if caption:
+            image_payload["caption"] = caption
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "image",
+            "image": image_payload
+        }
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        logger.info(
+            "whatsapp.send_image.start",
+            to=to,
+            image_url=image_url,
+            has_caption=caption is not None
+        )
+        
+        try:
+            with whatsapp_api_latency.labels(endpoint="messages/image", method="POST").time():
+                response = await self.client.post(endpoint, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                message_id = result.get("messages", [{}])[0].get("id")
+                
+                whatsapp_messages_sent.labels(type="image", status="success").inc()
+                logger.info(
+                    "whatsapp.send_image.success",
+                    to=to,
+                    message_id=message_id
+                )
+                
+                return result
+            
+            # Handle error responses
+            error_data = response.json() if response.text else {}
+            
+            # Media-specific error handling
+            if response.status_code in (400, 404):
+                error_message = error_data.get("error", {}).get("message", "Image error")
+                raise WhatsAppMediaError(
+                    error_message,
+                    media_id=None,
+                    status_code=response.status_code,
+                    context={"image_url": image_url}
+                )
+            
+            self._handle_error_response(response.status_code, error_data, "send_image")
+            
+        except WhatsAppMediaError:
+            whatsapp_messages_sent.labels(type="image", status="media_error").inc()
+            raise
+        except httpx.TimeoutException as e:
+            whatsapp_messages_sent.labels(type="image", status="timeout").inc()
+            logger.error("whatsapp.send_image.timeout", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Timeout sending image: {e}")
+        except httpx.NetworkError as e:
+            whatsapp_messages_sent.labels(type="image", status="network_error").inc()
+            logger.error("whatsapp.send_image.network_error", to=to, error=str(e))
+            raise WhatsAppNetworkError(f"Network error: {e}")
+        except Exception as e:
+            whatsapp_messages_sent.labels(type="image", status="error").inc()
+            logger.error("whatsapp.send_image.error", to=to, error=str(e))
+            raise
+        
+        # This line should never be reached due to _handle_error_response raising
+        raise WhatsAppError("Unexpected response from WhatsApp API")  # pragma: no cover
+
     async def send_template_message(
         self,
         to: str,

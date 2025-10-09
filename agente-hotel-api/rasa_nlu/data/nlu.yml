@@ -297,6 +297,27 @@ nlu:
       - supermercado cerca?
       - farmacia proxima?
       - cajero automatico cerca?
+      - mapa del hotel
+      - mandame la ubicacion
+      - compartir ubicacion
+      - donde quedan?
+      - cual es su direccion exacta?
+      - por donde estan?
+      - ubicación exacta
+      - coordenadas del hotel
+      - mandame pin de ubicacion
+      - enviame la ubicacion por favor
+      - mostrame donde estan
+      - pin de google maps
+      - location del hotel
+      - donde se encuentran ubicados?
+      - direccion completa
+      - en que calle estan?
+      - numero de la calle
+      - altura de la direccion
+      - ciudad y codigo postal
+      - referencias para llegar
+      - puntos de referencia cercanos
 
   - intent: ask_policies
     examples: |
@@ -388,6 +409,57 @@ nlu:
       - no es lo que busco
       - no me sirve
       - paso
+
+  # ==================== LATE CHECKOUT ====================
+  
+  - intent: late_checkout
+    examples: |
+      - puedo hacer late checkout?
+      - quiero late checkout
+      - necesito salir mas tarde
+      - me puedo quedar hasta mas tarde?
+      - es posible el checkout tardio?
+      - puedo extender el checkout?
+      - late check out
+      - checkout tarde
+      - salida tardia
+      - me gustaria quedarme hasta mas tarde
+      - hay late checkout disponible?
+      - cuanto cuesta el late checkout?
+      - hasta que hora puedo hacer checkout?
+      - puedo salir a las 3pm?
+      - me puedo quedar hasta la tarde?
+      - necesito checkout a las 2pm
+      - checkout extendido
+      - extension de horario de salida
+      - me quedaria hasta las 14hs
+      - late check out por favor
+      - salida despues del mediodia
+      - puedo check out mas tarde?
+      - me dejan salir mas tarde?
+      - checkout a las 15hs
+      - extension de estadía
+      - quiero quedarme mas horas
+      - salir tarde del hotel
+      - hay cargo por late checkout?
+      - cuanto cobran por salir tarde?
+      - precio late checkout
+      - late checkout disponible?
+      - consulto por checkout tardio
+      - me gustaria extender mi estadia
+      - puedo quedarme hasta las 3?
+      - checkout retrasado
+      - salida más tarde de lo normal
+      - horario extendido de salida
+      - late check-out
+      - check out tardío
+      - salida posterior
+      - puedo hacer checkout después del mediodía?
+      - me dejan quedarme hasta las 14?
+      - salida a las 2 de la tarde
+      - necesito más tiempo en la habitación
+      - quiero salir por la tarde
+      - hay opción de late checkout?
 
   - intent: help
     examples: |

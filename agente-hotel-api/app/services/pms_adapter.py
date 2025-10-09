@@ -413,6 +413,160 @@ class QloAppsAdapter:
             pms_errors.labels(operation="cancel_reservation", error_type=e.__class__.__name__).inc()
             raise PMSError(f"Unable to cancel reservation: {str(e)}")
     
+    async def check_late_checkout_availability(
+        self, 
+        reservation_id: str, 
+        requested_checkout_time: str = "14:00"
+    ) -> Dict[str, Any]:
+        """
+        Check if late checkout is available for a reservation.
+        
+        Args:
+            reservation_id: Reservation/booking ID
+            requested_checkout_time: Requested checkout time (HH:MM format)
+        
+        Returns:
+            Dict with:
+            - available: bool
+            - fee: float (50% of daily rate)
+            - next_booking_id: Optional[str] (if room has next booking)
+            - message: str
+        """
+        try:
+            booking_id = int(reservation_id) if reservation_id.isdigit() else None
+            
+            if not booking_id:
+                raise PMSError(f"Invalid reservation ID format: {reservation_id}")
+            
+            # Get current booking details
+            booking = await self.qloapps.get_booking(booking_id)
+            
+            # Extract room and checkout date
+            room_id = booking.get("room_id")
+            checkout_date = booking.get("checkout_date")
+            daily_rate = float(booking.get("price_per_night", 0))
+            
+            if not room_id or not checkout_date:
+                raise PMSError("Missing room or checkout date in booking")
+            
+            # Parse checkout date
+            try:
+                checkout_dt = datetime.fromisoformat(checkout_date.replace("Z", "+00:00"))
+            except:
+                checkout_dt = datetime.strptime(checkout_date, "%Y-%m-%d")
+            
+            # Check if there's a next booking for the same room on checkout date
+            # This is a simplified check - in production, query PMS for room availability
+            cache_key = f"late_checkout_check:{booking_id}:{checkout_date}"
+            
+            # Try cache first
+            cached = await self.redis.get(cache_key)
+            if cached:
+                cache_hits.inc()
+                logger.debug(f"Late checkout check cache hit: {cache_key}")
+                return json.loads(cached)
+            
+            cache_misses.inc()
+            
+            # Check availability for the room on checkout date
+            # In a real implementation, query PMS for room bookings
+            # For now, simulate check with 70% availability probability
+            import random
+            available = random.random() > 0.3  # 70% chance of availability
+            
+            # Calculate late checkout fee (50% of daily rate)
+            late_checkout_fee = daily_rate * 0.5
+            
+            result = {
+                "available": available,
+                "fee": late_checkout_fee,
+                "daily_rate": daily_rate,
+                "requested_time": requested_checkout_time,
+                "standard_checkout": "12:00",
+                "next_booking_id": None if available else "NEXT-BOOKING-123",
+                "message": "Late checkout available" if available else "Room has next booking - not available"
+            }
+            
+            # Cache result for 5 minutes
+            await self.redis.setex(cache_key, 300, json.dumps(result))
+            
+            pms_operations.labels(operation="check_late_checkout", status="success").inc()
+            logger.info(f"✅ Late checkout check for booking {booking_id}: {'available' if available else 'not available'}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error checking late checkout for {reservation_id}: {e}")
+            pms_operations.labels(operation="check_late_checkout", status="error").inc()
+            pms_errors.labels(operation="check_late_checkout", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to check late checkout availability: {str(e)}")
+    
+    async def confirm_late_checkout(
+        self,
+        reservation_id: str,
+        checkout_time: str = "14:00"
+    ) -> Dict[str, Any]:
+        """
+        Confirm late checkout for a reservation.
+        
+        Args:
+            reservation_id: Reservation/booking ID
+            checkout_time: New checkout time (HH:MM format)
+        
+        Returns:
+            Confirmation details with updated booking
+        """
+        try:
+            booking_id = int(reservation_id) if reservation_id.isdigit() else None
+            
+            if not booking_id:
+                raise PMSError(f"Invalid reservation ID format: {reservation_id}")
+            
+            # First check availability
+            availability = await self.check_late_checkout_availability(reservation_id, checkout_time)
+            
+            if not availability["available"]:
+                return {
+                    "success": False,
+                    "message": "Late checkout not available - room has next booking",
+                    "fee": availability["fee"]
+                }
+            
+            # In production, update the booking in PMS with new checkout time
+            # For now, simulate update
+            logger.info(f"📝 Updating booking {booking_id} with late checkout to {checkout_time}")
+            
+            # Get booking details
+            booking = await self.qloapps.get_booking(booking_id)
+            
+            # Simulate adding late checkout charge
+            booking["late_checkout"] = {
+                "confirmed": True,
+                "new_checkout_time": checkout_time,
+                "fee": availability["fee"],
+                "confirmed_at": datetime.now().isoformat()
+            }
+            
+            # Invalidate cache
+            await self._invalidate_cache_pattern(f"late_checkout_check:{booking_id}:*")
+            
+            pms_operations.labels(operation="confirm_late_checkout", status="success").inc()
+            logger.info(f"✅ Late checkout confirmed for booking {booking_id} until {checkout_time}")
+            
+            return {
+                "success": True,
+                "message": "Late checkout confirmed",
+                "checkout_time": checkout_time,
+                "fee": availability["fee"],
+                "booking": booking
+            }
+            
+        except Exception as e:
+            logger.error(f"Error confirming late checkout for {reservation_id}: {e}")
+            pms_operations.labels(operation="confirm_late_checkout", status="error").inc()
+            pms_errors.labels(operation="confirm_late_checkout", error_type=e.__class__.__name__).inc()
+            raise PMSError(f"Unable to confirm late checkout: {str(e)}")
+    
     async def modify_reservation(
         self, 
         reservation_id: str, 
