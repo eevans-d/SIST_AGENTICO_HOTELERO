@@ -54,3 +54,65 @@ docker-compose.override.yml
 *.tmp
 *.temp
 .cache/
+
+# Testing & Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.benchmarks/
+
+# Backups
+*.bak
+*.backup
+.env.backup.*
+backups/
+
+# Tools
+tools/
+
+# Archives
+docs/archive/
+tests/legacy/
+docker/compose-archive/
+docker/dockerfiles-archive/
+
+# Secrets y configuración sensible
+.env.production
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+*.secret
+
+# Logs que podrían contener información sensible
+*.log
+logs/
+audit_logs/
+
+# Backups de base de datos
+*.sql
+*.dump
+backups/
+
+# Secrets y configuración sensible
+.env.production
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+*.secret
+
+# Logs que podrían contener información sensible
+*.log
+logs/
+audit_logs/
+
+# Backups de base de datos
+*.sql
+*.dump
+backups/

@@ -33,6 +33,10 @@ TEXT_TEMPLATES = {
     "late_checkout_no_booking": "Para solicitar late checkout, necesito tu número de reserva.\n\n¿Podrías compartirlo?",
     "late_checkout_already_day": "El horario de checkout ya pasó. 😅\n\nPara extensiones de último momento, contacta a recepción directamente al [TELÉFONO].",
     "late_checkout_free": "¡Buenas noticias! 🎉\n\nLate checkout hasta las {checkout_time} sin cargo adicional.\n\n¿Lo confirmas?",
+    
+    # NEW: QR Code confirmation templates
+    "booking_confirmed_with_qr": "🎉 ¡RESERVA CONFIRMADA! 🎉\n\n📋 Detalles de tu reserva:\n• Reserva: {booking_id}\n• Huésped: {guest_name}\n• Check-in: {check_in}\n• Check-out: {check_out}\n• Habitación: {room_number}\n\n🎫 Te enviamos tu código QR de confirmación.\n¡Guárdalo para facilitar tu check-in!",
+    "booking_confirmed_no_qr": "🎉 ¡RESERVA CONFIRMADA! 🎉\n\n📋 Detalles de tu reserva:\n• Reserva: {booking_id}\n• Check-in: {check_in}\n• Check-out: {check_out}\n\n✅ Tu reserva está confirmada.\nRecibirás más detalles por email.",
 }
 
 # Plantillas para botones interactivos

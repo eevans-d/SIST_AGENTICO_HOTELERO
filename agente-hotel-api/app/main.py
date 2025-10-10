@@ -57,7 +57,7 @@ except ImportError:
 # Importar servicios de optimización de performance
 try:
     from .services.performance_optimizer import get_performance_optimizer
-    from .services.database_tuner import get_database_tuner
+    from .services.database_tuner import get_db_performance_tuner
     from .services.cache_optimizer import get_cache_optimizer
     from .services.resource_monitor import get_resource_monitor
     from .services.auto_scaler import get_auto_scaler
@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
             try:
                 # Inicializar servicios de optimización
                 performance_optimizer = await get_performance_optimizer()
-                database_tuner = await get_database_tuner()
+                database_tuner = await get_db_performance_tuner()
                 cache_optimizer = await get_cache_optimizer()
                 resource_monitor = await get_resource_monitor()
                 auto_scaler = await get_auto_scaler()
@@ -210,7 +210,7 @@ async def lifespan(app: FastAPI):
         if OPTIMIZATION_AVAILABLE:
             try:
                 performance_optimizer = await get_performance_optimizer()
-                database_tuner = await get_database_tuner()
+                database_tuner = await get_db_performance_tuner()
                 cache_optimizer = await get_cache_optimizer()
                 resource_monitor = await get_resource_monitor()
                 auto_scaler = await get_auto_scaler()

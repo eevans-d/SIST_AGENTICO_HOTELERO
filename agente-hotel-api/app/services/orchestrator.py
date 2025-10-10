@@ -26,6 +26,7 @@ from ..utils.business_hours import (
     format_business_hours
 )
 from ..utils.room_images import get_room_image_url, validate_image_url
+from .qr_service import get_qr_service
 
 
 class Orchestrator:
@@ -715,7 +716,92 @@ class Orchestrator:
                 # Simular la confirmación del pago
                 # En un caso real, procesaríamos la imagen y confirmaríamos con el PMS
                 
-                # Responder con una reacción positiva al comprobante
+                # FEATURE 5: Generate QR code for confirmed booking
+                qr_data = None
+                try:
+                    qr_service = get_qr_service()
+                    
+                    # Generate booking data (en producción esto vendría del PMS)
+                    booking_id = f"HTL-{int(time.time())}"  # Unique booking ID
+                    guest_name = session.get("guest_name", "Estimado Huésped")
+                    check_in_date = session.get("check_in_date", "2025-10-15")
+                    check_out_date = session.get("check_out_date", "2025-10-17")
+                    room_number = session.get("room_number", "205")
+                    
+                    # Generate QR code
+                    qr_result = qr_service.generate_booking_qr(
+                        booking_id=booking_id,
+                        guest_name=guest_name,
+                        check_in_date=check_in_date,
+                        check_out_date=check_out_date,
+                        room_number=room_number,
+                        hotel_name=settings.hotel_name
+                    )
+                    
+                    if qr_result["success"]:
+                        qr_data = {
+                            "file_path": qr_result["file_path"],
+                            "booking_id": booking_id,
+                            "guest_name": guest_name
+                        }
+                        
+                        # Update session with confirmed booking info
+                        session["booking_confirmed"] = True
+                        session["booking_id"] = booking_id
+                        session["qr_generated"] = True
+                        session["reservation_pending"] = False
+                        await self.session_manager.update_session(message.user_id, session)
+                        
+                        logger.info(
+                            "booking_qr_generated",
+                            booking_id=booking_id,
+                            guest_name=guest_name,
+                            qr_file=qr_result["file_path"]
+                        )
+                    else:
+                        logger.error(
+                            "qr_generation_failed",
+                            error=qr_result.get("error"),
+                            booking_id=booking_id
+                        )
+                        
+                except Exception as e:
+                    logger.error(
+                        "qr_service_error",
+                        error=str(e),
+                        exc_info=True
+                    )
+                
+                # Si tenemos QR code, enviar confirmación completa con QR
+                if qr_data:
+                    confirmation_text = self.template_service.get_response(
+                        "booking_confirmed_with_qr",
+                        booking_id=qr_data["booking_id"],
+                        guest_name=qr_data["guest_name"],
+                        check_in=check_in_date,
+                        check_out=check_out_date,
+                        room_number=room_number
+                    )
+                    
+                    return {
+                        "response_type": "image_with_text",
+                        "content": confirmation_text,
+                        "image_path": qr_data["file_path"],
+                        "image_caption": "🎫 Tu código QR de confirmación - Guárdalo para el check-in!"
+                    }
+                else:
+                    # Fallback: confirmation sin QR
+                    return {
+                        "response_type": "text",
+                        "content": self.template_service.get_response(
+                            "booking_confirmed_no_qr",
+                            booking_id=f"HTL-{int(time.time())}",
+                            check_in=check_in_date,
+                            check_out=check_out_date
+                        )
+                    }
+            else:
+                # No hay reserva pendiente, responder con reacción simple
                 return {
                     "response_type": "reaction",
                     "content": {

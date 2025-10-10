@@ -1,0 +1,1095 @@
+system_overview:
+  architecture_type: "Centralized Orchestrator with Specialized Service Layer"
+  orchestration_pattern: "Event-Driven Message Processing with Async Service Coordination"
+  total_agents: 9
+  agent_communication: "Direct async method invocation (no message queue)"
+  framework_detected: "Custom orchestration layer with FastAPI + Rasa NLU"
+  
+agents:
+  - id: "orchestrator"
+    name: "Central Orchestrator"
+    type: "coordinator"
+    
+    llm_configuration:
+      provider: "None (uses Rasa NLU for intent detection)"
+      model: "N/A - No generative LLM, template-based responses"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      notes: "System primarily uses rule-based and template responses, not generative AI"
+      
+    system_prompts:
+      primary: |
+        NO EXPLICIT SYSTEM PROMPT - This is NOT an LLM-based agent
+        Orchestrator uses:
+        1. Rasa NLU for intent classification
+        2. Template-based response generation
+        3. Rule-based business logic
+        4. Direct PMS API calls
+      fallback: |
+        When NLP fails, uses regex-based keyword matching:
+        - "disponibilidad|habitacion|cuarto" → check_availability
+        - "reservar|reserva|reservacion" → make_reservation
+        - "precio|costo|tarifa" → ask_prices
+        - "cancelar|cancelacion" → cancel_reservation
+        
+    capabilities:
+      - capability: "Multi-channel message coordination"
+        implementation: "Receives UnifiedMessage from MessageGateway, processes via handle_unified_message()"
+      - capability: "Intent-based routing"
+        implementation: "NLPEngine detects intent → routes to specific handler method (_handle_<intent>_intent)"
+      - capability: "Audio processing coordination"
+        implementation: "Detects audio messages → AudioProcessor.transcribe_whatsapp_audio() → continues as text"
+      - capability: "Business hours enforcement"
+        implementation: "Checks is_business_hours() before processing non-urgent requests"
+      - capability: "Session state management"
+        implementation: "SessionManager tracks conversation context, pending actions (late_checkout, booking_id)"
+      - capability: "PMS integration"
+        implementation: "Calls PMSAdapter methods with circuit breaker and cache"
+      - capability: "Multi-language support"
+        implementation: "NLPEngine.detect_language() → processes with appropriate language model"
+      - capability: "Graceful degradation"
+        implementation: "Try-catch blocks with fallback responses when PMS/NLP fails"
+        
+    tools_available:
+      - tool_name: "NLPEngine.process_message"
+        description: "Detect intent and extract entities from user text"
+        parameters: ["text", "language"]
+        implementation_file: "app/services/nlp_engine.py"
+      
+      - tool_name: "PMSAdapter.check_availability"
+        description: "Check room availability in PMS system"
+        parameters: ["check_in", "check_out", "guests"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "PMSAdapter.check_late_checkout_availability"
+        description: "Verify if late checkout is available for a booking"
+        parameters: ["reservation_id", "requested_checkout_time"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "PMSAdapter.confirm_late_checkout"
+        description: "Confirm and update late checkout in PMS"
+        parameters: ["reservation_id", "checkout_time"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "AudioProcessor.transcribe_whatsapp_audio"
+        description: "Convert audio message to text using Whisper STT"
+        parameters: ["media_url"]
+        implementation_file: "app/services/audio_processor.py"
+      
+      - tool_name: "WhatsAppClient.send_message"
+        description: "Send text response to user"
+        parameters: ["to", "message"]
+        implementation_file: "app/services/whatsapp_client.py"
+      
+      - tool_name: "WhatsAppClient.send_location"
+        description: "Send hotel location coordinates"
+        parameters: ["to", "latitude", "longitude", "name", "address"]
+        implementation_file: "app/services/whatsapp_client.py"
+      
+      - tool_name: "TemplateService.get_response"
+        description: "Generate response from template with variables"
+        parameters: ["template_name", "**kwargs"]
+        implementation_file: "app/services/template_service.py"
+      
+      - tool_name: "SessionManager.get_session"
+        description: "Retrieve user conversation session"
+        parameters: ["session_id"]
+        implementation_file: "app/services/session_manager.py"
+        
+    memory_management:
+      type: "conversation"
+      storage: "Redis + PostgreSQL"
+      persistence: true
+      details:
+        - "SessionManager stores conversation context in Redis (fast access)"
+        - "Persistent sessions backed by PostgreSQL"
+        - "Tracks: booking_id, pending_late_checkout, awaiting_booking_id_for, language"
+        - "TTL: Configurable session expiry (default unknown)"
+        - "Cleanup: Background task removes expired sessions"
+      
+    state_management:
+      stateful: true
+      state_variables:
+        - "booking_id: Current reservation being discussed"
+        - "pending_late_checkout: {booking_id, checkout_time, fee} for confirmation flow"
+        - "awaiting_booking_id_for: Tracks which action needs booking ID (e.g., 'late_checkout')"
+        - "detected_language: User's language (es/en/pt)"
+        - "last_intent: Previous intent for context"
+        - "conversation_history: Recent message exchange"
+      state_persistence: "Redis (fast) + PostgreSQL (durable)"
+      
+    interaction_patterns:
+      receives_from: ["MessageGateway", "WebhookRouter"]
+      sends_to: ["NLPEngine", "PMSAdapter", "AudioProcessor", "WhatsAppClient", "SessionManager", "TemplateService"]
+      message_format: "UnifiedMessage (Pydantic model)"
+      flow: "Webhook → MessageGateway → Orchestrator → [NLP|PMS|Audio] → Orchestrator → WhatsApp"
+      
+    error_handling:
+      retry_strategy: "Circuit breaker (3 failures → open for 60s)"
+      fallback_behavior: "Return template-based error message, log error, increment Prometheus counter"
+      escalation_path: "Log error → Metrics → AlertManager → On-call"
+      degraded_mode: "When PMS fails, provides contact info instead of availability"
+
+  - id: "nlp_engine"
+    name: "NLP Engine (Rasa-based)"
+    type: "specialist"
+    
+    llm_configuration:
+      provider: "Rasa NLU"
+      model: "DIET Classifier (Dual Intent Entity Transformer)"
+      temperature: null
+      max_tokens: null
+      custom_parameters:
+        epochs: 100
+        batch_size: [64, 256]
+        learning_rate: 0.001
+        drop_rate: 0.2
+        confidence_threshold: 0.75
+      
+    system_prompts:
+      primary: |
+        NOT APPLICABLE - Rasa uses supervised learning on labeled training data, not prompts.
+        Training data location: rasa_nlu/data/nlu.yml
+        15+ intents trained:
+        - check_availability
+        - make_reservation
+        - cancel_reservation
+        - ask_prices
+        - ask_location
+        - ask_business_hours
+        - late_checkout
+        - help
+        - greeting
+        - goodbye
+        - affirm
+        - deny
+        - out_of_scope
+      fallback: |
+        When Rasa confidence < 0.75:
+        1. Log NLP fallback metric
+        2. Use regex-based keyword matching
+        3. Return "out_of_scope" intent if no match
+        
+    capabilities:
+      - capability: "Intent classification"
+        implementation: "Rasa DIET Classifier with CountVectors + Character n-grams"
+      - capability: "Entity extraction"
+        implementation: "DIET extracts: dates, room_type, number_guests, price_range"
+      - capability: "Multi-language support"
+        implementation: "Separate or unified models for ES/EN/PT, language detection via fasttext or keyword markers"
+      - capability: "Confidence scoring"
+        implementation: "Softmax confidence (0.0-1.0), threshold 0.75 for acceptance"
+      - capability: "Circuit breaker protection"
+        implementation: "3 failures → open circuit for 60s"
+        
+    tools_available:
+      - tool_name: "process_message"
+        description: "Main NLP processing entry point"
+        parameters: ["text", "language"]
+        implementation_file: "app/services/nlp_engine.py"
+      
+      - tool_name: "detect_language"
+        description: "Detect message language (ES/EN/PT)"
+        parameters: ["text"]
+        implementation_file: "app/services/nlp_engine.py"
+      
+      - tool_name: "extract_entities"
+        description: "Extract structured data from text"
+        parameters: ["text", "intent"]
+        implementation_file: "app/services/nlp_engine.py"
+        
+    memory_management:
+      type: "none"
+      storage: "stateless"
+      persistence: false
+      notes: "Each call is independent, no conversation memory"
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "N/A"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator"]
+      sends_to: ["Orchestrator (returns intent+entities)"]
+      message_format: "dict {intent: {name, confidence}, entities: [...], language: str}"
+      
+    error_handling:
+      retry_strategy: "Circuit breaker (3 failures → 60s timeout)"
+      fallback_behavior: "Regex-based keyword matching"
+      escalation_path: "Log warning → Continue with fallback"
+
+  - id: "pms_adapter"
+    name: "PMS Integration Adapter"
+    type: "integration_adapter"
+    
+    llm_configuration:
+      provider: "N/A - API client, not LLM"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: "NOT APPLICABLE - This is an API integration layer"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Check room availability"
+        implementation: "GET /api/v1/availability?check_in=...&check_out=...&guests=..."
+      - capability: "Make reservation"
+        implementation: "POST /api/v1/bookings with booking details"
+      - capability: "Late checkout availability check"
+        implementation: "Custom method check_late_checkout_availability(reservation_id, time)"
+      - capability: "Confirm late checkout"
+        implementation: "Custom method confirm_late_checkout(reservation_id, time)"
+      - capability: "Cache PMS responses"
+        implementation: "Redis cache with 5min TTL for availability, longer for static data"
+      - capability: "Circuit breaker protection"
+        implementation: "5 failures → open for 30s"
+      - capability: "Retry with exponential backoff"
+        implementation: "@retry_with_backoff decorator (3 retries, 1s→2s→4s)"
+        
+    tools_available:
+      - tool_name: "check_availability"
+        description: "Query PMS for room availability"
+        parameters: ["check_in", "check_out", "guests", "room_type"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "make_reservation"
+        description: "Create new booking in PMS"
+        parameters: ["guest_info", "room_details", "dates"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "check_late_checkout_availability"
+        description: "Check if late checkout is possible"
+        parameters: ["reservation_id", "requested_checkout_time"]
+        implementation_file: "app/services/pms_adapter.py"
+      
+      - tool_name: "confirm_late_checkout"
+        description: "Confirm late checkout booking modification"
+        parameters: ["reservation_id", "checkout_time"]
+        implementation_file: "app/services/pms_adapter.py"
+        
+    memory_management:
+      type: "semantic"
+      storage: "Redis cache"
+      persistence: false
+      details:
+        - "Cache key pattern: pms:operation:params_hash"
+        - "TTL: 5min for availability, 1hr for room info"
+        - "Cache invalidation: On mutations (reservations, cancellations)"
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "Cache only (no conversation state)"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator", "CompletePMSOrchestrator"]
+      sends_to: ["QloAppsClient (HTTP)", "Redis (cache)", "Prometheus (metrics)"]
+      message_format: "dict responses"
+      
+    error_handling:
+      retry_strategy: "@retry_with_backoff (3 attempts)"
+      fallback_behavior: "Raise PMSError → Orchestrator handles with degraded response"
+      escalation_path: "Log error → Metrics → Circuit breaker opens → AlertManager"
+      circuit_breaker_states:
+        - "CLOSED: Normal operation"
+        - "OPEN: Return CircuitBreakerOpenError immediately (30s)"
+        - "HALF_OPEN: Try one request, close if success, reopen if fails"
+
+  - id: "audio_processor"
+    name: "Audio Processing Service"
+    type: "specialist"
+    
+    llm_configuration:
+      provider: "OpenAI Whisper"
+      model: "whisper-base (configurable)"
+      temperature: null
+      max_tokens: null
+      custom_parameters:
+        language: "auto-detect (or specified)"
+        task: "transcribe"
+        
+    system_prompts:
+      primary: "NOT APPLICABLE - Whisper is a STT model, not a conversational LLM"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Speech-to-Text (STT)"
+        implementation: "OpenAI Whisper transcription"
+      - capability: "Audio validation"
+        implementation: "Check format, duration, size"
+      - capability: "Audio optimization"
+        implementation: "Compression, format conversion if needed"
+      - capability: "Cache transcriptions"
+        implementation: "Redis cache by media_url hash"
+      - capability: "Text-to-Speech (TTS)"
+        implementation: "espeak or coqui-tts (configurable)"
+        
+    tools_available:
+      - tool_name: "transcribe_whatsapp_audio"
+        description: "Download and transcribe WhatsApp audio"
+        parameters: ["media_url"]
+        implementation_file: "app/services/audio_processor.py"
+      
+      - tool_name: "text_to_speech"
+        description: "Generate audio from text response"
+        parameters: ["text", "language"]
+        implementation_file: "app/services/audio_processor.py"
+        
+    memory_management:
+      type: "semantic"
+      storage: "Redis cache + file system"
+      persistence: true
+      details:
+        - "Transcriptions cached in Redis (1hr TTL)"
+        - "Audio files temporarily stored on disk"
+        - "Cleanup task removes old audio files"
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "Cache only"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator"]
+      sends_to: ["Whisper API", "Redis", "File system"]
+      message_format: "dict {text: str, confidence: float, language: str}"
+      
+    error_handling:
+      retry_strategy: "Single retry on network errors"
+      fallback_behavior: "Return error dict with low confidence"
+      escalation_path: "Log error → Metrics → Continue without audio"
+
+  - id: "whatsapp_client"
+    name: "WhatsApp Meta API Client"
+    type: "channel_adapter"
+    
+    llm_configuration:
+      provider: "N/A - API client"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: "NOT APPLICABLE"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Send text messages"
+        implementation: "POST to Meta Cloud API v18.0"
+      - capability: "Send audio messages"
+        implementation: "Upload audio → send media message"
+      - capability: "Send images"
+        implementation: "Send image URL or upload → send media message"
+      - capability: "Send location"
+        implementation: "send_location(lat, lon, name, address)"
+      - capability: "Send interactive messages"
+        implementation: "Buttons, lists (feature flag controlled)"
+      - capability: "Rate limiting"
+        implementation: "slowapi + Redis"
+        
+    tools_available:
+      - tool_name: "send_message"
+        description: "Send text to WhatsApp user"
+        parameters: ["to", "message"]
+        implementation_file: "app/services/whatsapp_client.py"
+      
+      - tool_name: "send_location"
+        description: "Send location pin"
+        parameters: ["to", "latitude", "longitude", "name", "address"]
+        implementation_file: "app/services/whatsapp_client.py"
+      
+      - tool_name: "send_image"
+        description: "Send image with caption"
+        parameters: ["to", "image_url", "caption"]
+        implementation_file: "app/services/whatsapp_client.py"
+        
+    memory_management:
+      type: "none"
+      storage: "stateless"
+      persistence: false
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "N/A"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator", "WebhookRouter"]
+      sends_to: ["WhatsApp Meta API (external)"]
+      message_format: "WhatsApp Cloud API JSON payloads"
+      
+    error_handling:
+      retry_strategy: "httpx retry (3 attempts with exponential backoff)"
+      fallback_behavior: "Log error, raise exception to orchestrator"
+      escalation_path: "Log → Metrics → AlertManager if rate > threshold"
+
+  - id: "session_manager"
+    name: "Session Management Service"
+    type: "state_manager"
+    
+    llm_configuration:
+      provider: "N/A - Storage service"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: "NOT APPLICABLE"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Store conversation sessions"
+        implementation: "Redis (fast) + PostgreSQL (durable)"
+      - capability: "Retrieve session by ID"
+        implementation: "get_session(session_id) → dict"
+      - capability: "Update session state"
+        implementation: "update_session(session_id, data)"
+      - capability: "Session expiry"
+        implementation: "TTL-based expiration + cleanup task"
+      - capability: "Cross-request context"
+        implementation: "Enables multi-step flows (e.g., late checkout confirmation)"
+        
+    tools_available:
+      - tool_name: "get_session"
+        description: "Get or create user session"
+        parameters: ["session_id"]
+        implementation_file: "app/services/session_manager.py"
+      
+      - tool_name: "update_session"
+        description: "Update session data"
+        parameters: ["session_id", "data"]
+        implementation_file: "app/services/session_manager.py"
+      
+      - tool_name: "delete_session"
+        description: "Remove expired session"
+        parameters: ["session_id"]
+        implementation_file: "app/services/session_manager.py"
+        
+    memory_management:
+      type: "episodic"
+      storage: "Redis (primary) + PostgreSQL (backup)"
+      persistence: true
+      
+    state_management:
+      stateful: true
+      state_variables:
+        - "session_id: Unique identifier"
+        - "user_id: WhatsApp user ID"
+        - "context: Conversation context dict"
+        - "created_at, updated_at: Timestamps"
+        - "expires_at: TTL"
+      state_persistence: "Dual storage (Redis + PostgreSQL)"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator", "any service needing session"]
+      sends_to: ["Redis", "PostgreSQL"]
+      message_format: "dict"
+      
+    error_handling:
+      retry_strategy: "Database retry with backoff"
+      fallback_behavior: "Fallback to PostgreSQL if Redis fails"
+      escalation_path: "Log error → Metrics"
+
+  - id: "message_gateway"
+    name: "Message Gateway (Multi-channel Normalizer)"
+    type: "normalizer"
+    
+    llm_configuration:
+      provider: "N/A - Message transformer"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: "NOT APPLICABLE"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Normalize multi-channel messages"
+        implementation: "WhatsApp/Gmail/API → UnifiedMessage model"
+      - capability: "Tenant resolution"
+        implementation: "Dynamic or static tenant service lookup"
+      - capability: "Payload validation"
+        implementation: "Pydantic model validation"
+        
+    tools_available:
+      - tool_name: "process_webhook"
+        description: "Convert webhook payload to UnifiedMessage"
+        parameters: ["payload", "channel"]
+        implementation_file: "app/services/message_gateway.py"
+        
+    memory_management:
+      type: "none"
+      storage: "stateless"
+      persistence: false
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "N/A"
+      
+    interaction_patterns:
+      receives_from: ["WebhookRouter"]
+      sends_to: ["Orchestrator"]
+      message_format: "UnifiedMessage (Pydantic model)"
+      
+    error_handling:
+      retry_strategy: "None (validation errors fail fast)"
+      fallback_behavior: "Raise validation error"
+      escalation_path: "Log error → Return 400 to webhook caller"
+
+  - id: "template_service"
+    name: "Response Template Service"
+    type: "response_generator"
+    
+    llm_configuration:
+      provider: "N/A - Template engine"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: |
+        NOT APPLICABLE - This is a template-based response system, not LLM.
+        Templates stored in TemplateService class with 18+ predefined responses:
+        - availability_found, availability_not_found
+        - booking_confirmed, booking_failed
+        - location_info, business_hours_info
+        - late_checkout_available, late_checkout_confirmed
+        - after_hours_standard, after_hours_weekend
+        - urgency_escalation
+        - fallback, greeting, goodbye
+      fallback: "Default generic response"
+      
+    capabilities:
+      - capability: "Template-based responses"
+        implementation: "Python f-strings or .format() with variable substitution"
+      - capability: "Multi-language support"
+        implementation: "Separate templates per language (ES/EN/PT)"
+      - capability: "Dynamic variable injection"
+        implementation: "get_response(template_name, **kwargs)"
+        
+    tools_available:
+      - tool_name: "get_response"
+        description: "Get formatted template"
+        parameters: ["template_name", "**variables"]
+        implementation_file: "app/services/template_service.py"
+        
+    memory_management:
+      type: "none"
+      storage: "in-memory (class attributes)"
+      persistence: false
+      
+    state_management:
+      stateful: false
+      state_variables: []
+      state_persistence: "N/A"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator"]
+      sends_to: ["Orchestrator (returns formatted string)"]
+      message_format: "str"
+      
+    error_handling:
+      retry_strategy: "None"
+      fallback_behavior: "Return default template if not found"
+      escalation_path: "Log warning"
+
+  - id: "complete_pms_orchestrator"
+    name: "Complete PMS Orchestrator"
+    type: "specialist_orchestrator"
+    
+    llm_configuration:
+      provider: "N/A"
+      model: "N/A"
+      temperature: null
+      max_tokens: null
+      custom_parameters: {}
+      
+    system_prompts:
+      primary: "NOT APPLICABLE - Advanced PMS workflow coordinator"
+      fallback: "N/A"
+      
+    capabilities:
+      - capability: "Multi-step reservation flows"
+        implementation: "Coordinates booking → confirmation → payment → notification"
+      - capability: "Complex PMS operations"
+        implementation: "Orchestrates multiple PMS calls with transactional semantics"
+      - capability: "Booking confirmations"
+        implementation: "BookingConfirmationService integration"
+        
+    tools_available:
+      - tool_name: "complete_booking_flow"
+        description: "End-to-end booking with all steps"
+        parameters: ["booking_details"]
+        implementation_file: "app/services/pms/complete_orchestrator.py"
+        
+    memory_management:
+      type: "episodic"
+      storage: "Session-based (delegates to SessionManager)"
+      persistence: true
+      
+    state_management:
+      stateful: true
+      state_variables:
+        - "booking_flow_state: Current step in multi-step booking"
+        - "temporary_hold: Temporary reservation data"
+      state_persistence: "Via SessionManager"
+      
+    interaction_patterns:
+      receives_from: ["Orchestrator (for complex booking flows)"]
+      sends_to: ["PMSAdapter", "BookingConfirmationService", "SessionManager"]
+      message_format: "dict"
+      
+    error_handling:
+      retry_strategy: "Transactional rollback on failure"
+      fallback_behavior: "Rollback partial booking, inform user"
+      escalation_path: "Log → Metrics → Manual review if needed"
+
+operational_flows:
+  - flow_name: "Standard Message Processing"
+    trigger: "User sends message to WhatsApp"
+    description: "End-to-end message handling from receipt to response"
+    
+    steps:
+      - step: 1
+        agent: "webhook_router"
+        action: "Receive WhatsApp webhook POST"
+        input: "WhatsApp Cloud API payload (JSON)"
+        output: "Raw webhook data"
+        next_step_condition: "Always proceed to step 2"
+        
+      - step: 2
+        agent: "message_gateway"
+        action: "Normalize to UnifiedMessage"
+        input: "Webhook payload"
+        output: "UnifiedMessage(canal='whatsapp', texto='...', metadata={...})"
+        next_step_condition: "Validation passes"
+        
+      - step: 3
+        agent: "orchestrator"
+        action: "Begin message processing (handle_unified_message)"
+        input: "UnifiedMessage"
+        output: "Processing started"
+        next_step_condition: "Always"
+        
+      - step: 4
+        agent: "orchestrator"
+        action: "Check if audio message"
+        input: "message.tipo"
+        output: "Boolean"
+        next_step_condition: "If audio → step 5, else → step 6"
+        
+      - step: 5
+        agent: "audio_processor"
+        action: "Transcribe audio to text"
+        input: "message.media_url"
+        output: "dict {text: str, confidence: float}"
+        next_step_condition: "Success → continue to step 6"
+        
+      - step: 6
+        agent: "nlp_engine"
+        action: "Detect language"
+        input: "message.texto"
+        output: "language_code (es|en|pt)"
+        next_step_condition: "Always"
+        
+      - step: 7
+        agent: "nlp_engine"
+        action: "Process message (intent + entities)"
+        input: "text, language"
+        output: "dict {intent: {name, confidence}, entities: [...], language: str}"
+        next_step_condition: "If confidence >= 0.75 → step 9, else → step 8"
+        
+      - step: 8
+        agent: "orchestrator"
+        action: "Fallback to regex-based intent detection"
+        input: "message.texto"
+        output: "intent_name (from keyword matching)"
+        next_step_condition: "Always proceed"
+        
+      - step: 9
+        agent: "orchestrator"
+        action: "Check business hours"
+        input: "current_time, intent_name"
+        output: "Boolean (is_business_hours)"
+        next_step_condition: "If after-hours & non-urgent → return after-hours message; else → step 10"
+        
+      - step: 10
+        agent: "session_manager"
+        action: "Get or create session"
+        input: "user_id"
+        output: "session dict"
+        next_step_condition: "Always"
+        
+      - step: 11
+        agent: "orchestrator"
+        action: "Route to intent handler"
+        input: "intent_name, session, message"
+        output: "Calls _handle_<intent>_intent()"
+        next_step_condition: "Depends on intent"
+        
+      - step: 12
+        agent: "pms_adapter"
+        action: "Execute PMS operation (e.g., check_availability)"
+        input: "check_in, check_out, guests"
+        output: "availability_data dict"
+        next_step_condition: "Success → step 13, PMSError → step 15"
+        
+      - step: 13
+        agent: "template_service"
+        action: "Generate response from template"
+        input: "template_name, **availability_data"
+        output: "response_text (formatted string)"
+        next_step_condition: "Always"
+        
+      - step: 14
+        agent: "whatsapp_client"
+        action: "Send message to user"
+        input: "to=user_phone, message=response_text"
+        output: "message_id from WhatsApp API"
+        next_step_condition: "End flow"
+        
+      - step: 15
+        agent: "orchestrator"
+        action: "Handle PMS error (degraded response)"
+        input: "PMSError exception"
+        output: "fallback_message with contact info"
+        next_step_condition: "Go to step 14"
+    
+    error_scenarios:
+      - error_type: "ValidationError (step 2)"
+        handling: "Return 400 Bad Request to webhook caller"
+        recovery: "Log error, do not process further"
+        
+      - error_type: "AudioProcessingError (step 5)"
+        handling: "Return generic 'cannot process audio' message"
+        recovery: "Continue flow with fallback response"
+        
+      - error_type: "NLPEngineError (step 7)"
+        handling: "Trigger regex fallback (step 8)"
+        recovery: "Continue with keyword-based intent"
+        
+      - error_type: "PMSError / CircuitBreakerOpenError (step 12)"
+        handling: "Generate degraded response with contact info"
+        recovery: "Continue to step 14 with fallback message"
+        
+      - error_type: "WhatsAppAPIError (step 14)"
+        handling: "Retry 3 times with exponential backoff"
+        recovery: "Log error, increment failed_message_delivery metric"
+
+  - flow_name: "Late Checkout Request with 2-Step Confirmation"
+    trigger: "User says 'quiero late checkout'"
+    description: "Multi-step flow: request → check availability → ask confirmation → confirm"
+    
+    steps:
+      - step: 1
+        agent: "nlp_engine"
+        action: "Detect late_checkout intent"
+        input: "User message"
+        output: "intent: late_checkout"
+        next_step_condition: "Confidence >= 0.75"
+        
+      - step: 2
+        agent: "orchestrator"
+        action: "Check if booking_id in session"
+        input: "session.get('booking_id')"
+        output: "booking_id or None"
+        next_step_condition: "If None → ask for booking_id; else → step 3"
+        
+      - step: 3
+        agent: "pms_adapter"
+        action: "check_late_checkout_availability"
+        input: "reservation_id, requested_checkout_time='14:00'"
+        output: "dict {available: bool, fee: float, checkout_time: str}"
+        next_step_condition: "If available → step 4; else → not available message"
+        
+      - step: 4
+        agent: "orchestrator"
+        action: "Store pending_late_checkout in session"
+        input: "session, {booking_id, checkout_time, fee}"
+        output: "session updated"
+        next_step_condition: "Always"
+        
+      - step: 5
+        agent: "template_service"
+        action: "Generate late_checkout_available message"
+        input: "checkout_time, fee"
+        output: "¿Confirmas el late checkout hasta las 14:00 por $750?"
+        next_step_condition: "Always"
+        
+      - step: 6
+        agent: "whatsapp_client"
+        action: "Send confirmation request"
+        input: "message"
+        output: "Sent"
+        next_step_condition: "Wait for user response"
+        
+      - step: 7
+        agent: "orchestrator"
+        action: "User responds (new message received)"
+        input: "User message (e.g., 'sí')"
+        output: "New UnifiedMessage"
+        next_step_condition: "Process as new flow → detect affirm intent"
+        
+      - step: 8
+        agent: "nlp_engine"
+        action: "Detect affirm intent"
+        input: "User text"
+        output: "intent: affirm"
+        next_step_condition: "Confidence >= 0.75"
+        
+      - step: 9
+        agent: "orchestrator"
+        action: "Check if pending_late_checkout exists"
+        input: "session.get('pending_late_checkout')"
+        output: "dict with booking details"
+        next_step_condition: "If exists → step 10; else → generic affirm response"
+        
+      - step: 10
+        agent: "pms_adapter"
+        action: "confirm_late_checkout"
+        input: "reservation_id, checkout_time"
+        output: "dict {success: True, checkout_time, fee, booking}"
+        next_step_condition: "If success → step 11; else → error message"
+        
+      - step: 11
+        agent: "orchestrator"
+        action: "Remove pending_late_checkout from session"
+        input: "session"
+        output: "session.pop('pending_late_checkout')"
+        next_step_condition: "Always"
+        
+      - step: 12
+        agent: "template_service"
+        action: "Generate late_checkout_confirmed message"
+        input: "checkout_time, fee"
+        output: "✅ Late checkout confirmado hasta las 14:00. Cargo: $750."
+        next_step_condition: "Always"
+        
+      - step: 13
+        agent: "whatsapp_client"
+        action: "Send confirmation"
+        input: "message"
+        output: "Sent"
+        next_step_condition: "End flow"
+    
+    error_scenarios:
+      - error_type: "No booking_id in session"
+        handling: "Ask user for booking ID, set awaiting_booking_id_for='late_checkout'"
+        recovery: "Wait for next message with booking ID"
+        
+      - error_type: "Late checkout not available"
+        handling: "Return late_checkout_not_available template"
+        recovery: "End flow, offer alternatives"
+        
+      - error_type: "PMS confirmation fails"
+        handling: "Return error message, ask to contact reception"
+        recovery: "Log error, do not update session"
+
+  - flow_name: "Audio Message Processing"
+    trigger: "User sends voice note to WhatsApp"
+    description: "Audio-specific processing with STT conversion"
+    
+    steps:
+      - step: 1
+        agent: "message_gateway"
+        action: "Detect audio message type"
+        input: "WhatsApp webhook with media"
+        output: "UnifiedMessage(tipo='audio', media_url='...')"
+        next_step_condition: "Always"
+        
+      - step: 2
+        agent: "orchestrator"
+        action: "Identify audio message"
+        input: "message.tipo == 'audio'"
+        output: "Boolean True"
+        next_step_condition: "Route to audio processing"
+        
+      - step: 3
+        agent: "audio_processor"
+        action: "Download audio from media_url"
+        input: "media_url"
+        output: "audio_file (bytes)"
+        next_step_condition: "Download success"
+        
+      - step: 4
+        agent: "audio_processor"
+        action: "Transcribe with Whisper"
+        input: "audio_file"
+        output: "dict {text: 'quiero hacer una reserva', confidence: 0.95}"
+        next_step_condition: "If confidence >= 0.7 → step 5; else → low confidence error"
+        
+      - step: 5
+        agent: "orchestrator"
+        action: "Replace message.texto with transcription"
+        input: "stt_result['text']"
+        output: "message.texto = transcribed_text"
+        next_step_condition: "Continue to standard flow (NLP processing)"
+        
+      - step: 6
+        agent: "orchestrator"
+        action: "Store confidence in metadata"
+        input: "stt_result['confidence']"
+        output: "message.metadata['confidence_stt'] = 0.95"
+        next_step_condition: "Proceed with text processing"
+        
+    error_scenarios:
+      - error_type: "Audio download fails"
+        handling: "Return 'cannot access audio' message"
+        recovery: "Log error, ask user to try again"
+        
+      - error_type: "Whisper transcription fails"
+        handling: "Return 'cannot process audio' message"
+        recovery: "Log error with media_url for debugging"
+        
+      - error_type: "Low confidence transcription"
+        handling: "Return 'audio unclear, please type' message"
+        recovery: "Suggest text input instead"
+
+tool_ecosystem:
+  - tool_name: "Rasa NLU Pipeline"
+    type: "external_service"
+    purpose: "Intent classification and entity extraction"
+    used_by_agents: ["nlp_engine"]
+    implementation:
+      language: "Python"
+      file: "rasa_nlu/config.yml (configuration), trained models in rasa_nlu/"
+      dependencies: ["Rasa", "scikit-learn", "tensorflow (potential)"]
+    configuration:
+      parameters:
+        recipe: "default.v1"
+        language: "es (primary), en, pt (multilingual)"
+        pipeline: "WhitespaceTokenizer → RegexFeaturizer → CountVectorsFeaturizer → DIETClassifier"
+      authentication: "N/A (local models)"
+  
+  - tool_name: "QloApps PMS API"
+    type: "external_service"
+    purpose: "Hotel property management system integration"
+    used_by_agents: ["pms_adapter", "complete_pms_orchestrator"]
+    implementation:
+      language: "HTTP REST API"
+      file: "app/services/qloapps_client.py"
+      dependencies: ["httpx"]
+    configuration:
+      parameters:
+        base_url: "http://qloapps:80 (or configured PMS_BASE_URL)"
+        timeout: "30s"
+        retry: "3 attempts"
+      authentication: "API Key (PMS_API_KEY)"
+  
+  - tool_name: "OpenAI Whisper"
+    type: "api"
+    purpose: "Speech-to-Text transcription"
+    used_by_agents: ["audio_processor"]
+    implementation:
+      language: "Python"
+      file: "app/services/audio_processor.py"
+      dependencies: ["openai-whisper"]
+    configuration:
+      parameters:
+        model: "whisper-base (configurable)"
+        task: "transcribe"
+        language: "auto-detect"
+      authentication: "N/A (local model)"
+  
+  - tool_name: "WhatsApp Cloud API"
+    type: "external_service"
+    purpose: "Send/receive WhatsApp messages"
+    used_by_agents: ["whatsapp_client"]
+    implementation:
+      language: "HTTP REST API"
+      file: "app/services/whatsapp_client.py"
+      dependencies: ["httpx"]
+    configuration:
+      parameters:
+        version: "v18.0"
+        phone_number_id: "from settings"
+      authentication: "Bearer token (WHATSAPP_ACCESS_TOKEN)"
+  
+  - tool_name: "Redis"
+    type: "external_service"
+    purpose: "Cache, sessions, locks, rate limiting"
+    used_by_agents: ["pms_adapter", "session_manager", "orchestrator", "feature_flag_service"]
+    implementation:
+      language: "Redis protocol"
+      file: "app/core/redis_client.py"
+      dependencies: ["redis-py"]
+    configuration:
+      parameters:
+        host: "redis:6379 (Docker) or localhost"
+        db: "0"
+      authentication: "Password (REDIS_PASSWORD)"
+  
+  - tool_name: "PostgreSQL"
+    type: "external_service"
+    purpose: "Persistent storage (sessions, audits, tenant mapping)"
+    used_by_agents: ["session_manager", "dynamic_tenant_service", "lock_service"]
+    implementation:
+      language: "SQL"
+      file: "app/core/database.py"
+      dependencies: ["asyncpg", "sqlalchemy"]
+    configuration:
+      parameters:
+        pool_size: "10"
+        max_overflow: "10"
+      authentication: "Username/Password (POSTGRES_USER, POSTGRES_PASSWORD)"
+
+prompt_management:
+  storage_location: "N/A - System uses templates, not prompts"
+  versioning: false
+  templating_engine: "Python f-strings / .format()"
+  dynamic_prompts: false
+  prompt_examples:
+    - agent: "orchestrator"
+      example_prompt: |
+        NOT APPLICABLE - No LLM prompts used.
+        
+        Template example from TemplateService:
+        ```python
+        "availability_found": (
+            "¡Tenemos disponibilidad! 🏨\n\n"
+            "📅 Check-in: {checkin}\n"
+            "📅 Check-out: {checkout}\n"
+            "🛏️ Habitación: {room_type}\n"
+            "👥 Huéspedes: {guests}\n"
+            "💰 Precio: ${price} MXN por noche\n"
+            "💵 Total: ${total} MXN\n\n"
+            "¿Deseas reservar?"
+        )
+        ```
+  notes: "This system is NOT LLM-prompt-based. It uses Rasa NLU for intent detection and template-based responses. Future enhancement: Integrate generative LLM for dynamic responses."
+
+performance_characteristics:
+  average_response_time: "< 2 seconds (text messages), < 5 seconds (audio messages)"
+  concurrent_agent_limit: "Unlimited (async I/O with FastAPI)"
+  resource_requirements:
+    memory: "~500MB base, ~1-2GB with Whisper model loaded"
+    cpu: "2-4 cores recommended"
+    disk: "5-10GB (models + cache + logs)"
+  scalability_constraints:
+    - "PMS API rate limits (external dependency)"
+    - "WhatsApp Cloud API rate limits"
+    - "Redis connection pool size"
+    - "PostgreSQL connection pool size"
+    - "Whisper transcription is CPU-intensive (consider GPU for scale)"
+  notes: "System designed for async concurrency. Bottlenecks: external APIs (PMS, WhatsApp), STT processing. Circuit breakers prevent cascade failures."
+
+validation_questions:
+  - "¿Se utiliza algún LLM generativo (GPT, Claude, etc.) o solo Rasa NLU + templates?"
+  - "¿Cuál es el SLA objetivo para tiempo de respuesta?"
+  - "¿Existen planes para agregar RAG o búsqueda semántica?"
+  - "¿Cómo se maneja el rollback si un step del flujo falla a mitad de camino?"
+  - "¿Se guardan transcripciones de audio permanentemente o solo en cache?"
+  - "¿Existe monitoreo de satisfacción del usuario con las respuestas?"
+  - "¿Cómo se prueban cambios en templates sin afectar producción (A/B testing)?"
+  - "¿Existe documentación de todos los intents soportados y sus handlers?"

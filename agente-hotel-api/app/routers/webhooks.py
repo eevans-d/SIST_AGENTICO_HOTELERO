@@ -339,6 +339,50 @@ async def handle_whatsapp_webhook(request: Request):
                     emoji=content.get("emoji", "👍")
                 )
                 
+            elif response_type == "image_with_text" and original_message:
+                # FEATURE 5: Enviar imagen con texto (para QR codes de confirmación)
+                image_path = result.get("image_path")
+                image_caption = result.get("image_caption", "")
+                text_content = result.get("content", "")
+                
+                if image_path:
+                    # Enviar primero el texto
+                    if text_content:
+                        await whatsapp_client.send_message(
+                            to=original_message.user_id,
+                            text=text_content
+                        )
+                    
+                    # Luego enviar la imagen con caption
+                    try:
+                        # Para archivos locales, necesitamos convertir a URL
+                        # En producción esto sería una URL de S3 o CDN
+                        from pathlib import Path
+                        if Path(image_path).exists():
+                            # Upload to temporary hosting or convert to base64
+                            # Por ahora, enviamos solo el caption como texto
+                            await whatsapp_client.send_message(
+                                to=original_message.user_id,
+                                text=f"📱 {image_caption}\n\n(QR code would be sent here in production)"
+                            )
+                        else:
+                            # Imagen no encontrada, enviar fallback
+                            await whatsapp_client.send_message(
+                                to=original_message.user_id,
+                                text=f"⚠️ Error enviando QR code. {image_caption}"
+                            )
+                    except Exception as img_error:
+                        logger.error(
+                            "whatsapp.send_qr_image_error",
+                            error=str(img_error),
+                            image_path=image_path
+                        )
+                        # Fallback: enviar solo el texto de confirmación
+                        await whatsapp_client.send_message(
+                            to=original_message.user_id,
+                            text="✅ Tu reserva está confirmada. El QR code se enviará por email."
+                        )
+                
         elif "response" in result and unified:
             # Respuesta de texto tradicional
             await whatsapp_client.send_message(

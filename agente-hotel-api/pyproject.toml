@@ -26,6 +26,11 @@ python-multipart = "^0.0.9"
 openai-whisper = "^20231117"
 aiohttp = "^3.9.0"
 aiofiles = "^23.2.1"
+# Performance optimization dependencies
+psutil = "^5.9.8"
+# QR Code generation
+qrcode = {extras = ["pil"], version = "^7.4.2"}
+croniter = "^2.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.2"
