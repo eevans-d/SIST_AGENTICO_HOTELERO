@@ -94,6 +94,14 @@ class Settings(BaseSettings):
     room_images_enabled: bool = True
     room_images_base_url: str = "https://example.com/images/rooms/"  # S3 or local NGINX
     
+    # Review Request Settings - Feature 6
+    review_max_reminders: int = 3
+    review_initial_delay_hours: int = 24  # Wait 24h after checkout
+    review_reminder_interval_hours: int = 72  # Remind every 3 days
+    google_review_url: str = "https://g.page/r/EXAMPLE/review"
+    tripadvisor_review_url: str = "https://www.tripadvisor.com/UserReviewEdit-EXAMPLE"
+    booking_review_url: str = "https://www.booking.com/reviewcenter/EXAMPLE"
+    
     # eSpeak TTS Configuration 
     espeak_voice: str = "es"
     espeak_speed: int = 150  # words per minute

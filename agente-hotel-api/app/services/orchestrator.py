@@ -27,6 +27,7 @@ from ..utils.business_hours import (
 )
 from ..utils.room_images import get_room_image_url, validate_image_url
 from .qr_service import get_qr_service
+from .review_service import get_review_service
 
 
 class Orchestrator:
@@ -1057,6 +1058,107 @@ class Orchestrator:
                 "content": response_text
             }
             
+        # ============================================================
+        # FEATURE 6: REVIEW REQUESTS
+        # ============================================================
+        elif intent == "review_response":
+            logger.info("review_response_detected", user_id=message.user_id, text=message.texto)
+            
+            try:
+                review_service = get_review_service()
+                result = await review_service.process_review_response(
+                    guest_id=message.user_id,
+                    response_text=message.texto
+                )
+                
+                if result["success"]:
+                    if result["intent"] == "positive":
+                        response_text = "¡Perfecto! Te envío los enlaces para dejar tu reseña."
+                    elif result["intent"] == "negative":
+                        response_text = "Lamentamos que tu experiencia no haya sido perfecta. Valoramos tu feedback."
+                    elif result["intent"] == "unsubscribe":
+                        response_text = "Entendido, no enviaremos más recordatorios de reseñas."
+                    else:
+                        response_text = "Gracias por tu respuesta. ¿Hay algo más en lo que pueda ayudarte?"
+                else:
+                    response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
+                
+                logger.info("review_response_processed", 
+                           user_id=message.user_id,
+                           intent=result.get("intent"),
+                           sentiment=result.get("sentiment"))
+                
+            except Exception as e:
+                logger.error("review_response_error", user_id=message.user_id, error=str(e))
+                response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
+            
+            # Responder con audio si el mensaje original era de audio
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    if audio_data:
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for review: {e}")
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+            
+        # ============================================================
+        # CHECKOUT TRIGGER FOR REVIEW SCHEDULING
+        # ============================================================
+        # Check if this is a checkout confirmation and schedule review request
+        if intent in ["check_out_info", "checkout_completed"] or "checkout" in (message.texto or "").lower():
+            logger.info("checkout_detected_scheduling_review", user_id=message.user_id)
+            
+            try:
+                # Get guest info from session
+                guest_name = session.get("guest_name", "Estimado huésped")
+                booking_id = session.get("booking_id", "HTL-REVIEW-001")
+                
+                # Schedule review request for 24 hours later
+                from datetime import datetime, timedelta
+                checkout_date = datetime.utcnow()  # In real implementation, get from PMS
+                
+                review_service = get_review_service()
+                from app.services.review_service import GuestSegment
+                
+                # Determine guest segment based on session data
+                segment = GuestSegment.COUPLE  # Default, could be enhanced with ML
+                if session.get("business_trip"):
+                    segment = GuestSegment.BUSINESS
+                elif session.get("family_trip"):
+                    segment = GuestSegment.FAMILY
+                elif session.get("group_size", 1) > 2:
+                    segment = GuestSegment.GROUP
+                
+                schedule_result = await review_service.schedule_review_request(
+                    guest_id=message.user_id,
+                    guest_name=guest_name,
+                    booking_id=booking_id,
+                    checkout_date=checkout_date,
+                    segment=segment,
+                    language="es"
+                )
+                
+                if schedule_result["success"]:
+                    logger.info("review_request_scheduled", 
+                               user_id=message.user_id,
+                               request_id=schedule_result["request_id"],
+                               scheduled_time=schedule_result["scheduled_time"])
+                
+            except Exception as e:
+                logger.error("review_scheduling_error", user_id=message.user_id, error=str(e))
+                # Don't fail the main response if review scheduling fails
+        
         # Si llegamos aquí, devolver respuesta por defecto
         default_text = "No entendí tu consulta. ¿Podrías reformularla?"
         

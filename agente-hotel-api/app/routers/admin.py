@@ -159,3 +159,147 @@ async def trigger_audio_cache_cleanup(request: Request):
         "status": "cleanup_triggered",
         "result": cleanup_result
     }
+
+
+# ============================================================
+# FEATURE 6: REVIEW MANAGEMENT ENDPOINTS
+# ============================================================
+
+@router.post("/reviews/send")
+@limit("10/minute")
+async def send_review_request(request: Request, body: dict):
+    """
+    Envía una solicitud de reseña manualmente a un huésped.
+    
+    Body:
+        {
+            "guest_id": "5491112345678",
+            "force_send": false
+        }
+    """
+    from ..services.review_service import get_review_service
+    
+    guest_id = body.get("guest_id")
+    if not guest_id:
+        raise HTTPException(status_code=400, detail="guest_id es requerido")
+    
+    force_send = body.get("force_send", False)
+    
+    review_service = get_review_service()
+    result = await review_service.send_review_request(guest_id, force_send)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send review request"))
+    
+    return result
+
+
+@router.post("/reviews/schedule")
+@limit("10/minute")
+async def schedule_review_request_admin(request: Request, body: dict):
+    """
+    Programa una solicitud de reseña para envío diferido.
+    
+    Body:
+        {
+            "guest_id": "5491112345678",
+            "guest_name": "Juan Pérez",
+            "booking_id": "HTL-001",
+            "checkout_date": "2025-01-10T12:00:00Z",
+            "segment": "couple",  # couple|business|family|solo|group|vip
+            "language": "es"
+        }
+    """
+    from ..services.review_service import get_review_service, GuestSegment
+    from datetime import datetime
+    
+    required_fields = ["guest_id", "guest_name", "booking_id", "checkout_date"]
+    for field in required_fields:
+        if field not in body:
+            raise HTTPException(status_code=400, detail=f"{field} es requerido")
+    
+    # Parse segment
+    segment_str = body.get("segment", "couple")
+    try:
+        segment = GuestSegment(segment_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Segment inválido: {segment_str}")
+    
+    # Parse checkout date
+    try:
+        checkout_date = datetime.fromisoformat(body["checkout_date"].replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="checkout_date debe ser ISO 8601")
+    
+    review_service = get_review_service()
+    result = await review_service.schedule_review_request(
+        guest_id=body["guest_id"],
+        guest_name=body["guest_name"],
+        booking_id=body["booking_id"],
+        checkout_date=checkout_date,
+        segment=segment,
+        language=body.get("language", "es")
+    )
+    
+    return result
+
+
+@router.post("/reviews/mark-submitted")
+@limit("30/minute")
+async def mark_review_submitted_admin(request: Request, body: dict):
+    """
+    Marca una reseña como enviada (cuando se confirma externamente).
+    
+    Body:
+        {
+            "guest_id": "5491112345678",
+            "platform": "google"  # google|tripadvisor|booking|expedia|facebook
+        }
+    """
+    from ..services.review_service import get_review_service, ReviewPlatform
+    
+    guest_id = body.get("guest_id")
+    platform_str = body.get("platform")
+    
+    if not guest_id or not platform_str:
+        raise HTTPException(status_code=400, detail="guest_id y platform son requeridos")
+    
+    try:
+        platform = ReviewPlatform(platform_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Platform inválida: {platform_str}")
+    
+    review_service = get_review_service()
+    result = await review_service.mark_review_submitted(guest_id, platform)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result.get("error", "Review request not found"))
+    
+    return result
+
+
+@router.get("/reviews/analytics")
+@limit("60/minute")
+async def get_review_analytics(request: Request):
+    """
+    Obtiene estadísticas y analytics del sistema de reseñas.
+    
+    Returns:
+        {
+            "overview": {
+                "requests_sent": 150,
+                "responses_received": 75,
+                "reviews_submitted": 50,
+                "conversion_rate": 33.3
+            },
+            "platform_performance": {"google": 25, "tripadvisor": 15, ...},
+            "segment_performance": {"couple": {...}, "business": {...}, ...}
+        }
+    """
+    from ..services.review_service import get_review_service
+    
+    review_service = get_review_service()
+    analytics = review_service.get_review_analytics()
+    
+    return analytics
+
