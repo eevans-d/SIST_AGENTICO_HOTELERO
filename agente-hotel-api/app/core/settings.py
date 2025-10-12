@@ -208,6 +208,11 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# FastAPI dependency injection function
+def get_settings() -> Settings:
+    """Get the application settings instance."""
+    return settings
+
 # Helper para exponer lista normalizada (evita repetir split en middleware)
 if settings.csp_extra_sources:
     try:
