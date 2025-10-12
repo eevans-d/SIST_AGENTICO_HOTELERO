@@ -18,6 +18,7 @@ pool_kwargs = {
     "health_check_interval": 30,  # Health check every 30 seconds
     "socket_keepalive": True,
     "socket_keepalive_options": {},
+    "client_name": f"hotel_agent_{settings.environment.value}",  # Client name for monitoring
 }
 
 # Additional production optimizations for Redis
@@ -26,9 +27,6 @@ if settings.environment == Environment.PROD:
         "socket_connect_timeout": 5,
         "socket_timeout": 5,
         "retry_on_timeout": True,
-        "connection_kwargs": {
-            "client_name": f"hotel_agent_{settings.environment.value}"
-        }
     })
 
 redis_pool = redis.ConnectionPool.from_url(REDIS_URL, **pool_kwargs)
