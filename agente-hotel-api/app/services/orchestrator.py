@@ -20,6 +20,23 @@ from .business_metrics import (
 from ..exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
 from ..core.logging import logger
 from ..core.settings import settings
+from ..core.constants import (
+    CONFIDENCE_THRESHOLD_VERY_LOW,
+    CONFIDENCE_THRESHOLD_LOW,
+    CONFIDENCE_THRESHOLD_HIGH,
+    HOTEL_STANDARD_CHECKOUT_TIME,
+    HOTEL_LATE_CHECKOUT_TIME,
+    PRICE_ROOM_SINGLE,
+    PRICE_ROOM_DOUBLE,
+    PRICE_ROOM_PREMIUM_SINGLE,
+    PRICE_ROOM_PREMIUM_DOUBLE,
+    RESERVATION_DEPOSIT_AMOUNT,
+    MOCK_BANK_INFO,
+    MOCK_CHECKIN_DATE,
+    MOCK_CHECKOUT_DATE,
+    MOCK_ROOM_NUMBER,
+    MAX_ESCALATION_HISTORY_ITEMS,
+)
 from ..utils.business_hours import (
     is_business_hours,
     get_next_business_open_time,
@@ -286,10 +303,10 @@ class Orchestrator:
         room_data = {
             "checkin": "01/01/2023",
             "checkout": "05/01/2023",
-            "price_single": 8000,
-            "price_double": 12000,
-            "price_prem_single": 15000,
-            "price_prem_double": 20000
+            "price_single": PRICE_ROOM_SINGLE,
+            "price_double": PRICE_ROOM_DOUBLE,
+            "price_prem_single": PRICE_ROOM_PREMIUM_SINGLE,
+            "price_prem_double": PRICE_ROOM_PREMIUM_DOUBLE
         }
         
         # Si el mensaje original era de audio, primero responder con audio
@@ -465,13 +482,13 @@ class Orchestrator:
             
             availability = await self.pms_adapter.check_late_checkout_availability(
                 reservation_id=str(booking_id),
-                requested_checkout_time="14:00"  # Default to 2pm
+                requested_checkout_time=HOTEL_LATE_CHECKOUT_TIME  # Default to 2pm
             )
             
             if availability["available"]:
                 # Late checkout is available
                 fee = availability["fee"]
-                checkout_time = availability.get("requested_time", "14:00")
+                checkout_time = availability.get("requested_time", HOTEL_LATE_CHECKOUT_TIME)
                 
                 # Check if it's free (no next booking and policy allows)
                 if fee == 0:
@@ -498,7 +515,7 @@ class Orchestrator:
                 # Not available - room has next booking
                 response_text = self.template_service.get_response(
                     "late_checkout_not_available",
-                    standard_time="12:00"
+                    standard_time=HOTEL_STANDARD_CHECKOUT_TIME
                 )
             
             logger.info(
@@ -707,8 +724,8 @@ class Orchestrator:
             "checkout": "mañana",
             "room_type": "Doble",
             "guests": 2,
-            "price": 10000,
-            "total": 20000
+            "price": PRICE_ROOM_DOUBLE,
+            "total": PRICE_ROOM_DOUBLE * 2
         }
         
         # Preparar mensaje de respuesta de texto
@@ -828,8 +845,8 @@ class Orchestrator:
         
         # Datos de reserva (simulados)
         reservation_data = {
-            "deposit": 6000, 
-            "bank_info": "CBU 12345..."
+            "deposit": RESERVATION_DEPOSIT_AMOUNT, 
+            "bank_info": MOCK_BANK_INFO
         }
         
         # Actualizar estado de sesión para seguimiento de reserva
@@ -1006,9 +1023,9 @@ class Orchestrator:
             # TEMPORAL FIX: QR generation deshabilitado hasta agregar qrcode
             logger.info("QR generation temporarily disabled")
             
-            check_in_date = session_data.get("check_in_date", "2025-10-15")
-            check_out_date = session_data.get("check_out_date", "2025-10-17")
-            room_number = session_data.get("room_number", "205")
+            check_in_date = session_data.get("check_in_date", MOCK_CHECKIN_DATE)
+            check_out_date = session_data.get("check_out_date", MOCK_CHECKOUT_DATE)
+            room_number = session_data.get("room_number", MOCK_ROOM_NUMBER)
             
             # Si tenemos QR code, enviar confirmación completa con QR
             if qr_data:
@@ -1131,7 +1148,7 @@ class Orchestrator:
             # Métrica de negocio: registrar intent detectado
             intent_obj = nlp_result.get("intent", {})
             confidence = intent_obj.get("confidence", 0.0)
-            confidence_level = "high" if confidence >= 0.75 else "medium" if confidence >= 0.45 else "low"
+            confidence_level = "high" if confidence >= CONFIDENCE_THRESHOLD_LOW else "medium" if confidence >= CONFIDENCE_THRESHOLD_VERY_LOW else "low"
             intents_detected.labels(intent=intent_name, confidence_level=confidence_level).inc()
             
             session = await self.session_manager.get_or_create_session(message.user_id, message.canal, tenant_id)
@@ -1144,14 +1161,14 @@ class Orchestrator:
             # Get language from NLP result or message metadata
             response_language = nlp_result.get("language", message.metadata.get("detected_language", "es"))
             
-            if enhanced_fallback and confidence < 0.45:
+            if enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_VERY_LOW:
                 # Respuesta de bajo nivel de confianza agresiva
                 metrics_service.record_nlp_fallback("very_low_confidence")
                 nlp_fallbacks.inc()  # Métrica de negocio: fallback detectado
                 return {
                     "response": self._get_low_confidence_message(response_language)
                 }
-            elif enhanced_fallback and confidence < 0.75:
+            elif enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_LOW:
                 message.metadata["low_confidence"] = True
                 metrics_service.record_nlp_fallback("low_confidence_hint")
             
@@ -1537,8 +1554,8 @@ class Orchestrator:
         if interactive_id == "confirm_reservation":
             # Usuario confirmó que quiere reservar después de ver disponibilidad
             reservation_data = {
-                "deposit": 6000, 
-                "bank_info": "CBU 12345..."
+                "deposit": RESERVATION_DEPOSIT_AMOUNT, 
+                "bank_info": MOCK_BANK_INFO
             }
             
             # Actualizar estado de sesión para seguimiento de reserva
