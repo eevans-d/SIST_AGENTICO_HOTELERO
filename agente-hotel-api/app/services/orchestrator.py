@@ -28,6 +28,19 @@ from ..utils.business_hours import (
 from ..utils.room_images import get_room_image_url, validate_image_url
 from .qr_service import get_qr_service
 from .review_service import get_review_service
+from .alert_service import alert_manager
+
+# Métricas para escalamiento
+escalations_total = Counter(
+    "orchestrator_escalations_total",
+    "Total de escalamientos a staff humano",
+    ["reason", "channel"]
+)
+escalation_response_time = Histogram(
+    "orchestrator_escalation_response_seconds",
+    "Tiempo desde escalamiento hasta respuesta de staff",
+    ["reason"]
+)
 
 
 class Orchestrator:
@@ -39,6 +52,114 @@ class Orchestrator:
         self.nlp_engine = NLPEngine()
         self.audio_processor = AudioProcessor()
         self.template_service = TemplateService()
+
+    async def _escalate_to_staff(
+        self, 
+        message: UnifiedMessage, 
+        reason: str, 
+        intent: str = "unknown",
+        session_data: dict = None
+    ) -> dict:
+        """
+        Escalate conversation to human staff with comprehensive tracking.
+        
+        Args:
+            message: The unified message that triggered escalation
+            reason: Reason for escalation (urgent_after_hours, nlp_failure, etc.)
+            intent: Detected intent (if any)
+            session_data: Current session context
+            
+        Returns:
+            Response dict with escalation acknowledgment
+        """
+        # Record escalation metric
+        escalations_total.labels(reason=reason, channel=message.canal).inc()
+        
+        # Prepare escalation context
+        escalation_context = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "reason": reason,
+            "user_id": message.user_id,
+            "channel": message.canal,
+            "intent": intent,
+            "message_preview": message.texto[:200] if message.texto else "",
+            "session_history": session_data.get("history", [])[-5:] if session_data else [],
+            "metadata": {
+                "tenant_id": getattr(message, "tenant_id", None),
+                "language": message.metadata.get("detected_language", "es"),
+                "media_type": message.tipo
+            }
+        }
+        
+        # Log escalation for monitoring
+        logger.warning(
+            "orchestrator.escalation_triggered",
+            reason=reason,
+            user_id=message.user_id,
+            channel=message.canal,
+            intent=intent,
+            **escalation_context["metadata"]
+        )
+        
+        # Send alert to staff through alert manager
+        try:
+            await alert_manager.send_alert({
+                "metric": "conversation_escalation",
+                "level": "warning" if reason != "critical_error" else "critical",
+                "description": f"Escalamiento de conversación: {reason}",
+                "user_id": message.user_id,
+                "channel": message.canal,
+                "context": escalation_context,
+                "action_required": True
+            })
+        except Exception as alert_error:
+            logger.error(
+                "orchestrator.alert_send_failed",
+                error=str(alert_error),
+                user_id=message.user_id
+            )
+        
+        # Update session with escalation flag
+        if session_data:
+            session_data["escalated"] = True
+            session_data["escalation_timestamp"] = escalation_context["timestamp"]
+            session_data["escalation_reason"] = reason
+            
+            # Save updated session
+            try:
+                await self.session_manager.save_session(
+                    user_id=message.user_id,
+                    data=session_data
+                )
+            except Exception as session_error:
+                logger.error(
+                    "orchestrator.session_save_failed",
+                    error=str(session_error),
+                    user_id=message.user_id
+                )
+        
+        # Generate response based on reason
+        if reason == "urgent_after_hours":
+            response_text = self.template_service.get_response(
+                "escalated_to_staff",
+                next_business_time=format_business_hours(get_next_business_open_time())
+            )
+        elif reason == "nlp_failure":
+            response_text = self.template_service.get_response(
+                "fallback_human_needed"
+            )
+        else:
+            response_text = self.template_service.get_response(
+                "escalated_to_staff",
+                reason="Necesitas asistencia especializada"
+            )
+        
+        return {
+            "response_type": "text",
+            "content": response_text,
+            "escalated": True,
+            "escalation_id": f"ESC-{datetime.utcnow().timestamp()}"
+        }
 
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
@@ -323,8 +444,6 @@ class Orchestrator:
         
         # If urgent request outside business hours, escalate
         if not in_business_hours and is_urgent:
-            response_text = self.template_service.get_response("escalated_to_staff")
-            
             logger.warning(
                 "orchestrator.urgent_after_hours_escalation",
                 user_id=message.user_id,
@@ -332,13 +451,13 @@ class Orchestrator:
                 text_preview=message.texto[:100] if message.texto else ""
             )
             
-            # TODO: Implement actual escalation logic (notify staff, create ticket, etc.)
-            # For now, just send acknowledgment message
-            
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
+            # Escalate to staff with comprehensive tracking and alerting
+            return await self._escalate_to_staff(
+                message=message,
+                reason="urgent_after_hours",
+                intent=intent,
+                session_data=session
+            )
         # ============================================================
         # END BUSINESS HOURS CHECK
         # ============================================================
@@ -717,8 +836,11 @@ class Orchestrator:
                 # Simular la confirmación del pago
                 # En un caso real, procesaríamos la imagen y confirmaríamos con el PMS
                 
-                # FEATURE 5: Generate QR code for confirmed booking
+                # FEATURE 5: Generate QR code for confirmed booking - TEMPORALMENTE DESHABILITADO
                 qr_data = None
+                # TEMPORAL FIX: QR generation deshabilitado hasta agregar qrcode
+                logger.info("QR generation temporarily disabled")
+                """
                 try:
                     qr_service = get_qr_service()
                     
@@ -772,6 +894,7 @@ class Orchestrator:
                         error=str(e),
                         exc_info=True
                     )
+                """
                 
                 # Si tenemos QR code, enviar confirmación completa con QR
                 if qr_data:
