@@ -664,6 +664,146 @@ class Orchestrator:
         # If we reach here, return None to continue processing in handle_intent
         return None
 
+    async def _handle_availability(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage,
+        respond_with_audio: bool = False
+    ) -> dict:
+        """
+        Maneja consultas de disponibilidad de habitaciones.
+        
+        Procesa solicitudes de check_availability mostrando:
+        - Información de disponibilidad (fechas, tipo de habitación, precio)
+        - Imágenes de habitación (si está habilitado en settings)
+        - Respuesta en audio (si el mensaje original era audio)
+        - Botones interactivos o respuesta de texto según feature flag
+        
+        Args:
+            nlp_result: Resultado del análisis NLP con intent y entidades
+            session_data: Datos de sesión del huésped
+            message: Mensaje unificado del huésped
+            respond_with_audio: Si se debe responder con audio
+            
+        Returns:
+            Dict con response_type y content según formato seleccionado
+            
+        Raises:
+            Exception: Si falla la generación de respuesta (se captura internamente)
+        """
+        from app.core.settings import settings
+        from app.utils.room_images import get_room_image_url, validate_image_url
+        
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        # Comprobar si la feature flag de mensajes interactivos está activada
+        ff_service = await get_feature_flag_service()
+        use_interactive = await ff_service.is_enabled("features.interactive_messages", default=True)
+        
+        # Datos de disponibilidad (simulados - en producción vendrían del PMS)
+        availability_data = {
+            "checkin": "hoy",
+            "checkout": "mañana",
+            "room_type": "Doble",
+            "guests": 2,
+            "price": 10000,
+            "total": 20000
+        }
+        
+        # Preparar mensaje de respuesta de texto
+        response_text = self.template_service.get_response("availability_found", **availability_data)
+        
+        # Feature 3: Preparar imagen de habitación si está habilitada
+        room_image_url = None
+        room_image_caption = None
+        if settings.room_images_enabled:
+            try:
+                # Obtener URL de imagen basada en el tipo de habitación
+                room_type = availability_data.get("room_type", "")
+                room_image_url = get_room_image_url(room_type)
+                
+                if room_image_url and validate_image_url(room_image_url):
+                    # Preparar caption personalizado para la imagen
+                    room_image_caption = self.template_service.get_response(
+                        "room_photo_caption",
+                        room_type=room_type,
+                        price=availability_data.get("price", 0),
+                        guests=availability_data.get("guests", 2)
+                    )
+                    
+                    logger.info(
+                        "room_image.prepared",
+                        room_type=room_type,
+                        image_url=room_image_url,
+                        has_caption=bool(room_image_caption)
+                    )
+                else:
+                    logger.warning(
+                        "room_image.invalid_or_not_found",
+                        room_type=room_type,
+                        url=room_image_url
+                    )
+                    room_image_url = None
+            except Exception as e:
+                # No fallar la respuesta si la imagen falla - es un feature adicional
+                logger.warning(
+                    "room_image.preparation_failed",
+                    error=str(e),
+                    room_type=availability_data.get("room_type", "")
+                )
+                room_image_url = None
+        
+        # Si el mensaje original era de audio, responder también con audio
+        if respond_with_audio:
+            try:
+                # Generar audio con el texto de respuesta
+                audio_data = await self.audio_processor.generate_audio_response(
+                    response_text, content_type="availability_response"
+                )
+                
+                if audio_data:
+                    logger.info("Generated audio response for availability check", 
+                               audio_bytes=len(audio_data))
+                    
+                    # No podemos combinar audio con mensajes interactivos en WhatsApp,
+                    # así que en este caso priorizamos el audio
+                    # Si hay imagen, la incluimos en la respuesta
+                    return {
+                        "response_type": "audio_with_image" if room_image_url else "audio",
+                        "content": response_text,
+                        "audio_data": audio_data,
+                        "image_url": room_image_url,
+                        "image_caption": room_image_caption
+                    }
+            except Exception as e:
+                # Si falla la generación de audio, continuamos con texto normal
+                logger.error(f"Failed to generate audio response: {e}")
+        
+        # Si llegamos aquí, usamos respuesta normal (texto o interactiva)
+        if use_interactive:
+            # Respuesta con botones interactivos
+            button_template = self.template_service.get_interactive_buttons(
+                "availability_confirmation",
+                **availability_data
+            )
+            
+            # Si hay imagen, incluirla junto con los botones interactivos
+            return {
+                "response_type": "interactive_buttons_with_image" if room_image_url else "interactive_buttons",
+                "content": button_template,
+                "image_url": room_image_url,
+                "image_caption": room_image_caption
+            }
+        else:
+            # Respuesta de texto tradicional con imagen opcional
+            return {
+                "response_type": "text_with_image" if room_image_url else "text",
+                "content": response_text,
+                "image_url": room_image_url,
+                "image_caption": room_image_caption
+            }
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
         intent_name = "unknown"
@@ -930,112 +1070,7 @@ class Orchestrator:
                 return await self._handle_interactive_response(interactive_id, session, message)
 
         if intent == "check_availability":
-            # Comprobar si la feature flag de mensajes interactivos está activada
-            ff_service = await get_feature_flag_service()
-            use_interactive = await ff_service.is_enabled("features.interactive_messages", default=True)
-            
-            # Datos de disponibilidad (simulados - en producción vendrían del PMS)
-            availability_data = {
-                "checkin": "hoy",
-                "checkout": "mañana",
-                "room_type": "Doble",
-                "guests": 2,
-                "price": 10000,
-                "total": 20000
-            }
-            
-            # Preparar mensaje de respuesta de texto
-            response_text = self.template_service.get_response("availability_found", **availability_data)
-            
-            # Feature 3: Preparar imagen de habitación si está habilitada
-            room_image_url = None
-            room_image_caption = None
-            if settings.room_images_enabled:
-                try:
-                    # Obtener URL de imagen basada en el tipo de habitación
-                    room_type = availability_data.get("room_type", "")
-                    room_image_url = get_room_image_url(room_type)
-                    
-                    if room_image_url and validate_image_url(room_image_url):
-                        # Preparar caption personalizado para la imagen
-                        room_image_caption = self.template_service.get_response(
-                            "room_photo_caption",
-                            room_type=room_type,
-                            price=availability_data.get("price", 0),
-                            guests=availability_data.get("guests", 2)
-                        )
-                        
-                        logger.info(
-                            "room_image.prepared",
-                            room_type=room_type,
-                            image_url=room_image_url,
-                            has_caption=bool(room_image_caption)
-                        )
-                    else:
-                        logger.warning(
-                            "room_image.invalid_or_not_found",
-                            room_type=room_type,
-                            url=room_image_url
-                        )
-                        room_image_url = None
-                except Exception as e:
-                    # No fallar la respuesta si la imagen falla - es un feature adicional
-                    logger.warning(
-                        "room_image.preparation_failed",
-                        error=str(e),
-                        room_type=availability_data.get("room_type", "")
-                    )
-                    room_image_url = None
-            
-            # Si el mensaje original era de audio, responder también con audio
-            if respond_with_audio:
-                try:
-                    # Generar audio con el texto de respuesta
-                    audio_data = await self.audio_processor.generate_audio_response(
-                        response_text, content_type="availability_response"
-                    )
-                    
-                    if audio_data:
-                        logger.info("Generated audio response for availability check", 
-                                   audio_bytes=len(audio_data))
-                        
-                        # No podemos combinar audio con mensajes interactivos en WhatsApp,
-                        # así que en este caso priorizamos el audio
-                        # Si hay imagen, la incluimos en la respuesta
-                        return {
-                            "response_type": "audio_with_image" if room_image_url else "audio",
-                            "content": response_text,
-                            "audio_data": audio_data,
-                            "image_url": room_image_url,
-                            "image_caption": room_image_caption
-                        }
-                except Exception as e:
-                    # Si falla la generación de audio, continuamos con texto normal
-                    logger.error(f"Failed to generate audio response: {e}")
-            
-            # Si llegamos aquí, usamos respuesta normal (texto o interactiva)
-            if use_interactive:
-                # Respuesta con botones interactivos
-                button_template = self.template_service.get_interactive_buttons(
-                    "availability_confirmation",
-                    **availability_data
-                )
-                
-                # Si hay imagen, incluirla junto con los botones interactivos
-                return {
-                    "response_type": "interactive_buttons_with_image" if room_image_url else "interactive_buttons",
-                    "content": button_template,
-                    "image_url": room_image_url,
-                    "image_caption": room_image_caption
-                }
-            else:
-                # Respuesta de texto tradicional con imagen opcional
-                return {
-                    "response_type": "text_with_image" if room_image_url else "text",
-                    "content": response_text,
-                    "image_url": room_image_url,
-                    "image_caption": room_image_caption
-                }
+            return await self._handle_availability(nlp_result, session, message, respond_with_audio)
 
         elif intent == "make_reservation":
             # Datos de reserva (simulados)
