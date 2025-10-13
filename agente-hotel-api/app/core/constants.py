@@ -95,6 +95,7 @@ CLEANUP_TIMEOUT = 5.0  # Timeout para operaciones de limpieza
 CLEANUP_INTERVAL = 60  # Limpieza cada minuto
 MONITORING_INTERVAL = 30  # Monitoreo cada 30 segundos
 HEALTH_CHECK_INTERVAL = 15  # Health check cada 15 segundos
+SESSION_CLEANUP_INTERVAL = 600  # Limpieza de sesiones cada 10 minutos
 
 # Retry configuration
 MAX_RETRIES_DEFAULT = 3
@@ -104,6 +105,9 @@ RETRY_DELAY_BASE = 1  # Delay base en segundos para exponential backoff
 # ============================================================
 # SESSION & ESCALATION
 # ============================================================
+
+# TTL de sesiones
+SESSION_TTL_DEFAULT = 1800  # 30 minutos de inactividad
 
 # Límites de mensajes en historial
 MAX_ESCALATION_HISTORY_ITEMS = 5  # Máximo de mensajes en historial de escalado
