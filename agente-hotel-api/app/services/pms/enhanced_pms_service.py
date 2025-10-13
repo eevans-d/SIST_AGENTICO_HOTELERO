@@ -4,7 +4,8 @@ Advanced Property Management System integration with QloApps and fallback provid
 """
 
 import asyncio
-import aiohttp
+# TEMPORAL FIX: Comentado hasta agregar aiohttp a requirements
+# import aiohttp
 import json
 import logging
 from typing import Dict, List, Any, Optional, Union, Tuple
@@ -181,7 +182,7 @@ class EnhancedPMSService:
         )
         
         # HTTP session
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: Optional[Any] = None
         
         # Cache configuration
         self.cache_ttl = {
@@ -225,8 +226,8 @@ class EnhancedPMSService:
         
         try:
             # Create HTTP session
-            timeout = aiohttp.ClientTimeout(total=30)
-            self.session = aiohttp.ClientSession(timeout=timeout)
+            timeout = Any(total=30)
+            self.session = Any(timeout=timeout)
             
             # Test connection
             await self._test_connection()

@@ -161,6 +161,101 @@ class Orchestrator:
             "escalation_id": f"ESC-{datetime.utcnow().timestamp()}"
         }
 
+    async def _handle_business_hours(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja la verificación de horarios comerciales y escalación urgente
+        
+        Funcionalidad:
+        - Detecta solicitudes urgentes (palabras clave: urgente, urgent, emergency)
+        - Verifica si estamos dentro del horario comercial
+        - Retorna mensaje de horario cerrado para requests no urgentes
+        - Escala requests urgentes fuera de horario
+        
+        Args:
+            nlp_result: Resultado del análisis NLP con intent y entidades
+            session_data: Estado persistente de la sesión del usuario
+            message: Mensaje unificado normalizado
+            
+        Returns:
+            dict: Respuesta estructurada con tipo y contenido
+            {
+                "response_type": "text",
+                "content": str,
+                "escalated": bool (opcional)
+            }
+        """
+        intent = nlp_result.get("intent", "unknown")
+        text_lower = (message.texto or "").lower()
+        is_urgent = "urgente" in text_lower or "urgent" in text_lower or "emergency" in text_lower
+        
+        # Check if we're within business hours
+        in_business_hours = is_business_hours()
+        
+        logger.info(
+            "orchestrator.business_hours_check",
+            in_business_hours=in_business_hours,
+            is_urgent=is_urgent,
+            intent=intent,
+            user_id=message.user_id
+        )
+        
+        # If outside business hours and not an urgent request
+        if not in_business_hours and not is_urgent:
+            # Get next opening time for the message
+            next_open = get_next_business_open_time()
+            business_hours_str = format_business_hours()
+            
+            # Check if it's weekend
+            current_time = datetime.now()
+            is_weekend = current_time.weekday() >= 5  # Saturday=5, Sunday=6
+            
+            # Choose appropriate template
+            template_key = "after_hours_weekend" if is_weekend else "after_hours_standard"
+            
+            response_text = self.template_service.get_response(
+                template_key,
+                business_hours=business_hours_str,
+                next_open_time=next_open.strftime("%H:%M")
+            )
+            
+            logger.info(
+                "orchestrator.after_hours_response",
+                template=template_key,
+                next_open_time=next_open.isoformat(),
+                user_id=message.user_id
+            )
+            
+            # Return after-hours response
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        # If urgent request outside business hours, escalate
+        if not in_business_hours and is_urgent:
+            logger.warning(
+                "orchestrator.urgent_after_hours_escalation",
+                user_id=message.user_id,
+                intent=intent,
+                text_preview=message.texto[:100] if message.texto else ""
+            )
+            
+            # Escalate to staff with comprehensive tracking and alerting
+            return await self._escalate_to_staff(
+                message=message,
+                reason="urgent_after_hours",
+                intent=intent,
+                session_data=session_data
+            )
+        
+        # If within business hours, return None to continue processing
+        return None
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
         intent_name = "unknown"
@@ -386,78 +481,21 @@ class Orchestrator:
                 "content": { ... contenido específico del tipo ... }
             }
         """
-        intent = nlp_result.get("intent", {}).get("name")
+        intent = nlp_result.get("intent")
+        if isinstance(intent, dict):
+            intent = intent.get("name")
         tenant_id = getattr(message, "tenant_id", None)
         
         # Verificar si el mensaje original era de audio
         respond_with_audio = message.tipo == "audio"
         
         # ============================================================
+        # ============================================================
         # FEATURE 2: BUSINESS HOURS CHECK
         # ============================================================
-        # Check if message contains "URGENTE" keyword for after-hours escalation
-        text_lower = (message.texto or "").lower()
-        is_urgent = "urgente" in text_lower or "urgent" in text_lower or "emergency" in text_lower
-        
-        # Check if we're within business hours
-        in_business_hours = is_business_hours()
-        
-        logger.info(
-            "orchestrator.business_hours_check",
-            in_business_hours=in_business_hours,
-            is_urgent=is_urgent,
-            intent=intent,
-            user_id=message.user_id
-        )
-        
-        # If outside business hours and not an urgent request
-        if not in_business_hours and not is_urgent:
-            # Get next opening time for the message
-            next_open = get_next_business_open_time()
-            business_hours_str = format_business_hours()
-            
-            # Check if it's weekend
-            current_time = datetime.now()
-            is_weekend = current_time.weekday() >= 5  # Saturday=5, Sunday=6
-            
-            # Choose appropriate template
-            template_key = "after_hours_weekend" if is_weekend else "after_hours_standard"
-            
-            response_text = self.template_service.get_response(
-                template_key,
-                business_hours=business_hours_str,
-                next_open_time=next_open.strftime("%H:%M")
-            )
-            
-            logger.info(
-                "orchestrator.after_hours_response",
-                template=template_key,
-                next_open_time=next_open.isoformat(),
-                user_id=message.user_id
-            )
-            
-            # Return after-hours response
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
-        
-        # If urgent request outside business hours, escalate
-        if not in_business_hours and is_urgent:
-            logger.warning(
-                "orchestrator.urgent_after_hours_escalation",
-                user_id=message.user_id,
-                intent=intent,
-                text_preview=message.texto[:100] if message.texto else ""
-            )
-            
-            # Escalate to staff with comprehensive tracking and alerting
-            return await self._escalate_to_staff(
-                message=message,
-                reason="urgent_after_hours",
-                intent=intent,
-                session_data=session
-            )
+        business_hours_result = await self._handle_business_hours(nlp_result, session, message)
+        if business_hours_result is not None:
+            return business_hours_result
         # ============================================================
         # END BUSINESS HOURS CHECK
         # ============================================================

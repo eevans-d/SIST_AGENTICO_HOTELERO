@@ -22,7 +22,7 @@ import structlog
 from app.core.settings import settings
 from app.services.session_manager import SessionManager
 from app.services.template_service import TemplateService
-from app.services.whatsapp_client import WhatsAppClient
+from app.services.whatsapp_client import WhatsAppMetaClient as WhatsAppClient
 
 logger = structlog.get_logger(__name__)
 

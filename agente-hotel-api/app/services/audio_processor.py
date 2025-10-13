@@ -26,11 +26,12 @@ from .audio_compression_optimizer import (
     CompressionLevel, 
     NetworkConditions
 )
-from .audio_connection_pool import (
-    AudioConnectionManager, 
-    ServiceType, 
-    ConnectionConfig
-)
+# TEMPORAL FIX: Comentado hasta agregar aiohttp a requirements
+# from .audio_connection_pool import (
+#     AudioConnectionManager, 
+#     ServiceType, 
+#     ConnectionConfig
+# )
 
 
 class OptimizedWhisperSTT:
@@ -386,9 +387,11 @@ class OptimizedAudioProcessor:
         
         self.compression_optimizer = AudioCompressionOptimizer() if enable_compression else None
         
-        self.connection_manager = AudioConnectionManager(
-            redis_client=redis_client
-        ) if enable_connection_pooling else None
+        # TEMPORAL FIX: Deshabilitado hasta agregar aiohttp a requirements
+        # self.connection_manager = AudioConnectionManager(
+        #     redis_client=redis_client
+        # ) if enable_connection_pooling else None
+        self.connection_manager = None  # Temporalmente deshabilitado
         
         # Servicios STT/TTS optimizados
         self.stt = OptimizedWhisperSTT(cache_optimizer=self.cache_optimizer)

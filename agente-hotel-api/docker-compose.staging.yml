@@ -7,16 +7,18 @@ services:
   agente-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.production
       args:
         - BUILD_ENV=staging
     image: agente-hotel-api:staging
     container_name: agente-api-staging
     restart: unless-stopped
     environment:
-      - ENVIRONMENT=staging
+      - ENVIRONMENT=production
       - LOG_LEVEL=INFO
       - DEBUG=false
+      - SECRET_KEY=88612cc54da9e49f0a557c8eedf2f31ec6ff1538ab4b3dbdc3feec7a5792bfc9
+      - JWT_SECRET_KEY=88612cc54da9e49f0a557c8eedf2f31ec6ff1538ab4b3dbdc3feec7a5792bfc9
       # Base de datos
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -43,7 +45,7 @@ services:
       - postgres
       - redis
     ports:
-      - "8000:8000"
+      - "8001:8000"
     networks:
       - frontend_network
       - backend_network

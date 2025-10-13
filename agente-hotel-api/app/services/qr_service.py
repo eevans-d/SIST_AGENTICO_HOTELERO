@@ -10,9 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Any
 import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
-from qrcode.image.styles.colorfills import SolidFillColorMask
+# Simplified imports - some advanced styling may not be available
+try:
+    from qrcode.image.styledpil import StyledPilImage
+    from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+    from qrcode.image.styles.colorfills import SolidFillColorMask
+    ADVANCED_QR_AVAILABLE = True
+except ImportError:
+    ADVANCED_QR_AVAILABLE = False
+    
 from PIL import Image, ImageDraw, ImageFont
 import structlog
 
@@ -74,20 +80,24 @@ class QRService:
             if room_number:
                 qr_data["room_number"] = room_number
                 
-            # Generate QR code
-            qr_code = qrcode.QRCode(**self.qr_config)
+            # Generate QR code - COMMENTED OUT
+            # qr_code = qrcode.QRCode(**self.qr_config)
             qr_code.add_data(json.dumps(qr_data))
             qr_code.make(fit=True)
             
-            # Create styled image
-            img = qr_code.make_image(
-                image_factory=StyledPilImage,
-                module_drawer=RoundedModuleDrawer(),
-                color_mask=SolidFillColorMask(
-                    back_color=(255, 255, 255),  # White background
-                    front_color=(41, 128, 185)   # Hotel blue
+            # Create styled image - with fallback for basic QR
+            if ADVANCED_QR_AVAILABLE:
+                img = qr_code.make_image(
+                    image_factory=StyledPilImage,
+                    module_drawer=RoundedModuleDrawer(),
+                    color_mask=SolidFillColorMask(
+                        back_color=(255, 255, 255),  # White background
+                        front_color=(41, 128, 185)   # Hotel blue
+                    )
                 )
-            )
+            else:
+                # Basic QR code if advanced styling not available
+                img = qr_code.make_image(fill_color="black", back_color="white")
             
             # Add hotel branding
             branded_img = self._add_branding(img, qr_data)
@@ -160,14 +170,17 @@ class QRService:
             qr_code.add_data(json.dumps(qr_data))
             qr_code.make(fit=True)
             
-            img = qr_code.make_image(
-                image_factory=StyledPilImage,
-                module_drawer=RoundedModuleDrawer(),
-                color_mask=SolidFillColorMask(
-                    back_color=(255, 255, 255),
-                    front_color=(46, 204, 113)  # Green for check-in
+            if ADVANCED_QR_AVAILABLE:
+                img = qr_code.make_image(
+                    image_factory=StyledPilImage,
+                    module_drawer=RoundedModuleDrawer(),
+                    color_mask=SolidFillColorMask(
+                        back_color=(255, 255, 255),
+                        front_color=(46, 204, 113)  # Green for check-in
+                    )
                 )
-            )
+            else:
+                img = qr_code.make_image(fill_color="green", back_color="white")
             
             branded_img = self._add_branding(img, qr_data)
             
@@ -243,14 +256,17 @@ class QRService:
             
             color = service_colors.get(service_type, (52, 73, 94))  # Default gray
             
-            img = qr_code.make_image(
-                image_factory=StyledPilImage,
-                module_drawer=RoundedModuleDrawer(),
-                color_mask=SolidFillColorMask(
-                    back_color=(255, 255, 255),
-                    front_color=color
+            if ADVANCED_QR_AVAILABLE:
+                img = qr_code.make_image(
+                    image_factory=StyledPilImage,
+                    module_drawer=RoundedModuleDrawer(),
+                    color_mask=SolidFillColorMask(
+                        back_color=(255, 255, 255),
+                        front_color=color
+                    )
                 )
-            )
+            else:
+                img = qr_code.make_image(fill_color="black", back_color="white")
             
             branded_img = self._add_branding(img, qr_data)
             

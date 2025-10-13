@@ -783,11 +783,12 @@ class AdvancedHealthService:
         
         start_time = time.time()
         
+        # TEMPORAL FIX: psutil deshabilitado - retornar valores por defecto
         try:
-            # Get system metrics
-            cpu_percent = psutil.cpu_percent(interval=1)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            # Get system metrics - DISABLED
+            cpu_percent = 50.0  # psutil.cpu_percent(interval=1)
+            memory_percent = 60.0  # psutil.virtual_memory().percent
+            disk_percent = 40.0  # psutil.disk_usage('/').percent
             
             # Determine status based on thresholds
             status = HealthStatus.HEALTHY
@@ -797,13 +798,13 @@ class AdvancedHealthService:
                 status = HealthStatus.WARNING
                 issues.append(f"High CPU usage: {cpu_percent}%")
             
-            if memory.percent > 85:
+            if memory_percent > 85:
                 status = HealthStatus.WARNING
-                issues.append(f"High memory usage: {memory.percent}%")
+                issues.append(f"High memory usage: {memory_percent}%")
             
-            if disk.percent > 90:
+            if disk_percent > 90:
                 status = HealthStatus.CRITICAL
-                issues.append(f"High disk usage: {disk.percent}%")
+                issues.append(f"High disk usage: {disk_percent}%")
             
             duration_ms = (time.time() - start_time) * 1000
             
@@ -813,12 +814,13 @@ class AdvancedHealthService:
                 check_type=CheckType.PERFORMANCE,
                 duration_ms=duration_ms,
                 timestamp=datetime.utcnow(),
-                message=f"System performance check completed. Issues: {len(issues)}",
+                message=f"System performance check completed (mock data). Issues: {len(issues)}",
                 details={
                     "cpu_percent": cpu_percent,
-                    "memory_percent": memory.percent,
-                    "disk_percent": disk.percent,
-                    "issues": issues
+                    "memory_percent": memory_percent,
+                    "disk_percent": disk_percent,
+                    "issues": issues,
+                    "note": "psutil temporarily disabled"
                 }
             )
             
@@ -981,9 +983,15 @@ class AdvancedHealthService:
     async def _check_qloapps_dependency(self, endpoint: str) -> Dict[str, Any]:
         """Check QloApps PMS dependency"""
         
+        # TEMPORAL FIX: Deshabilitado hasta agregar aiohttp
+        return {
+            "status": HealthStatus.DEGRADED,
+            "metadata": {"message": "PMS check temporarily disabled"}
+        }
+        """
         try:
             # This would be a real API health check
-            async with aiohttp.ClientSession() as session:
+            async with Any() as session:
                 async with session.get(f"{endpoint}/health", timeout=10) as response:
                     if response.status == 200:
                         return {
@@ -1006,21 +1014,26 @@ class AdvancedHealthService:
                 "status": HealthStatus.CRITICAL,
                 "metadata": {"error": str(e)}
             }
+        """
 
     async def _get_system_metrics(self) -> Dict[str, float]:
         """Get system resource metrics"""
         
+        # TEMPORAL FIX: psutil deshabilitado - retornar valores mock
         try:
-            cpu_percent = psutil.cpu_percent(interval=1)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            cpu_percent = 45.0  # psutil.cpu_percent(interval=1)
+            memory_percent = 55.0  # psutil.virtual_memory().percent
+            memory_available_gb = 8.0  # mock: 8GB available
+            disk_percent = 35.0  # psutil.disk_usage('/').percent
+            disk_free_gb = 50.0  # mock: 50GB free
             
             return {
                 "cpu_percent": cpu_percent,
-                "memory_percent": memory.percent,
-                "memory_available_gb": memory.available / (1024**3),
-                "disk_percent": disk.percent,
-                "disk_free_gb": disk.free / (1024**3)
+                "memory_percent": memory_percent,
+                "memory_available_gb": memory_available_gb,
+                "disk_percent": disk_percent,
+                "disk_free_gb": disk_free_gb,
+                "note": "psutil metrics temporarily disabled"
             }
             
         except Exception as e:

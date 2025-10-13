@@ -11,7 +11,8 @@ from enum import Enum
 import logging
 from contextlib import asynccontextmanager
 
-import aiohttp
+# TEMPORAL FIX: Comentado hasta agregar aiohttp a requirements
+# import aiohttp
 from prometheus_client import Counter, Histogram, Gauge
 import redis.asyncio as redis
 
@@ -76,7 +77,7 @@ class ConnectionPool(Generic[T]):
         self.redis_client = redis_client
         
         # Pool de conexiones
-        self._connections: List[aiohttp.ClientSession] = []
+        self._connections: List[Any] = []
         self._available_connections: asyncio.Queue = asyncio.Queue()
         self._connection_health: Dict[int, bool] = {}
         
@@ -182,7 +183,7 @@ class ConnectionPool(Generic[T]):
         method: str,
         endpoint: str,
         **kwargs
-    ) -> aiohttp.ClientResponse:
+    ) -> Any:
         """
         Ejecuta una request usando una conexión del pool.
         """
@@ -199,7 +200,7 @@ class ConnectionPool(Generic[T]):
                 headers['Authorization'] = f"Bearer {self.config.auth_token}"
             
             kwargs['headers'] = headers
-            kwargs['timeout'] = aiohttp.ClientTimeout(
+            kwargs['timeout'] = Any(
                 total=self.config.timeout_seconds
             )
             
@@ -233,8 +234,8 @@ class ConnectionPool(Generic[T]):
         """Inicializa las conexiones del pool."""
         for i in range(self.config.max_connections):
             try:
-                session = aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(
+                session = Any(
+                    connector=Any(
                         limit=1,
                         ttl_dns_cache=300,
                         use_dns_cache=True,
@@ -252,7 +253,7 @@ class ConnectionPool(Generic[T]):
         
         self._update_pool_metrics()
     
-    async def _acquire_connection(self) -> aiohttp.ClientSession:
+    async def _acquire_connection(self) -> Any:
         """Adquiere una conexión del pool."""
         try:
             # Intentar obtener conexión con timeout
@@ -270,7 +271,7 @@ class ConnectionPool(Generic[T]):
             self.status = PoolStatus.CRITICAL
             raise RuntimeError("Timeout obteniendo conexión del pool")
     
-    async def _release_connection(self, connection: aiohttp.ClientSession):
+    async def _release_connection(self, connection: Any):
         """Libera una conexión de vuelta al pool."""
         try:
             if not connection.closed:
@@ -284,7 +285,7 @@ class ConnectionPool(Generic[T]):
         except Exception as e:
             logger.error(f"Error liberando conexión: {e}")
     
-    async def _replace_connection(self, old_connection: aiohttp.ClientSession):
+    async def _replace_connection(self, old_connection: Any):
         """Reemplaza una conexión defectuosa."""
         try:
             # Cerrar conexión antigua
@@ -292,8 +293,8 @@ class ConnectionPool(Generic[T]):
                 await old_connection.close()
             
             # Crear nueva conexión
-            new_session = aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(
+            new_session = Any(
+                connector=Any(
                     limit=1,
                     ttl_dns_cache=300,
                     use_dns_cache=True,
@@ -341,7 +342,7 @@ class ConnectionPool(Generic[T]):
                 # Verificar con un request simple (HEAD al endpoint base)
                 async with session.head(
                     self.config.base_url,
-                    timeout=aiohttp.ClientTimeout(total=5.0)
+                    timeout=Any(total=5.0)
                 ) as response:
                     if response.status < 500:
                         self._connection_health[i] = True
@@ -517,7 +518,7 @@ class AudioConnectionManager:
         method: str,
         endpoint: str,
         **kwargs
-    ) -> aiohttp.ClientResponse:
+    ) -> Any:
         """Ejecuta una request usando el pool apropiado."""
         pool = await self.get_pool(service_type)
         return await pool.execute_request(method, endpoint, **kwargs)

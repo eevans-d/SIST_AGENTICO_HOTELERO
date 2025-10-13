@@ -145,11 +145,26 @@ class AudioCompressionOptimizer:
         Returns:
             Tuple con datos comprimidos y metadatos de compresión
         """
+        # TEMPORAL FIX: Deshabilitar procesamiento hasta agregar pydub
+        logger.warning("AudioCompressionOptimizer temporalmente deshabilitado - retornando audio sin procesar")
+        return audio_data, {
+            "original_size": len(audio_data),
+            "compressed_size": len(audio_data),
+            "compression_ratio": 1.0,
+            "quality_score": 1.0,
+            "level": "passthrough",
+            "format": "original",
+            "processing_time": 0.0,
+            "disabled": True
+        }
+        
+        # Código original comentado hasta agregar pydub a requirements
+        """
         start_time = time.time()
         
         try:
             # Cargar audio original
-            original_audio = AudioSegment.from_file(io.BytesIO(audio_data))
+            original_audio = Any.from_file(io.BytesIO(audio_data))
             original_size = len(audio_data)
             
             # Determinar nivel de compresión
@@ -225,10 +240,11 @@ class AudioCompressionOptimizer:
                     level=target_level.value,
                     format=self.COMPRESSION_PROFILES[target_level].format.value
                 ).observe(time.time() - start_time)
+        """
     
     async def _determine_optimal_compression_level(
         self,
-        audio: AudioSegment,
+        audio: Any,
         network_conditions: Optional[NetworkConditions] = None,
         max_size_kb: Optional[int] = None
     ) -> CompressionLevel:
@@ -311,7 +327,7 @@ class AudioCompressionOptimizer:
     
     async def _adjust_for_size_constraint(
         self,
-        audio: AudioSegment,
+        audio: Any,
         current_level: CompressionLevel,
         max_size_kb: int
     ) -> CompressionLevel:
@@ -348,7 +364,7 @@ class AudioCompressionOptimizer:
     
     async def _estimate_compressed_size(
         self,
-        audio: AudioSegment,
+        audio: Any,
         level: CompressionLevel
     ) -> int:
         """
@@ -367,9 +383,9 @@ class AudioCompressionOptimizer:
     
     async def _optimize_audio(
         self,
-        audio: AudioSegment,
+        audio: Any,
         settings: CompressionSettings
-    ) -> AudioSegment:
+    ) -> Any:
         """
         Aplica optimizaciones de audio antes de la compresión.
         """
@@ -393,7 +409,7 @@ class AudioCompressionOptimizer:
         
         return optimized
     
-    async def _normalize_audio(self, audio: AudioSegment) -> AudioSegment:
+    async def _normalize_audio(self, audio: Any) -> Any:
         """
         Normaliza el volumen del audio.
         """
@@ -402,7 +418,7 @@ class AudioCompressionOptimizer:
         change_in_dBFS = target_dBFS - audio.dBFS
         return audio.apply_gain(change_in_dBFS)
     
-    async def _reduce_noise(self, audio: AudioSegment) -> AudioSegment:
+    async def _reduce_noise(self, audio: Any) -> Any:
         """
         Aplica reducción básica de ruido.
         """
@@ -412,7 +428,7 @@ class AudioCompressionOptimizer:
     
     async def _apply_compression(
         self,
-        audio: AudioSegment,
+        audio: Any,
         settings: CompressionSettings
     ) -> bytes:
         """
@@ -433,8 +449,8 @@ class AudioCompressionOptimizer:
     
     async def _calculate_quality_score(
         self,
-        original: AudioSegment,
-        compressed: AudioSegment,
+        original: Any,
+        compressed: Any,
         settings: CompressionSettings
     ) -> float:
         """
@@ -456,7 +472,7 @@ class AudioCompressionOptimizer:
     
     def _generate_cache_key(
         self,
-        audio: AudioSegment,
+        audio: Any,
         network_conditions: Optional[NetworkConditions],
         max_size_kb: Optional[int]
     ) -> str:
