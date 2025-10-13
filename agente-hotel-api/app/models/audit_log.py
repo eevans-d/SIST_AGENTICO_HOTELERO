@@ -1,5 +1,9 @@
 """
-Modelo de Audit Log para persistencia en PostgreSQL
+Modelo de Audit Log para persistencia en PostgreSQL.
+
+Este módulo define el modelo SQLAlchemy para registros de auditoría,
+permitiendo tracking completo de eventos de seguridad, accesos, y
+operaciones críticas en el sistema hotelero.
 """
 
 from datetime import datetime
@@ -11,8 +15,53 @@ Base = declarative_base()
 
 class AuditLog(Base):
     """
-    Modelo para registro de auditoría de eventos de seguridad.
-    Almacena todos los eventos de seguridad para análisis histórico y forense.
+    Modelo para registro exhaustivo de auditoría de eventos del sistema.
+    
+    Almacena todos los eventos de seguridad, accesos, operaciones críticas
+    y cambios de estado para análisis histórico, forense y compliance.
+    
+    Optimizado con índices compuestos para búsquedas por usuario/fecha
+    y tenant/fecha (multi-tenancy).
+    
+    Attributes:
+        id (int): Primary key autoincremental
+        timestamp (DateTime): Momento UTC del evento (indexado)
+        event_type (str): Tipo de evento - "login_success", "reservation_created",
+            "access_denied", "pms_error", etc. (max 100 chars, indexado)
+        user_id (str): Identificador del usuario (teléfono, email, ID interno)
+            (max 255 chars, indexado, nullable)
+        ip_address (str): Dirección IP de origen (IPv4 o IPv6)
+            (max 45 chars para IPv6, indexado, nullable)
+        resource (str): Recurso accedido o modificado
+            (ej: "/api/reservations/123", "room:205") (max 500 chars, nullable)
+        details (JSON): Metadata adicional del evento en formato JSON:
+            - request_id: ID de correlación de request
+            - user_agent: User agent del cliente
+            - action_result: Resultado de la acción
+            - error_message: Mensaje de error si aplica
+            - metadata: Cualquier dato contextual adicional
+        tenant_id (str): ID del tenant (multi-tenancy support)
+            (max 100 chars, indexado, nullable)
+        severity (str): Nivel de severidad - "info", "warning", "error", "critical"
+            (max 20 chars, indexado, nullable)
+        created_at (DateTime): Momento de creación del registro en DB
+    
+    Indexes:
+        - idx_audit_user_timestamp: Compuesto (user_id, timestamp) para búsquedas por usuario
+        - idx_audit_tenant_timestamp: Compuesto (tenant_id, timestamp) para multi-tenancy
+        - Individual indexes en: timestamp, event_type, user_id, ip_address, tenant_id, severity
+    
+    Example:
+        >>> log = AuditLog(
+        ...     event_type="reservation_created",
+        ...     user_id="+34612345678",
+        ...     resource="/api/reservations/456",
+        ...     details={"booking_id": "HTL-456", "room_type": "double"},
+        ...     tenant_id="hotel-madrid",
+        ...     severity="info"
+        ... )
+        >>> session.add(log)
+        >>> session.commit()
     """
     __tablename__ = "audit_logs"
     
@@ -55,7 +104,30 @@ class AuditLog(Base):
         return f"<AuditLog(id={self.id}, event_type='{self.event_type}', user_id='{self.user_id}', timestamp='{self.timestamp}')>"
     
     def to_dict(self):
-        """Convertir a diccionario para serialización"""
+        """
+        Convierte el registro de auditoría a diccionario para serialización.
+        
+        Útil para respuestas API, logging estructurado y exportación de datos.
+        Todos los campos datetime se convierten a formato ISO 8601.
+        
+        Returns:
+            dict: Representación completa del audit log con:
+                - id: ID del registro
+                - timestamp: Momento del evento (ISO 8601)
+                - event_type: Tipo de evento auditado
+                - user_id: ID del usuario que generó el evento
+                - ip_address: IP de origen
+                - resource: Recurso accedido
+                - details: Metadata del evento (JSON)
+                - tenant_id: ID del tenant (multi-tenancy)
+                - severity: Nivel de severidad (info, warning, error)
+                - created_at: Momento de creación del registro (ISO 8601)
+        
+        Example:
+            >>> log = AuditLog(event_type="reservation_created", user_id="+34612345678")
+            >>> log.to_dict()
+            {'id': 1, 'event_type': 'reservation_created', 'user_id': '+34612345678', ...}
+        """
         return {
             "id": self.id,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
