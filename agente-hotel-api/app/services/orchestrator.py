@@ -536,6 +536,134 @@ class Orchestrator:
             "content": response_text
         }
 
+    async def _handle_review_request(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja solicitudes de review y programación de recordatorios post-checkout.
+        
+        Procesa dos flujos:
+        1. Respuestas a solicitudes de review (intent: review_response)
+        2. Detección de checkout para programar review automática
+        
+        Args:
+            nlp_result: Resultado del análisis NLP con intent y entidades
+            session_data: Datos de sesión del huésped
+            message: Mensaje unificado del huésped
+            
+        Returns:
+            Dict con response_type ('text' o 'audio') y content con la respuesta
+            
+        Raises:
+            Exception: Si falla el procesamiento de review o programación
+        """
+        tenant_id = getattr(message, "tenant_id", None)
+        intent = nlp_result.get("intent")
+        if isinstance(intent, dict):
+            intent = intent.get("name")
+        
+        # PART 1: Procesar respuesta a solicitud de review
+        if intent == "review_response":
+            logger.info("review_response_detected", user_id=message.user_id, text=message.texto)
+            
+            try:
+                review_service = get_review_service()
+                result = await review_service.process_review_response(
+                    guest_id=message.user_id,
+                    response_text=message.texto
+                )
+                
+                if result["success"]:
+                    if result["intent"] == "positive":
+                        response_text = "¡Perfecto! Te envío los enlaces para dejar tu reseña."
+                    elif result["intent"] == "negative":
+                        response_text = "Lamentamos que tu experiencia no haya sido perfecta. Valoramos tu feedback."
+                    elif result["intent"] == "unsubscribe":
+                        response_text = "Entendido, no enviaremos más recordatorios de reseñas."
+                    else:
+                        response_text = "Gracias por tu respuesta. ¿Hay algo más en lo que pueda ayudarte?"
+                else:
+                    response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
+                
+                logger.info("review_response_processed", 
+                           user_id=message.user_id,
+                           intent=result.get("intent"),
+                           sentiment=result.get("sentiment"))
+                
+            except Exception as e:
+                logger.error("review_response_error", user_id=message.user_id, error=str(e))
+                response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
+            
+            # Responder con audio si el mensaje original era de audio
+            if message.tipo == "audio":
+                try:
+                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+                    if audio_data:
+                        return {
+                            "response_type": "audio",
+                            "content": {
+                                "text": response_text,
+                                "audio_data": audio_data
+                            }
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to generate audio response for review: {e}")
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        # PART 2: Detectar checkout y programar solicitud de review
+        if intent in ["check_out_info", "checkout_completed"] or "checkout" in (message.texto or "").lower():
+            logger.info("checkout_detected_scheduling_review", user_id=message.user_id)
+            
+            try:
+                # Get guest info from session
+                guest_name = session_data.get("guest_name", "Estimado huésped")
+                booking_id = session_data.get("booking_id", "HTL-REVIEW-001")
+                
+                # Schedule review request for 24 hours later
+                from datetime import datetime, timedelta
+                checkout_date = datetime.utcnow()  # In real implementation, get from PMS
+                
+                review_service = get_review_service()
+                from app.services.review_service import GuestSegment
+                
+                # Determine guest segment based on session data
+                segment = GuestSegment.COUPLE  # Default, could be enhanced with ML
+                if session_data.get("business_trip"):
+                    segment = GuestSegment.BUSINESS
+                elif session_data.get("family_trip"):
+                    segment = GuestSegment.FAMILY
+                elif session_data.get("group_size", 1) > 2:
+                    segment = GuestSegment.GROUP
+                
+                schedule_result = await review_service.schedule_review_request(
+                    guest_id=message.user_id,
+                    guest_name=guest_name,
+                    booking_id=booking_id,
+                    checkout_date=checkout_date,
+                    segment=segment,
+                    language="es"
+                )
+                
+                if schedule_result["success"]:
+                    logger.info("review_request_scheduled", 
+                               user_id=message.user_id,
+                               request_id=schedule_result["request_id"],
+                               scheduled_time=schedule_result["scheduled_time"])
+                
+            except Exception as e:
+                logger.error("review_scheduling_error", user_id=message.user_id, error=str(e))
+                # Don't fail the main response if review scheduling fails
+        
+        # If we reach here, return None to continue processing in handle_intent
+        return None
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
         intent_name = "unknown"
@@ -1291,102 +1419,17 @@ class Orchestrator:
         # FEATURE 6: REVIEW REQUESTS
         # ============================================================
         elif intent == "review_response":
-            logger.info("review_response_detected", user_id=message.user_id, text=message.texto)
-            
-            try:
-                review_service = get_review_service()
-                result = await review_service.process_review_response(
-                    guest_id=message.user_id,
-                    response_text=message.texto
-                )
-                
-                if result["success"]:
-                    if result["intent"] == "positive":
-                        response_text = "¡Perfecto! Te envío los enlaces para dejar tu reseña."
-                    elif result["intent"] == "negative":
-                        response_text = "Lamentamos que tu experiencia no haya sido perfecta. Valoramos tu feedback."
-                    elif result["intent"] == "unsubscribe":
-                        response_text = "Entendido, no enviaremos más recordatorios de reseñas."
-                    else:
-                        response_text = "Gracias por tu respuesta. ¿Hay algo más en lo que pueda ayudarte?"
-                else:
-                    response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
-                
-                logger.info("review_response_processed", 
-                           user_id=message.user_id,
-                           intent=result.get("intent"),
-                           sentiment=result.get("sentiment"))
-                
-            except Exception as e:
-                logger.error("review_response_error", user_id=message.user_id, error=str(e))
-                response_text = "Gracias por tu mensaje. ¿En qué más puedo ayudarte?"
-            
-            # Responder con audio si el mensaje original era de audio
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-                    if audio_data:
-                        return {
-                            "response_type": "audio",
-                            "content": {
-                                "text": response_text,
-                                "audio_data": audio_data
-                            }
-                        }
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for review: {e}")
-            
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
+            return await self._handle_review_request(nlp_result, session, message)
             
         # ============================================================
         # CHECKOUT TRIGGER FOR REVIEW SCHEDULING
         # ============================================================
         # Check if this is a checkout confirmation and schedule review request
         if intent in ["check_out_info", "checkout_completed"] or "checkout" in (message.texto or "").lower():
-            logger.info("checkout_detected_scheduling_review", user_id=message.user_id)
-            
-            try:
-                # Get guest info from session
-                guest_name = session.get("guest_name", "Estimado huésped")
-                booking_id = session.get("booking_id", "HTL-REVIEW-001")
-                
-                # Schedule review request for 24 hours later
-                from datetime import datetime, timedelta
-                checkout_date = datetime.utcnow()  # In real implementation, get from PMS
-                
-                review_service = get_review_service()
-                from app.services.review_service import GuestSegment
-                
-                # Determine guest segment based on session data
-                segment = GuestSegment.COUPLE  # Default, could be enhanced with ML
-                if session.get("business_trip"):
-                    segment = GuestSegment.BUSINESS
-                elif session.get("family_trip"):
-                    segment = GuestSegment.FAMILY
-                elif session.get("group_size", 1) > 2:
-                    segment = GuestSegment.GROUP
-                
-                schedule_result = await review_service.schedule_review_request(
-                    guest_id=message.user_id,
-                    guest_name=guest_name,
-                    booking_id=booking_id,
-                    checkout_date=checkout_date,
-                    segment=segment,
-                    language="es"
-                )
-                
-                if schedule_result["success"]:
-                    logger.info("review_request_scheduled", 
-                               user_id=message.user_id,
-                               request_id=schedule_result["request_id"],
-                               scheduled_time=schedule_result["scheduled_time"])
-                
-            except Exception as e:
-                logger.error("review_scheduling_error", user_id=message.user_id, error=str(e))
-                # Don't fail the main response if review scheduling fails
+            result = await self._handle_review_request(nlp_result, session, message)
+            if result:  # If handler returned a response, use it
+                return result
+            # Otherwise continue with normal flow
         
         # Si llegamos aquí, devolver respuesta por defecto
         default_text = "No entendí tu consulta. ¿Podrías reformularla?"
