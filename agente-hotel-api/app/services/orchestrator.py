@@ -804,6 +804,251 @@ class Orchestrator:
                 "image_caption": room_image_caption
             }
 
+    async def _handle_make_reservation(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja solicitudes de creación de reserva.
+        
+        Proporciona instrucciones de reserva con información de depósito y banco.
+        Actualiza el estado de sesión para marcar reserva como pendiente.
+        
+        Args:
+            nlp_result: Resultado del análisis NLP
+            session_data: Datos de sesión del huésped
+            message: Mensaje unificado del huésped
+            
+        Returns:
+            Dict con response_type ('text' o 'audio') y content con instrucciones
+        """
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        # Datos de reserva (simulados)
+        reservation_data = {
+            "deposit": 6000, 
+            "bank_info": "CBU 12345..."
+        }
+        
+        # Actualizar estado de sesión para seguimiento de reserva
+        session_data["reservation_pending"] = True
+        session_data["deposit_amount"] = reservation_data["deposit"]
+        await self.session_manager.update_session(message.user_id, session_data, tenant_id)
+        
+        # Preparar texto de respuesta
+        response_text = self.template_service.get_response("reservation_instructions", **reservation_data)
+        
+        # Si el mensaje original era de audio, responder con audio también
+        if message.tipo == "audio":
+            try:
+                # Generar respuesta de audio
+                audio_data = await self.audio_processor.generate_audio_response(
+                    response_text, content_type="reservation_instructions"
+                )
+                
+                if audio_data:
+                    logger.info("Generated audio response for reservation instructions",
+                               audio_bytes=len(audio_data))
+                    
+                    return {
+                        "response_type": "audio",
+                        "content": {
+                            "text": response_text,
+                            "audio_data": audio_data
+                        }
+                    }
+            except Exception as e:
+                # Si falla la generación de audio, continuamos con texto normal
+                logger.error(f"Failed to generate audio response for reservation: {e}")
+        
+        # Respuesta de texto tradicional
+        return {
+            "response_type": "text",
+            "content": response_text
+        }
+
+    async def _handle_hotel_location(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja solicitudes de ubicación del hotel.
+        
+        Proporciona información de ubicación con coordenadas GPS, nombre y dirección.
+        Soporta respuesta con audio si el mensaje original era de audio.
+        
+        Args:
+            nlp_result: Resultado del análisis NLP
+            session_data: Datos de sesión del huésped
+            message: Mensaje unificado del huésped
+            
+        Returns:
+            Dict con response_type ('location', 'audio_with_location') y content
+        """
+        from app.core.settings import settings
+        
+        # Usar template de ubicación con datos de configuración
+        response_text = self.template_service.get_response("location_info")
+        
+        # Obtener coordenadas desde settings
+        latitude = settings.hotel_latitude
+        longitude = settings.hotel_longitude
+        hotel_name = settings.hotel_name
+        hotel_address = settings.hotel_address
+        
+        intent = nlp_result.get("intent")
+        if isinstance(intent, dict):
+            intent = intent.get("name")
+        
+        logger.info(
+            "Sending hotel location",
+            latitude=latitude,
+            longitude=longitude,
+            hotel_name=hotel_name,
+            intent=intent
+        )
+        
+        # Si es un mensaje de audio, responder con audio + ubicación
+        if message.tipo == "audio":
+            try:
+                # Generar respuesta de audio
+                audio_data = await self.audio_processor.generate_audio_response(
+                    response_text, content_type="hotel_location"
+                )
+                
+                if audio_data is None:
+                    # Si no se pudo generar audio, responder solo con ubicación
+                    logger.warning("Could not generate audio for location response")
+                    return {
+                        "response_type": "location",
+                        "content": {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "name": hotel_name,
+                            "address": hotel_address
+                        }
+                    }
+                
+                # Responder con audio + ubicación
+                return {
+                    "response_type": "audio_with_location",
+                    "content": {
+                        "text": response_text,
+                        "audio_data": audio_data,
+                        "location": {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "name": hotel_name,
+                            "address": hotel_address
+                        }
+                    }
+                }
+            except Exception as e:
+                # Si hay error en la generación de audio, responder solo con ubicación
+                logger.error(f"Error generating audio for location response: {e}")
+                return {
+                    "response_type": "location",
+                    "content": {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "name": hotel_name,
+                        "address": hotel_address
+                    }
+                }
+        else:
+            # Responder solo con ubicación (mapa)
+            return {
+                "response_type": "location",
+                "content": {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "name": hotel_name,
+                    "address": hotel_address
+                }
+            }
+
+    async def _handle_payment_confirmation(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja confirmación de pago con imagen de comprobante.
+        
+        Procesa imagen de comprobante de pago y genera confirmación de reserva.
+        Feature 5 (QR generation) temporalmente deshabilitado.
+        
+        Args:
+            nlp_result: Resultado del análisis NLP
+            session_data: Datos de sesión del huésped
+            message: Mensaje unificado del huésped
+            
+        Returns:
+            Dict con response_type y content según si hay QR o no
+        """
+        from app.core.settings import settings
+        import time
+        
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        # Si el usuario envía una imagen de comprobante de pago y tiene una reserva pendiente
+        if session_data.get("reservation_pending"):
+            # Simular la confirmación del pago
+            # En un caso real, procesaríamos la imagen y confirmaríamos con el PMS
+            
+            # FEATURE 5: Generate QR code for confirmed booking - TEMPORALMENTE DESHABILITADO
+            qr_data = None
+            # TEMPORAL FIX: QR generation deshabilitado hasta agregar qrcode
+            logger.info("QR generation temporarily disabled")
+            
+            check_in_date = session_data.get("check_in_date", "2025-10-15")
+            check_out_date = session_data.get("check_out_date", "2025-10-17")
+            room_number = session_data.get("room_number", "205")
+            
+            # Si tenemos QR code, enviar confirmación completa con QR
+            if qr_data:
+                guest_name = session_data.get("guest_name", "Estimado Huésped")
+                confirmation_text = self.template_service.get_response(
+                    "booking_confirmed_with_qr",
+                    booking_id=qr_data["booking_id"],
+                    guest_name=guest_name,
+                    check_in=check_in_date,
+                    check_out=check_out_date,
+                    room_number=room_number
+                )
+                
+                return {
+                    "response_type": "image_with_text",
+                    "content": confirmation_text,
+                    "image_path": qr_data["file_path"],
+                    "image_caption": "🎫 Tu código QR de confirmación - Guárdalo para el check-in!"
+                }
+            else:
+                # Fallback: confirmation sin QR
+                return {
+                    "response_type": "text",
+                    "content": self.template_service.get_response(
+                        "booking_confirmed_no_qr",
+                        booking_id=f"HTL-{int(time.time())}",
+                        check_in=check_in_date,
+                        check_out=check_out_date
+                    )
+                }
+        else:
+            # No hay reserva pendiente, responder con reacción simple
+            return {
+                "response_type": "reaction",
+                "content": {
+                    "message_id": message.message_id,
+                    "emoji": self.template_service.get_reaction("payment_received")
+                }
+            }
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
         intent_name = "unknown"
@@ -1073,233 +1318,16 @@ class Orchestrator:
             return await self._handle_availability(nlp_result, session, message, respond_with_audio)
 
         elif intent == "make_reservation":
-            # Datos de reserva (simulados)
-            reservation_data = {
-                "deposit": 6000, 
-                "bank_info": "CBU 12345..."
-            }
-            
-            # Actualizar estado de sesión para seguimiento de reserva
-            session["reservation_pending"] = True
-            session["deposit_amount"] = reservation_data["deposit"]
-            await self.session_manager.update_session(message.user_id, session, tenant_id)
-            
-            # Preparar texto de respuesta
-            response_text = self.template_service.get_response("reservation_instructions", **reservation_data)
-            
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    # Generar respuesta de audio
-                    audio_data = await self.audio_processor.generate_audio_response(
-                        response_text, content_type="reservation_instructions"
-                    )
-                    
-                    if audio_data:
-                        logger.info("Generated audio response for reservation instructions",
-                                   audio_bytes=len(audio_data))
-                        
-                        return {
-                            "response_type": "audio",
-                            "content": {
-                                "text": response_text,
-                                "audio_data": audio_data
-                            }
-                        }
-                except Exception as e:
-                    # Si falla la generación de audio, continuamos con texto normal
-                    logger.error(f"Failed to generate audio response for reservation: {e}")
-            
-            # Respuesta de texto tradicional
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
+            return await self._handle_make_reservation(nlp_result, session, message)
             
         elif intent == "hotel_location" or intent == "ask_location":
-            # Intención de obtener la ubicación del hotel
-            # Usar template de ubicación con datos de configuración
-            response_text = self.template_service.get_response("location_info")
-            
-            # Obtener coordenadas desde settings
-            latitude = settings.hotel_latitude
-            longitude = settings.hotel_longitude
-            hotel_name = settings.hotel_name
-            hotel_address = settings.hotel_address
-            
-            logger.info(
-                "Sending hotel location",
-                latitude=latitude,
-                longitude=longitude,
-                hotel_name=hotel_name,
-                intent=intent
-            )
-            
-            # Si es un mensaje de audio, responder con audio + ubicación
-            if message.tipo == "audio":
-                try:
-                    # Generar respuesta de audio
-                    audio_data = await self.audio_processor.generate_audio_response(
-                        response_text, content_type="hotel_location"
-                    )
-                    
-                    if audio_data is None:
-                        # Si no se pudo generar audio, responder solo con ubicación
-                        logger.warning("Could not generate audio for location response")
-                        return {
-                            "response_type": "location",
-                            "content": {
-                                "latitude": latitude,
-                                "longitude": longitude,
-                                "name": hotel_name,
-                                "address": hotel_address
-                            }
-                        }
-                    
-                    # Responder con audio + ubicación
-                    return {
-                        "response_type": "audio_with_location",
-                        "content": {
-                            "text": response_text,
-                            "audio_data": audio_data,
-                            "location": {
-                                "latitude": latitude,
-                                "longitude": longitude,
-                                "name": hotel_name,
-                                "address": hotel_address
-                            }
-                        }
-                    }
-                except Exception as e:
-                    # Si hay error en la generación de audio, responder solo con ubicación
-                    logger.error(f"Error generating audio for location response: {e}")
-                    return {
-                        "response_type": "location",
-                        "content": {
-                            "latitude": latitude,
-                            "longitude": longitude,
-                            "name": hotel_name,
-                            "address": hotel_address
-                        }
-                    }
-            else:
-                # Responder solo con ubicación (mapa)
-                return {
-                    "response_type": "location",
-                    "content": {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "name": hotel_name,
-                        "address": hotel_address
-                    }
-                }
+            return await self._handle_hotel_location(nlp_result, session, message)
             
         elif intent == "show_room_options":
             return await self._handle_room_options(nlp_result, session, message)
             
         elif intent == "payment_confirmation" and message.tipo == "image":
-            # Si el usuario envía una imagen de comprobante de pago y tiene una reserva pendiente
-            if session.get("reservation_pending"):
-                # Simular la confirmación del pago
-                # En un caso real, procesaríamos la imagen y confirmaríamos con el PMS
-                
-                # FEATURE 5: Generate QR code for confirmed booking - TEMPORALMENTE DESHABILITADO
-                qr_data = None
-                # TEMPORAL FIX: QR generation deshabilitado hasta agregar qrcode
-                logger.info("QR generation temporarily disabled")
-                """
-                try:
-                    qr_service = get_qr_service()
-                    
-                    # Generate booking data (en producción esto vendría del PMS)
-                    booking_id = f"HTL-{int(time.time())}"  # Unique booking ID
-                    guest_name = session.get("guest_name", "Estimado Huésped")
-                    check_in_date = session.get("check_in_date", "2025-10-15")
-                    check_out_date = session.get("check_out_date", "2025-10-17")
-                    room_number = session.get("room_number", "205")
-                    
-                    # Generate QR code
-                    qr_result = qr_service.generate_booking_qr(
-                        booking_id=booking_id,
-                        guest_name=guest_name,
-                        check_in_date=check_in_date,
-                        check_out_date=check_out_date,
-                        room_number=room_number,
-                        hotel_name=settings.hotel_name
-                    )
-                    
-                    if qr_result["success"]:
-                        qr_data = {
-                            "file_path": qr_result["file_path"],
-                            "booking_id": booking_id,
-                            "guest_name": guest_name
-                        }
-                        
-                        # Update session with confirmed booking info
-                        session["booking_confirmed"] = True
-                        session["booking_id"] = booking_id
-                        session["qr_generated"] = True
-                        session["reservation_pending"] = False
-                        await self.session_manager.update_session(message.user_id, session)
-                        
-                        logger.info(
-                            "booking_qr_generated",
-                            booking_id=booking_id,
-                            guest_name=guest_name,
-                            qr_file=qr_result["file_path"]
-                        )
-                    else:
-                        logger.error(
-                            "qr_generation_failed",
-                            error=qr_result.get("error"),
-                            booking_id=booking_id
-                        )
-                        
-                except Exception as e:
-                    logger.error(
-                        "qr_service_error",
-                        error=str(e),
-                        exc_info=True
-                    )
-                """
-                
-                # Si tenemos QR code, enviar confirmación completa con QR
-                if qr_data:
-                    confirmation_text = self.template_service.get_response(
-                        "booking_confirmed_with_qr",
-                        booking_id=qr_data["booking_id"],
-                        guest_name=qr_data["guest_name"],
-                        check_in=check_in_date,
-                        check_out=check_out_date,
-                        room_number=room_number
-                    )
-                    
-                    return {
-                        "response_type": "image_with_text",
-                        "content": confirmation_text,
-                        "image_path": qr_data["file_path"],
-                        "image_caption": "🎫 Tu código QR de confirmación - Guárdalo para el check-in!"
-                    }
-                else:
-                    # Fallback: confirmation sin QR
-                    return {
-                        "response_type": "text",
-                        "content": self.template_service.get_response(
-                            "booking_confirmed_no_qr",
-                            booking_id=f"HTL-{int(time.time())}",
-                            check_in=check_in_date,
-                            check_out=check_out_date
-                        )
-                    }
-            else:
-                # No hay reserva pendiente, responder con reacción simple
-                return {
-                    "response_type": "reaction",
-                    "content": {
-                        "message_id": message.message_id,
-                        "emoji": self.template_service.get_reaction("payment_received")
-                    }
-                }
+            return await self._handle_payment_confirmation(nlp_result, session, message)
         
         elif intent == "guest_services":
             # Información sobre servicios para huéspedes
