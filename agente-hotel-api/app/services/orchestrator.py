@@ -355,6 +355,187 @@ class Orchestrator:
             "content": room_options
         }
 
+    async def _handle_late_checkout(
+        self,
+        nlp_result: dict,
+        session_data: dict,
+        message: UnifiedMessage
+    ) -> dict:
+        """
+        Maneja solicitudes y confirmaciones de late checkout
+        
+        Funcionalidad:
+        - Verifica disponibilidad de late checkout con PMS
+        - Maneja flujo de confirmación (pending → confirm)
+        - Calcula fees según disponibilidad y políticas
+        - Soporte para audio con respuesta TTS
+        
+        Args:
+            nlp_result: Resultado del análisis NLP con intent y entidades
+            session_data: Estado persistente de la sesión del usuario
+            message: Mensaje unificado normalizado
+            
+        Returns:
+            dict: Respuesta con disponibilidad y opciones de confirmación
+        """
+        intent = nlp_result.get("intent")
+        if isinstance(intent, dict):
+            intent = intent.get("name")
+        tenant_id = getattr(message, "tenant_id", None)
+        
+        # PART 1: Handle confirmation of pending late checkout
+        if session_data.get("pending_late_checkout") and intent in ["affirm", "yes", "confirm"]:
+            pending_lc = session_data["pending_late_checkout"]
+            booking_id = pending_lc.get("booking_id")
+            checkout_time = pending_lc.get("checkout_time")
+            fee = pending_lc.get("fee", 0)
+            
+            try:
+                logger.info(
+                    "orchestrator.confirming_late_checkout",
+                    booking_id=booking_id,
+                    checkout_time=checkout_time,
+                    fee=fee
+                )
+                
+                # Confirm late checkout with PMS
+                confirmation = await self.pms_adapter.confirm_late_checkout(
+                    reservation_id=str(booking_id),
+                    checkout_time=checkout_time
+                )
+                
+                if confirmation["success"]:
+                    response_text = self.template_service.get_response(
+                        "late_checkout_confirmed",
+                        checkout_time=checkout_time,
+                        fee=fee
+                    )
+                    
+                    # Clear pending late checkout from session
+                    del session_data["pending_late_checkout"]
+                    await self.session_manager.update_session(message.user_id, session_data, tenant_id)
+                    
+                    logger.info(
+                        "orchestrator.late_checkout_confirmed_success",
+                        booking_id=booking_id,
+                        checkout_time=checkout_time
+                    )
+                else:
+                    response_text = "Lo siento, no pudimos confirmar el late checkout. Por favor, contacta a recepción."
+                    
+            except Exception as e:
+                logger.error(
+                    "orchestrator.late_checkout_confirmation_failed",
+                    booking_id=booking_id,
+                    error=str(e)
+                )
+                response_text = "Hubo un error al confirmar el late checkout. Por favor, contacta a recepción."
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        # PART 2: Handle new late checkout request
+        logger.info("orchestrator.late_checkout_request", user_id=message.user_id, tenant_id=tenant_id)
+        
+        # Check if user has an active booking in session
+        booking_id = session_data.get("booking_id") or session_data.get("reservation_id")
+        
+        if not booking_id:
+            # No booking ID in session - ask for it
+            response_text = self.template_service.get_response("late_checkout_no_booking")
+            
+            # Update session to expect booking ID
+            session_data["awaiting_booking_id_for"] = "late_checkout"
+            await self.session_manager.update_session(message.user_id, session_data, tenant_id)
+            
+            return {
+                "response_type": "text",
+                "content": response_text
+            }
+        
+        try:
+            # Check late checkout availability
+            logger.info(
+                "orchestrator.checking_late_checkout_availability",
+                booking_id=booking_id,
+                user_id=message.user_id
+            )
+            
+            availability = await self.pms_adapter.check_late_checkout_availability(
+                reservation_id=str(booking_id),
+                requested_checkout_time="14:00"  # Default to 2pm
+            )
+            
+            if availability["available"]:
+                # Late checkout is available
+                fee = availability["fee"]
+                checkout_time = availability.get("requested_time", "14:00")
+                
+                # Check if it's free (no next booking and policy allows)
+                if fee == 0:
+                    response_text = self.template_service.get_response(
+                        "late_checkout_free",
+                        checkout_time=checkout_time
+                    )
+                else:
+                    response_text = self.template_service.get_response(
+                        "late_checkout_available",
+                        checkout_time=checkout_time,
+                        fee=fee
+                    )
+                
+                # Store late checkout request in session for confirmation
+                session_data["pending_late_checkout"] = {
+                    "booking_id": booking_id,
+                    "checkout_time": checkout_time,
+                    "fee": fee
+                }
+                await self.session_manager.update_session(message.user_id, session_data, tenant_id)
+                
+            else:
+                # Not available - room has next booking
+                response_text = self.template_service.get_response(
+                    "late_checkout_not_available",
+                    standard_time="12:00"
+                )
+            
+            logger.info(
+                "orchestrator.late_checkout_check_complete",
+                booking_id=booking_id,
+                available=availability["available"],
+                fee=availability.get("fee", 0)
+            )
+            
+        except Exception as e:
+            logger.error(
+                "orchestrator.late_checkout_check_failed",
+                booking_id=booking_id,
+                error=str(e)
+            )
+            response_text = "Lo siento, hubo un error al verificar la disponibilidad de late checkout. Por favor, contacta a recepción."
+        
+        # If original message was audio, respond with audio too
+        if message.tipo == "audio":
+            try:
+                audio_data = await self.audio_processor.generate_audio_response(response_text)
+                
+                if audio_data:
+                    logger.info("orchestrator.late_checkout_audio_response_generated")
+                    return {
+                        "response_type": "audio",
+                        "content": response_text,
+                        "audio_data": audio_data
+                    }
+            except Exception as e:
+                logger.warning("orchestrator.late_checkout_audio_failed", error=str(e))
+        
+        return {
+            "response_type": "text",
+            "content": response_text
+        }
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
         start = time.time()
         intent_name = "unknown"
@@ -604,56 +785,7 @@ class Orchestrator:
         # ============================================================
         # Check if user is confirming a pending late checkout
         if session.get("pending_late_checkout") and intent in ["affirm", "yes", "confirm"]:
-            pending_lc = session["pending_late_checkout"]
-            booking_id = pending_lc.get("booking_id")
-            checkout_time = pending_lc.get("checkout_time")
-            fee = pending_lc.get("fee", 0)
-            
-            try:
-                logger.info(
-                    "confirming_late_checkout",
-                    booking_id=booking_id,
-                    checkout_time=checkout_time,
-                    fee=fee
-                )
-                
-                # Confirm late checkout with PMS
-                confirmation = await self.pms_adapter.confirm_late_checkout(
-                    reservation_id=str(booking_id),
-                    checkout_time=checkout_time
-                )
-                
-                if confirmation["success"]:
-                    response_text = self.template_service.get_response(
-                        "late_checkout_confirmed",
-                        checkout_time=checkout_time,
-                        fee=fee
-                    )
-                    
-                    # Clear pending late checkout from session
-                    del session["pending_late_checkout"]
-                    await self.session_manager.update_session(message.user_id, session, tenant_id)
-                    
-                    logger.info(
-                        "late_checkout_confirmed_success",
-                        booking_id=booking_id,
-                        checkout_time=checkout_time
-                    )
-                else:
-                    response_text = "Lo siento, no pudimos confirmar el late checkout. Por favor, contacta a recepción."
-                    
-            except Exception as e:
-                logger.error(
-                    "late_checkout_confirmation_failed",
-                    booking_id=booking_id,
-                    error=str(e)
-                )
-                response_text = "Hubo un error al confirmar el late checkout. Por favor, contacta a recepción."
-            
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
+            return await self._handle_late_checkout(nlp_result, session, message)
         # ============================================================
         # END LATE CHECKOUT CONFIRMATION
         # ============================================================
@@ -1152,106 +1284,8 @@ class Orchestrator:
             }
         
         elif intent == "late_checkout":
-            # Feature 4: Solicitud de late checkout
-            logger.info("late_checkout_request", user_id=message.user_id, tenant_id=tenant_id)
-            
-            # Check if user has an active booking in session
-            booking_id = session.get("booking_id") or session.get("reservation_id")
-            
-            if not booking_id:
-                # No booking ID in session - ask for it
-                response_text = self.template_service.get_response("late_checkout_no_booking")
-                
-                # Update session to expect booking ID
-                session["awaiting_booking_id_for"] = "late_checkout"
-                await self.session_manager.update_session(message.user_id, session, tenant_id)
-                
-                return {
-                    "response_type": "text",
-                    "content": response_text
-                }
-            
-            try:
-                # Check late checkout availability
-                logger.info(
-                    "checking_late_checkout_availability",
-                    booking_id=booking_id,
-                    user_id=message.user_id
-                )
-                
-                availability = await self.pms_adapter.check_late_checkout_availability(
-                    reservation_id=str(booking_id),
-                    requested_checkout_time="14:00"  # Default to 2pm
-                )
-                
-                if availability["available"]:
-                    # Late checkout is available
-                    fee = availability["fee"]
-                    checkout_time = availability.get("requested_time", "14:00")
-                    
-                    # Check if it's free (no next booking and policy allows)
-                    if fee == 0:
-                        response_text = self.template_service.get_response(
-                            "late_checkout_free",
-                            checkout_time=checkout_time
-                        )
-                    else:
-                        response_text = self.template_service.get_response(
-                            "late_checkout_available",
-                            checkout_time=checkout_time,
-                            fee=fee
-                        )
-                    
-                    # Store late checkout request in session for confirmation
-                    session["pending_late_checkout"] = {
-                        "booking_id": booking_id,
-                        "checkout_time": checkout_time,
-                        "fee": fee
-                    }
-                    await self.session_manager.update_session(message.user_id, session, tenant_id)
-                    
-                else:
-                    # Not available - room has next booking
-                    response_text = self.template_service.get_response(
-                        "late_checkout_not_available",
-                        standard_time="12:00"
-                    )
-                
-                logger.info(
-                    "late_checkout_check_complete",
-                    booking_id=booking_id,
-                    available=availability["available"],
-                    fee=availability.get("fee", 0)
-                )
-                
-            except Exception as e:
-                logger.error(
-                    "late_checkout_check_failed",
-                    booking_id=booking_id,
-                    error=str(e)
-                )
-                response_text = "Lo siento, hubo un error al verificar la disponibilidad de late checkout. Por favor, contacta a recepción."
-            
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-                    
-                    if audio_data:
-                        return {
-                            "response_type": "audio",
-                            "content": {
-                                "text": response_text,
-                                "audio_data": audio_data
-                            }
-                        }
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for late checkout: {e}")
-            
-            return {
-                "response_type": "text",
-                "content": response_text
-            }
+            # Feature 4: Solicitud de late checkout (nueva solicitud)
+            return await self._handle_late_checkout(nlp_result, session, message)
             
         # ============================================================
         # FEATURE 6: REVIEW REQUESTS
