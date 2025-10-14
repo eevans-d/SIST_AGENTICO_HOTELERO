@@ -93,40 +93,40 @@ async def global_exception_handler(request: Request, exc: Exception):
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """
     Middleware to limit request body size and prevent DoS attacks.
-    
+
     Default limit: 1MB for regular requests, 10MB for media uploads.
     """
-    
+
     def __init__(self, app, max_size: int = 1_000_000, max_media_size: int = 10_000_000):
         super().__init__(app)
         self.max_size = max_size  # 1MB default
         self.max_media_size = max_media_size  # 10MB for media
-    
+
     async def dispatch(self, request: Request, call_next):
         if request.method in ["POST", "PUT", "PATCH"]:
             content_length = request.headers.get("content-length")
-            
+
             if content_length:
                 content_length_int = int(content_length)
-                
+
                 # Allow larger size for media upload endpoints
                 max_allowed = self.max_media_size if "/media" in request.url.path else self.max_size
-                
+
                 if content_length_int > max_allowed:
                     logger.warning(
                         "request_too_large",
                         path=request.url.path,
                         size=content_length_int,
                         max_allowed=max_allowed,
-                        correlation_id=getattr(request.state, "correlation_id", "unknown")
+                        correlation_id=getattr(request.state, "correlation_id", "unknown"),
                     )
                     return JSONResponse(
                         status_code=413,
                         content={
                             "error": "Request entity too large",
                             "max_size_bytes": max_allowed,
-                            "received_bytes": content_length_int
-                        }
+                            "received_bytes": content_length_int,
+                        },
                     )
-        
+
         return await call_next(request)

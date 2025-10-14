@@ -61,7 +61,7 @@ async def verify_whatsapp_webhook(
 async def handle_whatsapp_webhook(request: Request):
     """
     WhatsApp Business API webhook handler.
-    
+
     Processes incoming messages from WhatsApp Cloud API v18.0:
     - Text messages
     - Audio messages (for STT processing)
@@ -71,12 +71,12 @@ async def handle_whatsapp_webhook(request: Request):
     - Reaction messages
     - Button replies
     - Template status updates
-    
+
     Security:
     - Signature verification (HMAC-SHA256)
     - Rate limiting (120 req/min)
     - Payload size limit (1MB)
-    
+
     Flow:
     1. Validate content-type and payload size
     2. Parse JSON payload
@@ -100,9 +100,7 @@ async def handle_whatsapp_webhook(request: Request):
     try:
         payload = json.loads(body_bytes.decode() or "{}")
         logger.info(
-            "whatsapp.webhook.received",
-            payload_keys=list(payload.keys()),
-            entry_count=len(payload.get("entry", []))
+            "whatsapp.webhook.received", payload_keys=list(payload.keys()), entry_count=len(payload.get("entry", []))
         )
     except Exception as e:
         logger.error("whatsapp.webhook.invalid_json", error=str(e))
@@ -152,19 +150,19 @@ async def handle_whatsapp_webhook(request: Request):
 
     # Procesar el mensaje con el orquestador
     result = await orchestrator.handle_unified_message(unified)
-    
+
     # Obtener cliente de WhatsApp para enviar respuestas
     from ..services.whatsapp_client import WhatsAppMetaClient
-    
+
     whatsapp_client = WhatsAppMetaClient()
-    
+
     try:
         # Comprobar el tipo de respuesta para determinar qué método usar
         if "response_type" in result:
             response_type = result.get("response_type")
             content = result.get("content", {})
             original_message = result.get("original_message")
-            
+
             if response_type == "interactive_buttons" and original_message:
                 # Enviar mensaje interactivo con botones
                 await whatsapp_client.send_interactive_message(
@@ -172,9 +170,9 @@ async def handle_whatsapp_webhook(request: Request):
                     header_text=content.get("header_text"),
                     body_text=content.get("body_text", ""),
                     footer_text=content.get("footer_text"),
-                    action_buttons=content.get("action_buttons")
+                    action_buttons=content.get("action_buttons"),
                 )
-                
+
             elif response_type == "interactive_list" and original_message:
                 # Enviar mensaje interactivo con lista
                 await whatsapp_client.send_interactive_message(
@@ -183,9 +181,9 @@ async def handle_whatsapp_webhook(request: Request):
                     body_text=content.get("body_text", ""),
                     footer_text=content.get("footer_text"),
                     list_sections=content.get("list_sections"),
-                    list_button_text=content.get("list_button_text")
+                    list_button_text=content.get("list_button_text"),
                 )
-                
+
             elif response_type == "location" and original_message:
                 # Enviar mensaje de ubicación usando el nuevo método send_location
                 content = result.get("content", {})
@@ -194,25 +192,21 @@ async def handle_whatsapp_webhook(request: Request):
                     latitude=content.get("latitude", 0),
                     longitude=content.get("longitude", 0),
                     name=content.get("name"),
-                    address=content.get("address")
+                    address=content.get("address"),
                 )
-                
+
             elif response_type == "audio_with_location" and original_message:
                 # Enviar primero el mensaje de audio
                 if content.get("audio_data"):
                     # Enviar el mensaje de audio
                     await whatsapp_client.send_audio_message(
-                        to=original_message.user_id,
-                        audio_data=content.get("audio_data")
+                        to=original_message.user_id, audio_data=content.get("audio_data")
                     )
-                    
+
                     # Si hay texto, enviarlo como mensaje separado
                     if text := content.get("text"):
-                        await whatsapp_client.send_message(
-                            to=original_message.user_id,
-                            text=text
-                        )
-                
+                        await whatsapp_client.send_message(to=original_message.user_id, text=text)
+
                 # Luego enviar la ubicación usando el nuevo método send_location
                 location = content.get("location", {})
                 if location:
@@ -221,9 +215,9 @@ async def handle_whatsapp_webhook(request: Request):
                         latitude=location.get("latitude", 0),
                         longitude=location.get("longitude", 0),
                         name=location.get("name"),
-                        address=location.get("address")
+                        address=location.get("address"),
                     )
-                
+
             elif response_type == "audio" and original_message:
                 # Enviar mensaje de audio
                 # Verificar si content es un diccionario o directamente el texto
@@ -234,25 +228,19 @@ async def handle_whatsapp_webhook(request: Request):
                     # El contenido es el texto y audio_data debería estar en un campo separado
                     audio_data = result.get("audio_data")
                     text = content
-                
+
                 if audio_data:
-                    await whatsapp_client.send_audio_message(
-                        to=original_message.user_id,
-                        audio_data=audio_data
-                    )
-                
+                    await whatsapp_client.send_audio_message(to=original_message.user_id, audio_data=audio_data)
+
                 # Si hay texto, enviarlo como mensaje separado
                 if text:
-                    await whatsapp_client.send_message(
-                        to=original_message.user_id,
-                        text=text
-                    )
-                
+                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
+
                 # Manejar mensaje de seguimiento si existe
                 if follow_up := content.get("follow_up"):
                     follow_up_type = follow_up.get("type")
                     follow_up_content = follow_up.get("content", {})
-                    
+
                     # Enviamos el mensaje de seguimiento según su tipo
                     if follow_up_type == "interactive_list":
                         await whatsapp_client.send_interactive_message(
@@ -261,140 +249,109 @@ async def handle_whatsapp_webhook(request: Request):
                             body_text=follow_up_content.get("body_text", ""),
                             footer_text=follow_up_content.get("footer_text"),
                             list_sections=follow_up_content.get("list_sections"),
-                            list_button_text=follow_up_content.get("list_button_text")
+                            list_button_text=follow_up_content.get("list_button_text"),
                         )
-            
+
             # Feature 3: Manejo de response types con imágenes
             elif response_type == "text_with_image" and original_message:
                 # Enviar texto y luego imagen
                 text = result.get("content", "")
                 if text:
-                    await whatsapp_client.send_message(
-                        to=original_message.user_id,
-                        text=text
-                    )
-                
+                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
+
                 # Enviar imagen si existe
                 image_url = result.get("image_url")
                 if image_url:
                     caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(
-                        to=original_message.user_id,
-                        image_url=image_url,
-                        caption=caption
-                    )
-            
+                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
+
             elif response_type == "audio_with_image" and original_message:
                 # Enviar audio primero
                 audio_data = result.get("audio_data")
                 if audio_data:
-                    await whatsapp_client.send_audio_message(
-                        to=original_message.user_id,
-                        audio_data=audio_data
-                    )
-                
+                    await whatsapp_client.send_audio_message(to=original_message.user_id, audio_data=audio_data)
+
                 # Enviar texto si existe
                 text = result.get("content", "")
                 if text:
-                    await whatsapp_client.send_message(
-                        to=original_message.user_id,
-                        text=text
-                    )
-                
+                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
+
                 # Enviar imagen si existe
                 image_url = result.get("image_url")
                 if image_url:
                     caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(
-                        to=original_message.user_id,
-                        image_url=image_url,
-                        caption=caption
-                    )
-            
+                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
+
             elif response_type == "interactive_buttons_with_image" and original_message:
                 # Enviar imagen primero
                 image_url = result.get("image_url")
                 if image_url:
                     caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(
-                        to=original_message.user_id,
-                        image_url=image_url,
-                        caption=caption
-                    )
-                
+                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
+
                 # Luego enviar botones interactivos
                 await whatsapp_client.send_interactive_message(
                     to=original_message.user_id,
                     header_text=content.get("header_text"),
                     body_text=content.get("body_text", ""),
                     footer_text=content.get("footer_text"),
-                    action_buttons=content.get("action_buttons")
+                    action_buttons=content.get("action_buttons"),
                 )
-            
+
             elif response_type == "reaction" and original_message:
                 # Enviar reacción a un mensaje
                 await whatsapp_client.send_reaction(
                     to=original_message.user_id,
                     message_id=content.get("message_id", ""),
-                    emoji=content.get("emoji", "👍")
+                    emoji=content.get("emoji", "👍"),
                 )
-                
+
             elif response_type == "image_with_text" and original_message:
                 # FEATURE 5: Enviar imagen con texto (para QR codes de confirmación)
                 image_path = result.get("image_path")
                 image_caption = result.get("image_caption", "")
                 text_content = result.get("content", "")
-                
+
                 if image_path:
                     # Enviar primero el texto
                     if text_content:
-                        await whatsapp_client.send_message(
-                            to=original_message.user_id,
-                            text=text_content
-                        )
-                    
+                        await whatsapp_client.send_message(to=original_message.user_id, text=text_content)
+
                     # Luego enviar la imagen con caption
                     try:
                         # Para archivos locales, necesitamos convertir a URL
                         # En producción esto sería una URL de S3 o CDN
                         from pathlib import Path
+
                         if Path(image_path).exists():
                             # Upload to temporary hosting or convert to base64
                             # Por ahora, enviamos solo el caption como texto
                             await whatsapp_client.send_message(
                                 to=original_message.user_id,
-                                text=f"📱 {image_caption}\n\n(QR code would be sent here in production)"
+                                text=f"📱 {image_caption}\n\n(QR code would be sent here in production)",
                             )
                         else:
                             # Imagen no encontrada, enviar fallback
                             await whatsapp_client.send_message(
-                                to=original_message.user_id,
-                                text=f"⚠️ Error enviando QR code. {image_caption}"
+                                to=original_message.user_id, text=f"⚠️ Error enviando QR code. {image_caption}"
                             )
                     except Exception as img_error:
-                        logger.error(
-                            "whatsapp.send_qr_image_error",
-                            error=str(img_error),
-                            image_path=image_path
-                        )
+                        logger.error("whatsapp.send_qr_image_error", error=str(img_error), image_path=image_path)
                         # Fallback: enviar solo el texto de confirmación
                         await whatsapp_client.send_message(
                             to=original_message.user_id,
-                            text="✅ Tu reserva está confirmada. El QR code se enviará por email."
+                            text="✅ Tu reserva está confirmada. El QR code se enviará por email.",
                         )
-                
+
         elif "response" in result and unified:
             # Respuesta de texto tradicional
-            await whatsapp_client.send_message(
-                to=unified.user_id,
-                text=result.get("response", "")
-            )
-            
+            await whatsapp_client.send_message(to=unified.user_id, text=result.get("response", ""))
+
     except Exception as e:
         logger.error("whatsapp.webhook.send_response_error", error=str(e))
     finally:
         await whatsapp_client.close()
-    
+
     # Siempre devolver OK al webhook para confirmar recepción
     return {"status": "ok"}
 
@@ -404,22 +361,22 @@ async def handle_whatsapp_webhook(request: Request):
 async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
     """
     Gmail webhook endpoint for push notifications.
-    
+
     Gmail API can send push notifications when new emails arrive using Cloud Pub/Sub.
     This endpoint receives those notifications and polls for new messages.
-    
+
     Alternative: For simpler setups, use scheduled polling instead of webhooks.
-    
+
     Flow:
     1. Gmail sends push notification via Pub/Sub
     2. This endpoint receives notification
     3. Poll Gmail for new messages
     4. Normalize and process via orchestrator
-    
+
     Docs: https://developers.google.com/gmail/api/guides/push
     """
     from ..services.gmail_client import GmailIMAPClient, GmailClientError
-    
+
     # Parse Pub/Sub message (si viene de Cloud Pub/Sub)
     try:
         payload = json.loads(body)
@@ -427,7 +384,7 @@ async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
     except json.JSONDecodeError:
         logger.warning("gmail.webhook.invalid_json")
         return {"status": "error", "message": "Invalid JSON"}
-    
+
     # Configurar servicios (similar a WhatsApp webhook)
     class _InMemoryRedis:
         _store: dict[str, Any] = {}
@@ -456,52 +413,41 @@ async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
     )
     gateway = MessageGateway()
     gmail_client = GmailIMAPClient()
-    
+
     # Poll Gmail para nuevos mensajes
     try:
         messages = gmail_client.poll_new_messages(mark_read=True)
-        
+
         if not messages:
             logger.info("gmail.webhook.no_messages")
             return {"status": "ok", "messages_processed": 0}
-        
+
         logger.info("gmail.webhook.messages_found", extra={"count": len(messages)})
-        
+
         # Procesar cada mensaje
         results = []
         for email_dict in messages:
             try:
                 # Normalizar a UnifiedMessage
                 unified = gateway.normalize_gmail_message(email_dict)
-                
+
                 # Procesar via orchestrator
                 result = await orchestrator.handle_unified_message(unified)
                 results.append(result)
-                
+
                 logger.info(
-                    "gmail.message.processed",
-                    extra={
-                        "message_id": unified.message_id,
-                        "user_id": unified.user_id
-                    }
+                    "gmail.message.processed", extra={"message_id": unified.message_id, "user_id": unified.user_id}
                 )
-                
+
             except Exception as e:
                 logger.error(
                     "gmail.message.processing_error",
-                    extra={
-                        "message_id": email_dict.get("message_id"),
-                        "error": str(e)
-                    }
+                    extra={"message_id": email_dict.get("message_id"), "error": str(e)},
                 )
                 continue
-        
-        return {
-            "status": "ok",
-            "messages_processed": len(results),
-            "results": results
-        }
-        
+
+        return {"status": "ok", "messages_processed": len(results), "results": results}
+
     except GmailClientError as e:
         logger.error("gmail.webhook.client_error", extra={"error": str(e)})
         return {"status": "error", "message": str(e)}

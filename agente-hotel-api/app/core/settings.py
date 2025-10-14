@@ -74,26 +74,26 @@ class Settings(BaseSettings):
     # Audio Processing Settings
     audio_enabled: bool = True
     tts_engine: TTSEngine = TTSEngine.ESPEAK
-    
+
     # Whisper STT Configuration
     whisper_model: str = "base"  # tiny, base, small, medium, large
     whisper_language: str = "es"  # Spanish by default
-    
+
     # Hotel Location Settings (for sharing location feature)
     hotel_latitude: float = -34.6037  # Default: Buenos Aires (configurable per tenant)
     hotel_longitude: float = -58.3816
     hotel_name: str = "Hotel Ejemplo"
     hotel_address: str = "Av. 9 de Julio 1000, Buenos Aires, Argentina"
-    
+
     # Business Hours Settings (for time-differentiated responses)
     business_hours_start: int = 9  # 9 AM
     business_hours_end: int = 21  # 9 PM
     business_hours_timezone: str = "America/Argentina/Buenos_Aires"
-    
+
     # Room Images Settings (for photo sending feature)
     room_images_enabled: bool = True
     room_images_base_url: str = "https://example.com/images/rooms/"  # S3 or local NGINX
-    
+
     # Review Request Settings - Feature 6
     review_max_reminders: int = 3
     review_initial_delay_hours: int = 24  # Wait 24h after checkout
@@ -101,20 +101,20 @@ class Settings(BaseSettings):
     google_review_url: str = "https://g.page/r/EXAMPLE/review"
     tripadvisor_review_url: str = "https://www.tripadvisor.com/UserReviewEdit-EXAMPLE"
     booking_review_url: str = "https://www.booking.com/reviewcenter/EXAMPLE"
-    
-    # eSpeak TTS Configuration 
+
+    # eSpeak TTS Configuration
     espeak_voice: str = "es"
     espeak_speed: int = 150  # words per minute
-    espeak_pitch: int = 50   # 0-99
-    
+    espeak_pitch: int = 50  # 0-99
+
     # Audio Caching Configuration
     audio_cache_enabled: bool = True
     audio_cache_ttl_seconds: int = 86400  # 24 hours default
-    
+
     # Audio Processing Limits
     audio_max_size_mb: int = 25  # WhatsApp limit
     audio_timeout_seconds: int = 30
-    
+
     # Audio Cache Settings
     audio_cache_enabled: bool = True
     audio_cache_ttl_seconds: int = 86400  # 24 horas por defecto
@@ -122,7 +122,7 @@ class Settings(BaseSettings):
     audio_cache_compression_enabled: bool = True  # Habilitar compresión para archivos grandes
     audio_cache_compression_threshold_kb: int = 100  # Comprimir archivos mayores a 100KB
     audio_cache_compression_level: int = 6  # Nivel de compresión (1-9, donde 9 es máxima compresión)
-    
+
     # Operational Settings
     environment: Environment = Environment.DEV
     log_level: LogLevel = LogLevel.INFO
@@ -154,7 +154,7 @@ class Settings(BaseSettings):
         Previene deploys accidentales con credenciales de desarrollo.
         """
         env = info.data.get("environment") if hasattr(info, "data") else None
-        
+
         # Lista extendida de valores dummy prohibidos en producción
         dummy_values = [
             None,
@@ -175,7 +175,7 @@ class Settings(BaseSettings):
             "password",
             "12345",
         ]
-        
+
         if env == Environment.PROD and v:
             secret_value = v.get_secret_value()
             if secret_value in dummy_values or len(secret_value) < 8:
@@ -208,10 +208,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
 # FastAPI dependency injection function
 def get_settings() -> Settings:
     """Get the application settings instance."""
     return settings
+
 
 # Helper para exponer lista normalizada (evita repetir split en middleware)
 if settings.csp_extra_sources:

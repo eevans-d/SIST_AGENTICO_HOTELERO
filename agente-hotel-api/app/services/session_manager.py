@@ -19,21 +19,22 @@ from ..core.constants import (
 active_sessions = Gauge("session_active_total", "Número de sesiones activas")
 session_cleanups = Counter("session_cleanup_total", "Limpiezas de sesiones ejecutadas", ["result"])
 session_expirations = Counter("session_expirations_total", "Sesiones expiradas", ["reason"])
-session_save_retries = Counter("session_save_retries_total", "Reintentos de guardado de sesión", ["operation", "result"])
-
+session_save_retries = Counter(
+    "session_save_retries_total", "Reintentos de guardado de sesión", ["operation", "result"]
+)
 
 
 class SessionManager:
     """
     Gestor de sesiones de usuario con persistencia en Redis.
-    
+
     Maneja el ciclo de vida completo de las sesiones de conversación, incluyendo:
     - Creación y recuperación de sesiones
     - Actualización con retry automático y exponential backoff
     - Limpieza periódica de sesiones huérfanas/corruptas
     - Métricas de Prometheus para observabilidad
     - Soporte multi-tenant
-    
+
     Características de robustez:
     ----------------------
     - **Retry con exponential backoff**: Reintentos automáticos en operaciones Redis
@@ -42,25 +43,25 @@ class SessionManager:
     - **Logging estructurado**: Contexto completo en todos los puntos de fallo
     - **Métricas de retry**: Contadores para monitoreo de reintentos y fallos
     - **Cleanup automático**: Tarea en background para limpiar sesiones corruptas
-    
+
     Ejemplo de uso:
     --------------
     ```python
     session_manager = SessionManager(redis_client)
     session_manager.start_cleanup_task()
-    
+
     # Obtener o crear sesión
     session = await session_manager.get_or_create_session(
         user_id="user123",
         canal="whatsapp",
         tenant_id="hotel_abc"
     )
-    
+
     # Actualizar sesión (con retry automático)
     session["context"]["last_intent"] = "check_availability"
     await session_manager.update_session("user123", session, tenant_id="hotel_abc")
     ```
-    
+
     Atributos:
     ---------
     redis : redis.Redis
@@ -72,9 +73,9 @@ class SessionManager:
     retry_delay_base : int
         Delay base para exponential backoff en segundos (default: RETRY_DELAY_BASE=1).
     """
-    
+
     def __init__(
-        self, 
+        self,
         redis_client: redis.Redis,
         ttl: int = SESSION_TTL_DEFAULT,
         max_retries: int = MAX_RETRIES_DEFAULT,
@@ -82,7 +83,7 @@ class SessionManager:
     ):
         """
         Inicializa el gestor de sesiones.
-        
+
         Args:
             redis_client: Cliente Redis async configurado.
             ttl: Time-to-live de sesiones en segundos (default: 1800).
@@ -99,42 +100,37 @@ class SessionManager:
     def _get_session_key(self, user_id: str, tenant_id: Optional[str] = None) -> str:
         """
         Genera la clave Redis para una sesión.
-        
+
         Args:
             user_id: Identificador del usuario.
             tenant_id: Identificador del tenant (opcional para multi-tenancy).
-        
+
         Returns:
             Clave Redis en formato "session:{tenant_id}:{user_id}" o "session:{user_id}".
         """
         if tenant_id:
             return f"session:{tenant_id}:{user_id}"
         return f"session:{user_id}"
-    
-    async def _save_session_with_retry(
-        self, 
-        session_key: str, 
-        session_data: dict, 
-        operation: str = "save"
-    ) -> bool:
+
+    async def _save_session_with_retry(self, session_key: str, session_data: dict, operation: str = "save") -> bool:
         """
         Guarda sesión en Redis con retry automático y exponential backoff.
-        
+
         Esta operación crítica puede fallar por:
         - Problemas de red con Redis (ConnectionError)
         - Timeouts de Redis (TimeoutError)
         - Redis sobrecargado (RedisError genérico)
-        
+
         El retry con exponential backoff mejora la resiliencia ante fallos transitorios.
-        
+
         Args:
             session_key: Clave Redis donde guardar la sesión.
             session_data: Datos de sesión a serializar y guardar.
             operation: Nombre de operación para logging ("save", "create", "update").
-        
+
         Returns:
             True si guardó exitosamente, False si todos los reintentos fallaron.
-        
+
         Raises:
             RedisError: Si todos los reintentos fallan, re-lanza la última excepción.
         """
@@ -142,7 +138,7 @@ class SessionManager:
             try:
                 # Intentar guardar en Redis con TTL
                 await self.redis.set(session_key, json.dumps(session_data), ex=self.ttl)
-                
+
                 # Log de éxito solo si fue retry (attempt > 0)
                 if attempt > 0:
                     logger.info(
@@ -152,13 +148,13 @@ class SessionManager:
                         operation=operation,
                     )
                     session_save_retries.labels(operation=operation, result="success").inc()
-                
+
                 return True
-                
+
             except (RedisConnectionError, RedisTimeoutError) as e:
                 # Errores de conexión/timeout son candidatos para retry
-                is_last_attempt = (attempt == self.max_retries - 1)
-                
+                is_last_attempt = attempt == self.max_retries - 1
+
                 if is_last_attempt:
                     # Último intento falló - log error y re-lanzar
                     logger.error(
@@ -174,8 +170,8 @@ class SessionManager:
                     raise
                 else:
                     # Calcular delay con exponential backoff: 1s, 2s, 4s, ...
-                    delay = self.retry_delay_base * (2 ** attempt)
-                    
+                    delay = self.retry_delay_base * (2**attempt)
+
                     logger.warning(
                         f"session_manager.{operation}_retry",
                         session_key=session_key,
@@ -187,10 +183,10 @@ class SessionManager:
                         operation=operation,
                     )
                     session_save_retries.labels(operation=operation, result="retry").inc()
-                    
+
                     # Esperar antes del siguiente intento
                     await asyncio.sleep(delay)
-                    
+
             except RedisError as e:
                 # Otros errores Redis (menos comunes, posiblemente no transitorios)
                 logger.error(
@@ -204,7 +200,7 @@ class SessionManager:
                 )
                 session_save_retries.labels(operation=operation, result="failed").inc()
                 raise
-                
+
             except Exception as e:
                 # Errores inesperados (ej: JSON serialization)
                 logger.error(
@@ -218,32 +214,27 @@ class SessionManager:
                 )
                 session_save_retries.labels(operation=operation, result="failed").inc()
                 raise
-        
+
         return False
 
-    async def get_or_create_session(
-        self, 
-        user_id: str, 
-        canal: str, 
-        tenant_id: Optional[str] = None
-    ) -> dict:
+    async def get_or_create_session(self, user_id: str, canal: str, tenant_id: Optional[str] = None) -> dict:
         """
         Obtiene una sesión existente o crea una nueva si no existe.
-        
+
         La creación de sesiones incluye retry automático para manejar fallos
         transitorios de Redis (conexión, timeout).
-        
+
         Args:
             user_id: Identificador único del usuario.
             canal: Canal de comunicación ("whatsapp", "gmail", etc.).
             tenant_id: Identificador del tenant para multi-tenancy (opcional).
-        
+
         Returns:
             Dict con datos de sesión (user_id, canal, state, context, etc.).
-        
+
         Raises:
             RedisError: Si falla la obtención Y la creación de sesión.
-        
+
         Ejemplo:
         -------
         ```python
@@ -265,17 +256,17 @@ class SessionManager:
         ```
         """
         session_key = self._get_session_key(user_id, tenant_id)
-        
+
         try:
             # Intentar obtener sesión existente
             session_data_str = await self.redis.get(session_key)
-            
+
             if session_data_str:
                 session = json.loads(session_data_str)
                 # Actualizar métrica de sesiones activas
                 await self._update_active_sessions_metric()
                 return session
-        
+
         except RedisError as e:
             # Error al obtener sesión - log pero intentar crear nueva
             logger.warning(
@@ -284,7 +275,7 @@ class SessionManager:
                 error=str(e),
                 error_type=type(e).__name__,
             )
-        
+
         # No existe sesión - crear nueva
         new_session = {
             "user_id": user_id,
@@ -295,58 +286,53 @@ class SessionManager:
             "created_at": datetime.utcnow().isoformat(),
             "last_activity": datetime.utcnow().isoformat(),
         }
-        
+
         if tenant_id:
             new_session["tenant_id"] = tenant_id
-        
+
         # Guardar con retry automático
         await self._save_session_with_retry(session_key, new_session, operation="create")
         await self._update_active_sessions_metric()
-        
+
         return new_session
 
-    async def update_session(
-        self, 
-        user_id: str, 
-        session_data: dict, 
-        tenant_id: Optional[str] = None
-    ):
+    async def update_session(self, user_id: str, session_data: dict, tenant_id: Optional[str] = None):
         """
         Actualiza una sesión existente con retry automático.
-        
+
         Actualiza automáticamente el timestamp de última actividad y guarda
         en Redis con exponential backoff en caso de fallos transitorios.
-        
+
         Args:
             user_id: Identificador del usuario.
             session_data: Datos de sesión actualizados a persistir.
             tenant_id: Identificador del tenant (opcional).
-        
+
         Raises:
             RedisError: Si todos los reintentos fallan.
-        
+
         Ejemplo:
         -------
         ```python
         # Obtener sesión
         session = await session_manager.get_or_create_session("user123", "whatsapp")
-        
+
         # Modificar contexto
         session["context"]["last_intent"] = "check_availability"
         session["context"]["check_in"] = "2024-02-01"
-        
+
         # Guardar con retry automático
         await session_manager.update_session("user123", session)
         ```
         """
         session_key = self._get_session_key(user_id, tenant_id)
-        
+
         # Actualizar timestamp de última actividad
         session_data["last_activity"] = datetime.utcnow().isoformat()
-        
+
         # Guardar con retry automático
         await self._save_session_with_retry(session_key, session_data, operation="update")
-    
+
     async def _update_active_sessions_metric(self):
         """Actualiza la métrica de sesiones activas."""
         try:
@@ -361,7 +347,7 @@ class SessionManager:
             active_sessions.set(count)
         except Exception as e:
             logger.warning(f"Failed to update active sessions metric: {e}")
-    
+
     async def cleanup_expired_sessions(self):
         """
         Background task para limpiar sesiones expiradas y actualizar métricas.
@@ -372,23 +358,23 @@ class SessionManager:
             try:
                 await asyncio.sleep(self._cleanup_interval)
                 logger.debug("Running session cleanup...")
-                
+
                 # Actualizar métrica de sesiones activas
                 await self._update_active_sessions_metric()
-                
+
                 # Limpiar sesiones huérfanas o corruptas
                 cleaned = await self._cleanup_orphaned_sessions()
-                
+
                 session_cleanups.labels(result="success").inc()
                 logger.info(f"✅ Session cleanup completed. Cleaned {cleaned} orphaned sessions.")
-                
+
             except asyncio.CancelledError:
                 logger.info("Session cleanup task cancelled")
                 break
             except Exception as e:
                 logger.error(f"Error in session cleanup: {e}")
                 session_cleanups.labels(result="error").inc()
-    
+
     async def _cleanup_orphaned_sessions(self) -> int:
         """Limpia sesiones corruptas o mal formadas."""
         cleaned = 0
@@ -396,43 +382,43 @@ class SessionManager:
             cursor = "0"
             while True:
                 cursor, keys = await self.redis.scan(cursor=int(cursor), match="session:*", count=100)
-                
+
                 for key in keys:
                     try:
                         data = await self.redis.get(key)
                         if not data:
                             continue
-                        
+
                         # Validar que sea JSON válido
                         session = json.loads(data)
-                        
+
                         # Validar campos requeridos
                         if not all(k in session for k in ["user_id", "canal", "state"]):
                             logger.warning(f"Orphaned session found: {key}")
                             await self.redis.delete(key)
                             session_expirations.labels(reason="invalid_format").inc()
                             cleaned += 1
-                            
+
                     except (json.JSONDecodeError, Exception) as e:
                         logger.warning(f"Corrupted session {key}: {e}")
                         await self.redis.delete(key)
                         session_expirations.labels(reason="corrupted").inc()
                         cleaned += 1
-                
+
                 if cursor == 0 or cursor == "0":
                     break
-                    
+
         except Exception as e:
             logger.error(f"Error cleaning orphaned sessions: {e}")
-        
+
         return cleaned
-    
+
     def start_cleanup_task(self):
         """Inicia la tarea de limpieza en background."""
         if self._cleanup_task is None:
             self._cleanup_task = asyncio.create_task(self.cleanup_expired_sessions())
             logger.info("✅ Session cleanup task started")
-    
+
     async def stop_cleanup_task(self):
         """Detiene la tarea de limpieza."""
         if self._cleanup_task:

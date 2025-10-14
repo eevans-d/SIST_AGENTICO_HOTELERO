@@ -12,7 +12,7 @@ import json
 INTENTS = {
     "es": [
         "check_availability",
-        "make_reservation", 
+        "make_reservation",
         "get_prices",
         "modify_reservation",
         "cancel_reservation",
@@ -23,11 +23,11 @@ INTENTS = {
         "goodbye",
         "thanks",
         "confirm",
-        "deny"
+        "deny",
     ],
     "en": [
         "check_availability",
-        "make_reservation", 
+        "make_reservation",
         "get_prices",
         "modify_reservation",
         "cancel_reservation",
@@ -38,11 +38,11 @@ INTENTS = {
         "goodbye",
         "thanks",
         "confirm",
-        "deny"
+        "deny",
     ],
     "pt": [
         "check_availability",
-        "make_reservation", 
+        "make_reservation",
         "get_prices",
         "modify_reservation",
         "cancel_reservation",
@@ -53,8 +53,8 @@ INTENTS = {
         "goodbye",
         "thanks",
         "confirm",
-        "deny"
-    ]
+        "deny",
+    ],
 }
 
 # Ejemplos multilingües por intención
@@ -81,7 +81,7 @@ EXAMPLES = {
             "quisiera saber si tienen lugar",
             "tienen habitaciones disponibles?",
             "para cuatro personas del 10 al 12",
-            "necesito una habitacion para el mes que viene"
+            "necesito una habitacion para el mes que viene",
         ],
         "make_reservation": [
             "Quiero reservar del 1 al 3 de enero para 2 personas",
@@ -99,7 +99,7 @@ EXAMPLES = {
             "me interesa, quiero avanzar",
             "reservamela",
             "dale, la quiero",
-            "quiero hacer una reserva"
+            "quiero hacer una reserva",
         ],
         "get_prices": [
             "¿Cuánto cuesta la habitación doble?",
@@ -116,7 +116,7 @@ EXAMPLES = {
             "precio de la suite",
             "costo para 3 noches",
             "cuánto está la habitación con vista al mar?",
-            "tarifa para habitación individual"
+            "tarifa para habitación individual",
         ],
         "greet": [
             "hola",
@@ -128,7 +128,7 @@ EXAMPLES = {
             "qué tal",
             "cómo estás",
             "qué hay de nuevo",
-            "buen día"
+            "buen día",
         ],
         "goodbye": [
             "adiós",
@@ -140,10 +140,9 @@ EXAMPLES = {
             "nos hablamos después",
             "hasta mañana",
             "que tengas buen día",
-            "me voy"
-        ]
+            "me voy",
+        ],
     },
-    
     # Inglés
     "en": {
         "check_availability": [
@@ -161,7 +160,7 @@ EXAMPLES = {
             "Looking for a room for the 20th",
             "Is there anything for December 25th?",
             "Do you have availability for New Year's?",
-            "For Valentine's Day, do you have anything?"
+            "For Valentine's Day, do you have anything?",
         ],
         "make_reservation": [
             "I want to book from January 1st to 3rd for 2 people",
@@ -179,7 +178,7 @@ EXAMPLES = {
             "I'm interested, I want to proceed",
             "Book it for me",
             "Yes, I want it",
-            "I want to make a reservation"
+            "I want to make a reservation",
         ],
         "get_prices": [
             "How much does the double room cost?",
@@ -196,7 +195,7 @@ EXAMPLES = {
             "Price for the suite",
             "Cost for 3 nights",
             "How much is the room with sea view?",
-            "Rate for single room"
+            "Rate for single room",
         ],
         "greet": [
             "hello",
@@ -208,7 +207,7 @@ EXAMPLES = {
             "hi there",
             "how are you",
             "what's up",
-            "good day"
+            "good day",
         ],
         "goodbye": [
             "goodbye",
@@ -220,10 +219,9 @@ EXAMPLES = {
             "talk to you later",
             "see you tomorrow",
             "have a good day",
-            "I'm leaving"
-        ]
+            "I'm leaving",
+        ],
     },
-    
     # Portugués
     "pt": {
         "check_availability": [
@@ -241,7 +239,7 @@ EXAMPLES = {
             "Procuro quarto para o dia 20",
             "Tem algo para 25 de dezembro?",
             "Tem disponibilidade para o Ano Novo?",
-            "Para o Dia dos Namorados, tem algo?"
+            "Para o Dia dos Namorados, tem algo?",
         ],
         "make_reservation": [
             "Quero reservar de 1 a 3 de janeiro para 2 pessoas",
@@ -259,7 +257,7 @@ EXAMPLES = {
             "Estou interessado, quero prosseguir",
             "Reserve para mim",
             "Sim, eu quero",
-            "Quero fazer uma reserva"
+            "Quero fazer uma reserva",
         ],
         "get_prices": [
             "Quanto custa o quarto duplo?",
@@ -276,7 +274,7 @@ EXAMPLES = {
             "Preço da suíte",
             "Custo para 3 noites",
             "Quanto está o quarto com vista para o mar?",
-            "Tarifa para quarto individual"
+            "Tarifa para quarto individual",
         ],
         "greet": [
             "olá",
@@ -288,7 +286,7 @@ EXAMPLES = {
             "e aí",
             "como vai",
             "tudo bem",
-            "bom dia"
+            "bom dia",
         ],
         "goodbye": [
             "adeus",
@@ -300,37 +298,33 @@ EXAMPLES = {
             "falamos depois",
             "até amanhã",
             "tenha um bom dia",
-            "estou indo"
-        ]
-    }
+            "estou indo",
+        ],
+    },
 }
+
 
 def generate_multilingual_nlu_data():
     """
     Genera datos de entrenamiento multilingües para Rasa NLU.
     """
-    nlu_data = {
-        "version": "3.1",
-        "nlu": []
-    }
-    
+    nlu_data = {"version": "3.1", "nlu": []}
+
     # Agregar intenciones para cada idioma
     for language, intents in INTENTS.items():
         for intent in intents:
             # Verificar si hay ejemplos para este intent y lenguaje
             if intent in EXAMPLES.get(language, {}):
                 examples = EXAMPLES[language][intent]
-                
+
                 # Crear entrada para este intent
-                intent_entry = {
-                    "intent": f"{intent}",
-                    "examples": "\n".join(f"- {example}" for example in examples)
-                }
-                
+                intent_entry = {"intent": f"{intent}", "examples": "\n".join(f"- {example}" for example in examples)}
+
                 # Agregar al dataset
                 nlu_data["nlu"].append(intent_entry)
-    
+
     return nlu_data
+
 
 def generate_domain_file():
     """
@@ -341,7 +335,7 @@ def generate_domain_file():
     for language, intents in INTENTS.items():
         for intent in intents:
             all_intents.add(intent)
-    
+
     # Entidades comunes
     entities = [
         "check_in_date",
@@ -352,9 +346,9 @@ def generate_domain_file():
         "location",
         "amenity",
         "price_range",
-        "date_range"
+        "date_range",
     ]
-    
+
     # Crear estructura de domain
     domain = {
         "version": "3.1",
@@ -364,21 +358,19 @@ def generate_domain_file():
             "utter_greet": [
                 {"text": "¡Hola! ¿En qué puedo ayudarte?"},
                 {"text": "Hello! How can I help you?"},
-                {"text": "Olá! Como posso ajudá-lo?"}
+                {"text": "Olá! Como posso ajudá-lo?"},
             ],
             "utter_goodbye": [
                 {"text": "¡Hasta luego! Gracias por contactarnos."},
                 {"text": "Goodbye! Thank you for contacting us."},
-                {"text": "Adeus! Obrigado por nos contatar."}
-            ]
+                {"text": "Adeus! Obrigado por nos contatar."},
+            ],
         },
-        "session_config": {
-            "session_expiration_time": 60,
-            "carry_over_slots_to_new_session": True
-        }
+        "session_config": {"session_expiration_time": 60, "carry_over_slots_to_new_session": True},
     }
-    
+
     return domain
+
 
 def generate_config_file():
     """
@@ -389,41 +381,17 @@ def generate_config_file():
         "language": "es",  # Idioma principal (se detecta automáticamente)
         "pipeline": [
             # Tokenización
-            {
-                "name": "WhitespaceTokenizer"
-            },
+            {"name": "WhitespaceTokenizer"},
             # Featurizers
-            {
-                "name": "RegexFeaturizer"
-            },
-            {
-                "name": "LexicalSyntacticFeaturizer"
-            },
+            {"name": "RegexFeaturizer"},
+            {"name": "LexicalSyntacticFeaturizer"},
             # Language Model (SpaCy)
-            {
-                "name": "SpacyNLP",
-                "model": "es_core_news_md",
-                "case_sensitive": False
-            },
-            {
-                "name": "SpacyTokenizer"
-            },
-            {
-                "name": "SpacyFeaturizer"
-            },
+            {"name": "SpacyNLP", "model": "es_core_news_md", "case_sensitive": False},
+            {"name": "SpacyTokenizer"},
+            {"name": "SpacyFeaturizer"},
             # Word Embeddings
-            {
-                "name": "CountVectorsFeaturizer",
-                "analyzer": "word",
-                "min_ngram": 1,
-                "max_ngram": 2
-            },
-            {
-                "name": "CountVectorsFeaturizer",
-                "analyzer": "char_wb",
-                "min_ngram": 2,
-                "max_ngram": 5
-            },
+            {"name": "CountVectorsFeaturizer", "analyzer": "word", "min_ngram": 1, "max_ngram": 2},
+            {"name": "CountVectorsFeaturizer", "analyzer": "char_wb", "min_ngram": 2, "max_ngram": 5},
             # Intent & Entity Classification
             {
                 "name": "DIETClassifier",
@@ -434,52 +402,29 @@ def generate_config_file():
                 "batch_size": [64, 256],
                 "learning_rate": 0.001,
                 "evaluate_every_number_of_epochs": 20,
-                "evaluate_on_number_of_examples": 100
+                "evaluate_on_number_of_examples": 100,
             },
             # Extracción de Entidades
-            {
-                "name": "RegexEntityExtractor",
-                "case_sensitive": False,
-                "use_lookup_tables": True,
-                "use_regexes": True
-            },
-            {
-                "name": "EntitySynonymMapper"
-            },
+            {"name": "RegexEntityExtractor", "case_sensitive": False, "use_lookup_tables": True, "use_regexes": True},
+            {"name": "EntitySynonymMapper"},
             # Response Selector
-            {
-                "name": "ResponseSelector",
-                "epochs": 100,
-                "constrain_similarities": True,
-                "retrieval_intent": "faq"
-            },
+            {"name": "ResponseSelector", "epochs": 100, "constrain_similarities": True, "retrieval_intent": "faq"},
             # Language Identification
-            {
-                "name": "LanguageIdentifierComponents.LanguageIdentifier",
-                "model_name": "lid.176.bin",
-                "threshold": 0.5
-            }
+            {"name": "LanguageIdentifierComponents.LanguageIdentifier", "model_name": "lid.176.bin", "threshold": 0.5},
         ],
         "policies": [
-            {
-                "name": "MemoizationPolicy",
-                "max_history": 5
-            },
+            {"name": "MemoizationPolicy", "max_history": 5},
             {
                 "name": "RulePolicy",
                 "core_fallback_threshold": 0.4,
-                "core_fallback_action_name": "action_default_fallback"
+                "core_fallback_action_name": "action_default_fallback",
             },
-            {
-                "name": "TEDPolicy",
-                "max_history": 5,
-                "epochs": 100,
-                "constrain_similarities": True
-            }
-        ]
+            {"name": "TEDPolicy", "max_history": 5, "epochs": 100, "constrain_similarities": True},
+        ],
     }
-    
+
     return config
+
 
 def save_file(data, file_path, file_format):
     """
@@ -493,41 +438,41 @@ def save_file(data, file_path, file_format):
         else:
             f.write(data)
 
+
 def main():
     """
     Función principal para generar archivos de configuración Rasa NLU multilingüe.
     """
     parser = argparse.ArgumentParser(description="Generador de dataset multilingüe para Rasa NLU")
     parser.add_argument(
-        "--output-dir", 
-        default="rasa_nlu_multilingual", 
-        help="Directorio de salida para archivos generados"
+        "--output-dir", default="rasa_nlu_multilingual", help="Directorio de salida para archivos generados"
     )
     args = parser.parse_args()
-    
+
     # Crear directorio de salida
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
-    
+
     # Crear subdirectorios
     data_dir = output_dir / "data"
     data_dir.mkdir(exist_ok=True)
-    
+
     # Generar y guardar archivos
     print("Generando dataset NLU multilingüe...")
     nlu_data = generate_multilingual_nlu_data()
     save_file(nlu_data, data_dir / "nlu.yml", "yaml")
-    
+
     print("Generando domain.yml...")
     domain = generate_domain_file()
     save_file(domain, output_dir / "domain.yml", "yaml")
-    
+
     print("Generando config.yml...")
     config = generate_config_file()
     save_file(config, output_dir / "config.yml", "yaml")
-    
+
     print(f"Archivos generados en: {output_dir}")
     print("Para entrenar el modelo ejecutar: rasa train --data data --config config.yml --domain domain.yml")
+
 
 if __name__ == "__main__":
     main()

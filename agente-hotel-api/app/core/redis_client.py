@@ -23,11 +23,13 @@ pool_kwargs = {
 
 # Additional production optimizations for Redis
 if settings.environment == Environment.PROD:
-    pool_kwargs.update({
-        "socket_connect_timeout": 5,
-        "socket_timeout": 5,
-        "retry_on_timeout": True,
-    })
+    pool_kwargs.update(
+        {
+            "socket_connect_timeout": 5,
+            "socket_timeout": 5,
+            "retry_on_timeout": True,
+        }
+    )
 
 redis_pool = redis.ConnectionPool.from_url(REDIS_URL, **pool_kwargs)
 

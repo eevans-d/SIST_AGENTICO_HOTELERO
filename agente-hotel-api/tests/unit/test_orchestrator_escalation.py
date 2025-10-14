@@ -3,8 +3,7 @@ Tests unitarios para el método _escalate_to_staff del Orchestrator
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app.services.orchestrator import Orchestrator
 from app.models.unified_message import UnifiedMessage
@@ -48,7 +47,7 @@ def sample_message():
         texto="¡URGENTE! Necesito ayuda con mi reserva",
         tipo="text",
         timestamp_iso="2025-10-13T10:00:00Z",
-        metadata={"detected_language": "es"}
+        metadata={"detected_language": "es"},
     )
 
 
@@ -59,173 +58,138 @@ def sample_session():
         "user_id": "+34612345678",
         "history": [
             {"user": "Hola", "bot": "¿En qué puedo ayudarte?"},
-            {"user": "Necesito cambiar mi reserva", "bot": "Déjame verificar..."}
+            {"user": "Necesito cambiar mi reserva", "bot": "Déjame verificar..."},
         ],
         "intent": "modificar_reserva",
-        "entities": {}
+        "entities": {},
     }
 
 
 class TestEscalateToStaff:
     """Tests para el método _escalate_to_staff"""
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_urgent_after_hours(
-        self,
-        orchestrator,
-        sample_message,
-        sample_session
-    ):
+    async def test_escalate_urgent_after_hours(self, orchestrator, sample_message, sample_session):
         """Test: Escalamiento por urgencia fuera de horario"""
-        with patch('app.services.orchestrator.alert_manager') as mock_alert_manager:
+        with patch("app.services.orchestrator.alert_manager") as mock_alert_manager:
             mock_alert_manager.send_alert = AsyncMock()
-            
+
             result = await orchestrator._escalate_to_staff(
                 message=sample_message,
                 reason="urgent_after_hours",
                 intent="modificar_reserva",
-                session_data=sample_session
+                session_data=sample_session,
             )
-            
+
             # Verificar estructura de respuesta
             assert result["response_type"] == "text"
             assert "escalated" in result
             assert result["escalated"] is True
             assert "escalation_id" in result
             assert result["escalation_id"].startswith("ESC-")
-            
+
             # Verificar que se llamó al alert manager
             mock_alert_manager.send_alert.assert_called_once()
             call_args = mock_alert_manager.send_alert.call_args[0][0]
             assert call_args["metric"] == "conversation_escalation"
             assert call_args["level"] == "warning"
             assert call_args["user_id"] == "+34612345678"
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_nlp_failure(
-        self,
-        orchestrator,
-        sample_message,
-        sample_session
-    ):
+    async def test_escalate_nlp_failure(self, orchestrator, sample_message, sample_session):
         """Test: Escalamiento por fallo de NLP"""
-        with patch('app.services.orchestrator.alert_manager') as mock_alert_manager:
+        with patch("app.services.orchestrator.alert_manager") as mock_alert_manager:
             mock_alert_manager.send_alert = AsyncMock()
-            
+
             result = await orchestrator._escalate_to_staff(
-                message=sample_message,
-                reason="nlp_failure",
-                intent="unknown",
-                session_data=sample_session
+                message=sample_message, reason="nlp_failure", intent="unknown", session_data=sample_session
             )
-            
+
             assert result["escalated"] is True
             assert "content" in result
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_updates_session(
-        self,
-        orchestrator,
-        mock_session_manager,
-        sample_message,
-        sample_session
-    ):
+    async def test_escalate_updates_session(self, orchestrator, mock_session_manager, sample_message, sample_session):
         """Test: Escalamiento actualiza la sesión correctamente"""
-        with patch('app.services.orchestrator.alert_manager'):
-            result = await orchestrator._escalate_to_staff(
+        with patch("app.services.orchestrator.alert_manager"):
+            await orchestrator._escalate_to_staff(
                 message=sample_message,
                 reason="urgent_after_hours",
                 intent="modificar_reserva",
-                session_data=sample_session
+                session_data=sample_session,
             )
-            
+
             # Verificar que se guardó la sesión
             mock_session_manager.save_session.assert_called_once()
             call_args = mock_session_manager.save_session.call_args
-            
+
             # Verificar que la sesión tiene los flags de escalamiento
             saved_data = call_args[1]["data"]
             assert saved_data["escalated"] is True
             assert "escalation_timestamp" in saved_data
             assert saved_data["escalation_reason"] == "urgent_after_hours"
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_handles_alert_failure(
-        self,
-        orchestrator,
-        sample_message,
-        sample_session,
-        caplog
-    ):
+    async def test_escalate_handles_alert_failure(self, orchestrator, sample_message, sample_session, caplog):
         """Test: Manejo de fallo al enviar alerta"""
-        with patch('app.services.orchestrator.alert_manager') as mock_alert_manager:
+        with patch("app.services.orchestrator.alert_manager") as mock_alert_manager:
             mock_alert_manager.send_alert = AsyncMock(side_effect=Exception("Network error"))
-            
+
             # No debe fallar aunque la alerta falle
             result = await orchestrator._escalate_to_staff(
                 message=sample_message,
                 reason="urgent_after_hours",
                 intent="modificar_reserva",
-                session_data=sample_session
+                session_data=sample_session,
             )
-            
+
             # Debe retornar respuesta válida
             assert result["escalated"] is True
-            
+
             # Debe haber loggeado el error
             assert "alert_send_failed" in caplog.text
-    
+
     @pytest.mark.asyncio
     async def test_escalate_handles_session_save_failure(
-        self,
-        orchestrator,
-        mock_session_manager,
-        sample_message,
-        sample_session,
-        caplog
+        self, orchestrator, mock_session_manager, sample_message, sample_session, caplog
     ):
         """Test: Manejo de fallo al guardar sesión"""
         mock_session_manager.save_session = AsyncMock(side_effect=Exception("DB error"))
-        
-        with patch('app.services.orchestrator.alert_manager'):
+
+        with patch("app.services.orchestrator.alert_manager"):
             # No debe fallar aunque el guardado de sesión falle
             result = await orchestrator._escalate_to_staff(
                 message=sample_message,
                 reason="urgent_after_hours",
                 intent="modificar_reserva",
-                session_data=sample_session
+                session_data=sample_session,
             )
-            
+
             # Debe retornar respuesta válida
             assert result["escalated"] is True
-            
+
             # Debe haber loggeado el error
             assert "session_save_failed" in caplog.text
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_includes_context(
-        self,
-        orchestrator,
-        sample_message,
-        sample_session
-    ):
+    async def test_escalate_includes_context(self, orchestrator, sample_message, sample_session):
         """Test: El escalamiento incluye contexto completo"""
-        with patch('app.services.orchestrator.alert_manager') as mock_alert_manager:
+        with patch("app.services.orchestrator.alert_manager") as mock_alert_manager:
             mock_alert_manager.send_alert = AsyncMock()
-            
+
             sample_message.tenant_id = "hotel-123"
-            
+
             await orchestrator._escalate_to_staff(
                 message=sample_message,
                 reason="urgent_after_hours",
                 intent="modificar_reserva",
-                session_data=sample_session
+                session_data=sample_session,
             )
-            
+
             # Verificar contexto en la alerta
             call_args = mock_alert_manager.send_alert.call_args[0][0]
             context = call_args["context"]
-            
+
             assert context["user_id"] == "+34612345678"
             assert context["channel"] == "whatsapp"
             assert context["intent"] == "modificar_reserva"
@@ -233,27 +197,19 @@ class TestEscalateToStaff:
             assert "session_history" in context
             assert len(context["session_history"]) <= 5  # Últimos 5 mensajes
             assert context["metadata"]["tenant_id"] == "hotel-123"
-    
+
     @pytest.mark.asyncio
-    async def test_escalate_different_reasons(
-        self,
-        orchestrator,
-        sample_message,
-        sample_session
-    ):
+    async def test_escalate_different_reasons(self, orchestrator, sample_message, sample_session):
         """Test: Diferentes razones generan respuestas apropiadas"""
-        with patch('app.services.orchestrator.alert_manager'):
+        with patch("app.services.orchestrator.alert_manager"):
             # Test cada razón
             reasons = ["urgent_after_hours", "nlp_failure", "critical_error"]
-            
+
             for reason in reasons:
                 result = await orchestrator._escalate_to_staff(
-                    message=sample_message,
-                    reason=reason,
-                    intent="test",
-                    session_data=sample_session
+                    message=sample_message, reason=reason, intent="test", session_data=sample_session
                 )
-                
+
                 assert result["escalated"] is True
                 assert "content" in result
                 assert len(result["content"]) > 0  # Debe tener mensaje
@@ -262,19 +218,14 @@ class TestEscalateToStaff:
 @pytest.mark.asyncio
 async def test_escalate_metrics_recorded(orchestrator, sample_message, sample_session):
     """Test: Métricas de Prometheus se registran correctamente"""
-    with patch('app.services.orchestrator.alert_manager'), \
-         patch('app.services.orchestrator.escalations_total') as mock_counter:
-        
+    with (
+        patch("app.services.orchestrator.alert_manager"),
+        patch("app.services.orchestrator.escalations_total") as mock_counter,
+    ):
         await orchestrator._escalate_to_staff(
-            message=sample_message,
-            reason="urgent_after_hours",
-            intent="test",
-            session_data=sample_session
+            message=sample_message, reason="urgent_after_hours", intent="test", session_data=sample_session
         )
-        
+
         # Verificar que se incrementó el contador
-        mock_counter.labels.assert_called_once_with(
-            reason="urgent_after_hours",
-            channel="whatsapp"
-        )
+        mock_counter.labels.assert_called_once_with(reason="urgent_after_hours", channel="whatsapp")
         mock_counter.labels.return_value.inc.assert_called_once()

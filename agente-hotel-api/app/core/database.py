@@ -21,16 +21,18 @@ engine_kwargs = {
 
 # Additional production optimizations
 if settings.environment == Environment.PROD:
-    engine_kwargs.update({
-        "pool_recycle": 1800,  # More aggressive recycling in production
-        "pool_timeout": 30,     # Timeout waiting for connection
-        "connect_args": {
-            "server_settings": {
-                "jit": "off",  # Disable JIT for consistent performance
-                "application_name": f"hotel_agent_{settings.environment.value}"
-            }
+    engine_kwargs.update(
+        {
+            "pool_recycle": 1800,  # More aggressive recycling in production
+            "pool_timeout": 30,  # Timeout waiting for connection
+            "connect_args": {
+                "server_settings": {
+                    "jit": "off",  # Disable JIT for consistent performance
+                    "application_name": f"hotel_agent_{settings.environment.value}",
+                }
+            },
         }
-    })
+    )
 
 engine = create_async_engine(POSTGRES_URL, **engine_kwargs)
 

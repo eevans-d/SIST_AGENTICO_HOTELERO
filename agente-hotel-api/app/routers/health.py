@@ -51,8 +51,8 @@ async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redi
     pms_required = bool(getattr(settings, "check_pms_in_readiness", False))
     pms_type = getattr(settings, "pms_type", None)
     # Use .value to get the actual enum value (e.g., "mock" instead of "PMSType.MOCK")
-    pms_type_value = pms_type.value if hasattr(pms_type, 'value') else str(pms_type).lower()
-    
+    pms_type_value = pms_type.value if hasattr(pms_type, "value") else str(pms_type).lower()
+
     if not pms_required or pms_type_value == "mock":
         checks["pms"] = True
     else:

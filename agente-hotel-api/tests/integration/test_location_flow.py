@@ -10,7 +10,7 @@ Flujo completo:
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.unified_message import UnifiedMessage
@@ -33,7 +33,7 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
@@ -41,11 +41,7 @@ class TestLocationFlowE2E:
 
         # Mensaje del usuario
         message = UnifiedMessage(
-            user_id="5491112345678",
-            texto="¿dónde están ubicados?",
-            canal="whatsapp",
-            tipo="text",
-            metadata={}
+            user_id="5491112345678", texto="¿dónde están ubicados?", canal="whatsapp", tipo="text", metadata={}
         )
 
         # Act
@@ -53,12 +49,12 @@ class TestLocationFlowE2E:
 
         # Assert
         assert result is not None
-        
+
         # Verificar que es una respuesta de tipo location
         if "response_type" in result:
             assert result["response_type"] == "location"
             content = result.get("content", {})
-            
+
             # Verificar que tiene las coordenadas correctas
             assert "latitude" in content
             assert "longitude" in content
@@ -75,7 +71,7 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
@@ -89,25 +85,19 @@ class TestLocationFlowE2E:
             "direccion del hotel",
             "donde estan?",
             "pin de ubicacion",
-            "mostrame donde quedan"
+            "mostrame donde quedan",
         ]
 
         for phrase in test_phrases:
             # Arrange
-            message = UnifiedMessage(
-                user_id="5491112345678",
-                texto=phrase,
-                canal="whatsapp",
-                tipo="text",
-                metadata={}
-            )
+            message = UnifiedMessage(user_id="5491112345678", texto=phrase, canal="whatsapp", tipo="text", metadata={})
 
             # Act
             result = await orchestrator.handle_unified_message(message)
 
             # Assert
             assert result is not None, f"Failed for phrase: {phrase}"
-            
+
             # Puede retornar respuesta de texto o location dependiendo de la confianza del NLP
             if "response_type" in result and result["response_type"] == "location":
                 content = result.get("content", {})
@@ -122,20 +112,19 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
         # Mock del procesador de audio para STT
-        with patch('app.services.orchestrator.AudioProcessor') as MockAudioProcessor:
+        with patch("app.services.orchestrator.AudioProcessor") as MockAudioProcessor:
             mock_audio_processor = MockAudioProcessor.return_value
-            mock_audio_processor.transcribe_whatsapp_audio = AsyncMock(return_value={
-                "text": "¿dónde están ubicados?",
-                "confidence": 0.95
-            })
-            
+            mock_audio_processor.transcribe_whatsapp_audio = AsyncMock(
+                return_value={"text": "¿dónde están ubicados?", "confidence": 0.95}
+            )
+
             orchestrator.audio_processor = mock_audio_processor
 
             # Mensaje de audio del usuario
@@ -145,7 +134,7 @@ class TestLocationFlowE2E:
                 canal="whatsapp",
                 tipo="audio",
                 media_url="https://example.com/audio/test.ogg",
-                metadata={}
+                metadata={},
             )
 
             # Act
@@ -153,11 +142,11 @@ class TestLocationFlowE2E:
 
             # Assert
             assert result is not None
-            
+
             # Para audio, debería retornar audio_with_location
             if "response_type" in result:
                 assert result["response_type"] in ["location", "audio_with_location"]
-                
+
                 if result["response_type"] == "audio_with_location":
                     content = result.get("content", {})
                     assert "location" in content
@@ -170,18 +159,17 @@ class TestLocationFlowE2E:
         """Test: Integración con cliente WhatsApp (mock API)."""
         # Arrange
         from app.services.whatsapp_client import WhatsAppMetaClient
-        
+
         whatsapp_client = WhatsAppMetaClient()
-        
+
         # Mock de la respuesta HTTP
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "messaging_product": "whatsapp",
-            "messages": [{"id": "wamid.integration_test"}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={"messaging_product": "whatsapp", "messages": [{"id": "wamid.integration_test"}]}
+        )
 
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Act
@@ -190,13 +178,13 @@ class TestLocationFlowE2E:
                 latitude=settings.hotel_latitude,
                 longitude=settings.hotel_longitude,
                 name=settings.hotel_name,
-                address=settings.hotel_address
+                address=settings.hotel_address,
             )
 
             # Assert
             assert result is not None
             assert result["messages"][0]["id"] == "wamid.integration_test"
-            
+
             # Verificar que se envió al endpoint correcto
             call_args = mock_post.call_args
             assert f"{whatsapp_client.phone_number_id}/messages" in str(call_args)
@@ -209,21 +197,17 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
         user_id = "5491112345678"
-        
+
         # Mensaje del usuario
         message = UnifiedMessage(
-            user_id=user_id,
-            texto="mandame la ubicacion",
-            canal="whatsapp",
-            tipo="text",
-            metadata={}
+            user_id=user_id, texto="mandame la ubicacion", canal="whatsapp", tipo="text", metadata={}
         )
 
         # Act
@@ -231,7 +215,7 @@ class TestLocationFlowE2E:
 
         # Assert
         assert result is not None
-        
+
         # Verificar que existe sesión para el usuario
         session = await session_manager.get_or_create_session(user_id, "whatsapp")
         assert session is not None
@@ -245,19 +229,18 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        from app.services.nlp_engine import NLPEngine
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
         # Mock del NLP con baja confianza
-        with patch.object(orchestrator.nlp_engine, 'process_message', new_callable=AsyncMock) as mock_nlp:
+        with patch.object(orchestrator.nlp_engine, "process_message", new_callable=AsyncMock) as mock_nlp:
             mock_nlp.return_value = {
                 "intent": {"name": "ask_location", "confidence": 0.40},  # Baja confianza
                 "entities": [],
-                "language": "es"
+                "language": "es",
             }
 
             # Mensaje ambiguo
@@ -266,7 +249,7 @@ class TestLocationFlowE2E:
                 texto="donde?",  # Muy ambiguo
                 canal="whatsapp",
                 tipo="text",
-                metadata={}
+                metadata={},
             )
 
             # Act
@@ -274,7 +257,7 @@ class TestLocationFlowE2E:
 
             # Assert
             assert result is not None
-            
+
             # Con baja confianza, podría pedir aclaración en vez de enviar ubicación
             # El comportamiento exacto depende de los thresholds configurados
 
@@ -286,7 +269,7 @@ class TestLocationFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
@@ -301,13 +284,7 @@ class TestLocationFlowE2E:
 
         for text, expected_lang in test_cases:
             # Arrange
-            message = UnifiedMessage(
-                user_id="5491112345678",
-                texto=text,
-                canal="whatsapp",
-                tipo="text",
-                metadata={}
-            )
+            message = UnifiedMessage(user_id="5491112345678", texto=text, canal="whatsapp", tipo="text", metadata={})
 
             # Act
             result = await orchestrator.handle_unified_message(message)

@@ -23,7 +23,7 @@ def mock_redis_client():
     redis_mock.get = AsyncMock(return_value=None)
     redis_mock.set = AsyncMock(return_value=True)
     redis_mock.delete = AsyncMock(return_value=True)
-    
+
     return redis_mock
 
 
@@ -31,30 +31,30 @@ def mock_redis_client():
 def mock_multilingual_processor():
     """Mock para procesador multilingüe."""
     processor_mock = AsyncMock(spec=MultilingualProcessor)
-    
+
     # Configurar respuestas de detección de idioma
-    processor_mock.detect_language = AsyncMock(return_value={
-        "language": "es", 
-        "confidence": 0.9, 
-        "method": "heuristic"
-    })
-    
+    processor_mock.detect_language = AsyncMock(
+        return_value={"language": "es", "confidence": 0.9, "method": "heuristic"}
+    )
+
     # Configurar respuestas de procesamiento
-    processor_mock.process_text = AsyncMock(return_value={
-        "intent": {"name": "check_availability", "confidence": 0.85},
-        "entities": [
-            {
-                "entity": "check_in_date",
-                "value": "2025-10-15",
-                "start": 20,
-                "end": 29,
-                "confidence": 0.92,
-                "extractor": "DIETClassifier"
-            }
-        ],
-        "language": "es"
-    })
-    
+    processor_mock.process_text = AsyncMock(
+        return_value={
+            "intent": {"name": "check_availability", "confidence": 0.85},
+            "entities": [
+                {
+                    "entity": "check_in_date",
+                    "value": "2025-10-15",
+                    "start": 20,
+                    "end": 29,
+                    "confidence": 0.92,
+                    "extractor": "DIETClassifier",
+                }
+            ],
+            "language": "es",
+        }
+    )
+
     return processor_mock
 
 
@@ -62,7 +62,7 @@ def mock_multilingual_processor():
 def mock_conversational_memory():
     """Mock para memoria conversacional."""
     memory_mock = AsyncMock(spec=ConversationalMemory)
-    
+
     # Configurar respuestas
     memory_mock.get_conversation_language = AsyncMock(return_value="es")
     memory_mock.resolve_anaphora = AsyncMock(
@@ -71,7 +71,7 @@ def mock_conversational_memory():
     memory_mock.is_follow_up_question = AsyncMock(return_value=False)
     memory_mock.get_relevant_entities = AsyncMock(return_value={})
     memory_mock.store_context = AsyncMock(return_value=None)
-    
+
     return memory_mock
 
 
@@ -79,14 +79,14 @@ def mock_conversational_memory():
 def nlp_engine(mock_redis_client, mock_multilingual_processor, mock_conversational_memory):
     """Crea una instancia de EnhancedNLPEngine con mocks."""
     engine = EnhancedNLPEngine(model_path="/fake/path/model.tar.gz", cache_enabled=True)
-    
+
     # Inyectar dependencias mockeadas
     engine.redis = mock_redis_client
     engine._redis_initialized = True
     engine._multilingual_processor = mock_multilingual_processor
     engine._conversational_memory = mock_conversational_memory
     engine.model_version = "test-20251005"
-    
+
     return engine
 
 
@@ -95,10 +95,10 @@ async def test_process_message_basic(nlp_engine):
     """Prueba el procesamiento básico de mensajes."""
     # Configurar datos de prueba
     text = "¿Hay habitaciones disponibles?"
-    
+
     # Ejecutar
     result = await nlp_engine.process_message(text)
-    
+
     # Verificar
     assert result["intent"]["name"] == "check_availability"
     assert result["intent"]["confidence"] == 0.85
@@ -119,23 +119,23 @@ async def test_process_message_with_cache(nlp_engine, mock_redis_client):
         "entities": [],
         "text": text,
         "model_version": "test-cache",
-        "language": "es"
+        "language": "es",
     }
-    
+
     # Configurar mock de Redis para devolver respuesta cacheada
     mock_redis_client.get.return_value = json.dumps(cached_response)
-    
+
     # Ejecutar
     result = await nlp_engine.process_message(text)
-    
+
     # Verificar
     assert result["intent"]["name"] == "check_availability"
     assert result["intent"]["confidence"] == 0.92
     assert result["model_version"] == "test-cache"
-    
+
     # Verificar que se consultó la caché
     mock_redis_client.get.assert_called_once()
-    
+
     # Verificar que no se procesó el mensaje
     nlp_engine._multilingual_processor.process_text.assert_not_called()
 
@@ -147,29 +147,26 @@ async def test_process_message_with_context(nlp_engine, mock_conversational_memo
     text = "Y para esas fechas, ¿qué precio tiene?"
     user_id = "user123"
     channel = "whatsapp"
-    
+
     # Configurar mock de memoria conversacional para simular resolución anafórica
     mock_conversational_memory.resolve_anaphora = AsyncMock(
         return_value="Y para el 10 al 15 de octubre, ¿qué precio tiene?"
     )
     mock_conversational_memory.is_follow_up_question = AsyncMock(return_value=True)
-    mock_conversational_memory.get_relevant_entities = AsyncMock(return_value={
-        "check_in_date": "2025-10-10",
-        "check_out_date": "2025-10-15"
-    })
-    
+    mock_conversational_memory.get_relevant_entities = AsyncMock(
+        return_value={"check_in_date": "2025-10-10", "check_out_date": "2025-10-15"}
+    )
+
     # Ejecutar
     result = await nlp_engine.process_message(text, user_id, channel)
-    
+
     # Verificar
     assert "context_used" in result
     assert result["context_used"] is True
-    
+
     # Verificar que se llamó al resolver anafórico
-    mock_conversational_memory.resolve_anaphora.assert_called_once_with(
-        user_id, text, channel, None
-    )
-    
+    mock_conversational_memory.resolve_anaphora.assert_called_once_with(user_id, text, channel, None)
+
     # Verificar que se guardó el contexto
     mock_conversational_memory.store_context.assert_called_once()
 
@@ -179,30 +176,26 @@ async def test_process_message_with_language_detection(nlp_engine, mock_multilin
     """Prueba la detección de idioma en el procesamiento."""
     # Configurar datos de prueba
     text = "Do you have any rooms available?"
-    
+
     # Configurar mock para simular detección de inglés
-    mock_multilingual_processor.detect_language = AsyncMock(return_value={
-        "language": "en", 
-        "confidence": 0.95, 
-        "method": "fasttext"
-    })
-    
+    mock_multilingual_processor.detect_language = AsyncMock(
+        return_value={"language": "en", "confidence": 0.95, "method": "fasttext"}
+    )
+
     # Configurar mock para resultado en inglés
-    mock_multilingual_processor.process_text = AsyncMock(return_value={
-        "intent": {"name": "check_availability", "confidence": 0.82},
-        "entities": [],
-        "language": "en"
-    })
-    
+    mock_multilingual_processor.process_text = AsyncMock(
+        return_value={"intent": {"name": "check_availability", "confidence": 0.82}, "entities": [], "language": "en"}
+    )
+
     # Ejecutar
     result = await nlp_engine.process_message(text)
-    
+
     # Verificar
     assert result["language"] == "en"
-    
+
     # Verificar que se llamó al detector de idioma
     mock_multilingual_processor.detect_language.assert_called_once_with(text)
-    
+
     # Verificar que se procesó con el idioma detectado
     mock_multilingual_processor.process_text.assert_called_once()
     args, kwargs = mock_multilingual_processor.process_text.call_args
@@ -220,8 +213,8 @@ async def test_handle_low_confidence(nlp_engine):
             "language": "es",
             "expected": {
                 "response": "Disculpa, no estoy seguro de entender tu consulta. ¿Podrías reformularla o te conecto con un representante?",
-                "requires_human": True
-            }
+                "requires_human": True,
+            },
         },
         # Baja confianza → mostrar menú
         {
@@ -229,17 +222,13 @@ async def test_handle_low_confidence(nlp_engine):
             "language": "es",
             "expected": {
                 "response": "¿En qué puedo ayudarte?\n1️⃣ Consultar disponibilidad\n2️⃣ Hacer una reserva\n3️⃣ Modificar/cancelar reserva\n4️⃣ Información del hotel (precios, servicios, ubicación)\n5️⃣ Hablar con recepción",
-                "requires_human": False
-            }
+                "requires_human": False,
+            },
         },
         # Alta confianza → ninguna acción especial
-        {
-            "intent": {"name": "check_availability", "confidence": 0.8},
-            "language": "es",
-            "expected": None
-        },
+        {"intent": {"name": "check_availability", "confidence": 0.8}, "language": "es", "expected": None},
     ]
-    
+
     # Probar cada caso
     for case in test_cases:
         result = await nlp_engine.handle_low_confidence(case["intent"], case["language"])
@@ -255,34 +244,22 @@ async def test_fallback_response(nlp_engine):
         {
             "text": "necesito saber si hay habitaciones disponibles",
             "language": "es",
-            "expected_intent": "check_availability"
+            "expected_intent": "check_availability",
         },
         # Español - make_reservation
         {
             "text": "quiero hacer una reserva para este fin de semana",
             "language": "es",
-            "expected_intent": "make_reservation"
+            "expected_intent": "make_reservation",
         },
         # Inglés - pricing_info
-        {
-            "text": "how much does it cost per night?",
-            "language": "en",
-            "expected_intent": "pricing_info"
-        },
+        {"text": "how much does it cost per night?", "language": "en", "expected_intent": "pricing_info"},
         # Portugués - ask_location
-        {
-            "text": "onde está localizado o hotel?",
-            "language": "pt",
-            "expected_intent": "ask_location"
-        },
+        {"text": "onde está localizado o hotel?", "language": "pt", "expected_intent": "ask_location"},
         # Sin coincidencia
-        {
-            "text": "xyz123",
-            "language": "es",
-            "expected_intent": "unknown"
-        }
+        {"text": "xyz123", "language": "es", "expected_intent": "unknown"},
     ]
-    
+
     # Probar cada caso
     for case in test_cases:
         result = nlp_engine._fallback_response(case["text"], case["language"])
@@ -296,19 +273,19 @@ async def test_circuit_breaker_behavior(nlp_engine, mock_multilingual_processor)
     """Prueba el comportamiento del circuit breaker."""
     # Configurar mock para fallar
     mock_multilingual_processor.process_text = AsyncMock(side_effect=Exception("Test error"))
-    
+
     # Ejecutar varias veces para disparar el circuit breaker
     for _ in range(4):  # Threshold es 3
         result = await nlp_engine.process_message("prueba")
         assert "fallback" in result
-    
+
     # Verificar que el circuit breaker está abierto
     assert nlp_engine.circuit_breaker.state.name == "OPEN"
-    
+
     # Verificar que ahora usa fallback directamente sin llamar al processor
     mock_multilingual_processor.process_text.reset_mock()
     result = await nlp_engine.process_message("otra prueba")
-    
+
     assert "fallback" in result
     mock_multilingual_processor.process_text.assert_not_called()
 
@@ -317,7 +294,7 @@ async def test_circuit_breaker_behavior(nlp_engine, mock_multilingual_processor)
 async def test_model_info(nlp_engine):
     """Prueba la obtención de información del modelo."""
     info = nlp_engine.get_model_info()
-    
+
     # Verificar información básica
     assert info["model_path"] == "/fake/path/model.tar.gz"
     assert info["model_version"] == "test-20251005"
@@ -326,7 +303,7 @@ async def test_model_info(nlp_engine):
     assert "en" in info["languages"]
     assert "pt" in info["languages"]
     assert info["contextual_memory"] is True
-    
+
     # Verificar estadísticas
     assert "stats" in info
     assert "processed_messages" in info["stats"]

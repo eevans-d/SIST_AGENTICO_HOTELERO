@@ -28,38 +28,38 @@ class TestBusinessMetrics:
         value = 150.0
         nights = 2
         lead_time_days = 7
-        
+
         # Act
         try:
             record_reservation(status, channel, room_type, value, nights, lead_time_days)
             success = True
         except Exception:
             success = False
-        
+
         # Assert
         assert success, "record_reservation should not raise exception with valid data"
 
     def test_record_reservation_with_different_room_types(self):
         """Test record_reservation con diferentes tipos de habitación."""
         room_types = ["standard", "deluxe", "suite"]
-        
+
         for room_type in room_types:
             try:
                 record_reservation("confirmed", "whatsapp", room_type, 100.0, 2, 7)
                 success = True
             except Exception:
                 success = False
-            
+
             assert success, f"record_reservation should work with room_type={room_type}"
 
     def test_failed_reservations_counter(self):
         """Test que failed_reservations incrementa correctamente."""
         # Arrange
         initial_value = failed_reservations._value.get()
-        
+
         # Act
         failed_reservations.inc()
-        
+
         # Assert
         new_value = failed_reservations._value.get()
         assert new_value > initial_value, "failed_reservations counter should increment"
@@ -69,7 +69,7 @@ class TestBusinessMetrics:
         # Arrange
         intents = ["check_availability", "make_reservation", "pricing_info"]
         confidence_levels = ["high", "medium", "low"]
-        
+
         # Act & Assert
         for intent in intents:
             for confidence in confidence_levels:
@@ -78,17 +78,17 @@ class TestBusinessMetrics:
                     success = True
                 except Exception:
                     success = False
-                
+
                 assert success, f"intents_detected should work with intent={intent}, confidence={confidence}"
 
     def test_nlp_fallbacks_increment(self):
         """Test que nlp_fallbacks puede incrementar."""
         # Arrange
         initial = nlp_fallbacks._value.get()
-        
+
         # Act
         nlp_fallbacks.inc()
-        
+
         # Assert
         new_value = nlp_fallbacks._value.get()
         assert new_value > initial, "nlp_fallbacks should increment"
@@ -97,7 +97,7 @@ class TestBusinessMetrics:
         """Test messages_by_channel con diferentes canales."""
         # Arrange
         channels = ["whatsapp", "gmail", "telegram"]
-        
+
         # Act & Assert
         for channel in channels:
             try:
@@ -105,7 +105,7 @@ class TestBusinessMetrics:
                 success = True
             except Exception:
                 success = False
-            
+
             assert success, f"messages_by_channel should work with channel={channel}"
 
     def test_update_operational_metrics(self):
@@ -116,12 +116,12 @@ class TestBusinessMetrics:
                 current_occupancy=75.5,
                 rooms_available={"standard": 10, "deluxe": 5, "suite": 2},
                 daily_rev=5000.0,
-                adr=125.0
+                adr=125.0,
             )
             success = True
         except Exception:
             success = False
-        
+
         # Assert
         assert success, "update_operational_metrics should execute without errors"
 
@@ -136,7 +136,7 @@ class TestBusinessMetrics:
             except Exception:
                 success = False
             assert success, f"Should handle status={status}"
-        
+
         # Test con precio 0
         try:
             record_reservation("confirmed", "whatsapp", "standard", 0.0, 2, 7)
@@ -144,7 +144,7 @@ class TestBusinessMetrics:
         except Exception:
             success = False
         assert success, "Should handle 0 value"
-        
+
         # Test con 0 noches
         try:
             record_reservation("confirmed", "whatsapp", "standard", 100.0, 0, 7)
@@ -153,12 +153,15 @@ class TestBusinessMetrics:
             success = False
         assert success, "Should handle 0 nights"
 
-    @pytest.mark.parametrize("status,channel,room_type,value,nights,lead_time", [
-        ("confirmed", "whatsapp", "standard", 75.0, 1, 3),
-        ("confirmed", "gmail", "deluxe", 150.0, 2, 7),
-        ("pending", "whatsapp", "suite", 300.0, 3, 14),
-        ("confirmed", "gmail", "presidential", 500.0, 5, 30),
-    ])
+    @pytest.mark.parametrize(
+        "status,channel,room_type,value,nights,lead_time",
+        [
+            ("confirmed", "whatsapp", "standard", 75.0, 1, 3),
+            ("confirmed", "gmail", "deluxe", 150.0, 2, 7),
+            ("pending", "whatsapp", "suite", 300.0, 3, 14),
+            ("confirmed", "gmail", "presidential", 500.0, 5, 30),
+        ],
+    )
     def test_record_reservation_parametrized(self, status, channel, room_type, value, nights, lead_time):
         """Test parametrizado para diferentes combinaciones."""
         try:
@@ -166,5 +169,5 @@ class TestBusinessMetrics:
             success = True
         except Exception:
             success = False
-        
+
         assert success, f"Should work with status={status}, channel={channel}, room_type={room_type}"

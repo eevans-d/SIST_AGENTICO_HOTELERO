@@ -5,9 +5,6 @@ Este test verifica el ciclo completo: WhatsApp Audio → STT → NLP → PMS →
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import tempfile
-import os
-from pathlib import Path
 
 from app.services.orchestrator import Orchestrator
 from app.services.pms_adapter import MockPMSAdapter
@@ -24,13 +21,13 @@ def orchestrator():
     pms_adapter = MockPMSAdapter(mock_redis)
     session_manager = AsyncMock(spec=SessionManager)
     lock_service = AsyncMock(spec=LockService)
-    
+
     # Crear orquestador
     orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
-    
+
     # Configurar el audio processor para modo mock
     orchestrator.audio_processor.stt._model_loaded = "mock"
-    
+
     return orchestrator
 
 
@@ -45,14 +42,8 @@ def audio_message():
         tipo="audio",
         texto=None,
         media_url="https://mock-whatsapp-media.com/audio123.ogg",
-        metadata={
-            "audio": {
-                "id": "audio123",
-                "mime_type": "audio/ogg",
-                "media_id": "media123456"
-            }
-        },
-        tenant_id="hotel_test"
+        metadata={"audio": {"id": "audio123", "mime_type": "audio/ogg", "media_id": "media123456"}},
+        tenant_id="hotel_test",
     )
 
 
@@ -62,39 +53,41 @@ async def test_audio_message_full_integration_flow(orchestrator, audio_message):
     Test del flujo completo de integración:
     Audio WhatsApp → STT → NLP → PMS → TTS → Response Audio
     """
-    
+
     # 1. Mock del STT (transcripción)
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.return_value = {
             "text": "Hola, quisiera saber si tienen habitaciones disponibles para este fin de semana",
             "confidence": 0.92,
             "success": True,
-            "language": "es"
+            "language": "es",
         }
-        
+
         # 2. Mock del TTS (síntesis)
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
             mock_tts.return_value = b"audio_response_data_bytes"
-            
+
             # 3. Mock de la sesión
             mock_session = MagicMock()
             mock_session.session_id = "session_123"
             orchestrator.session_manager.get_or_create_session.return_value = mock_session
-            
+
             # 4. Procesar el mensaje de audio
             result = await orchestrator.handle_unified_message(audio_message)
-            
+
             # 5. Verificar que se procesó correctamente
             assert result is not None
             assert "response" in result or "response_type" in result
-            
+
             # Verificar que se llamó a STT
             mock_stt.assert_called_once_with("https://mock-whatsapp-media.com/audio123.ogg")
-            
+
             # Verificar que el texto fue procesado por NLP
-            assert audio_message.texto == "Hola, quisiera saber si tienen habitaciones disponibles para este fin de semana"
+            assert (
+                audio_message.texto == "Hola, quisiera saber si tienen habitaciones disponibles para este fin de semana"
+            )
             assert audio_message.metadata["confidence_stt"] == 0.92
-            
+
             # Si la respuesta es de tipo audio, verificar TTS
             if result.get("response_type") == "audio":
                 mock_tts.assert_called_once()
@@ -104,32 +97,32 @@ async def test_audio_message_full_integration_flow(orchestrator, audio_message):
 @pytest.mark.asyncio
 async def test_audio_intent_detection_and_response(orchestrator, audio_message):
     """Test que verifica la detección de intents específicos desde audio."""
-    
+
     # Test para intent de disponibilidad
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.return_value = {
             "text": "¿Tienen habitaciones disponibles para dos personas?",
             "confidence": 0.89,
             "success": True,
-            "language": "es"
+            "language": "es",
         }
-        
+
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
             mock_tts.return_value = b"availability_audio_response"
-            
+
             # Mock de sesión
             mock_session = MagicMock()
             orchestrator.session_manager.get_or_create_session.return_value = mock_session
-            
+
             # Procesar mensaje
             result = await orchestrator.handle_unified_message(audio_message)
-            
+
             # Verificar que se detectó el intent correcto
             assert result is not None
-            
+
             # El texto debería haberse actualizado
             assert "habitaciones disponibles" in audio_message.texto
-            
+
             # Verificar que se generó una respuesta
             if result.get("response_type") == "audio":
                 assert "audio_data" in result["content"]
@@ -140,14 +133,14 @@ async def test_audio_intent_detection_and_response(orchestrator, audio_message):
 @pytest.mark.asyncio
 async def test_audio_error_handling_integration(orchestrator, audio_message):
     """Test del manejo de errores en el flujo de audio."""
-    
+
     # Test 1: Error en STT
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.side_effect = Exception("Error al transcribir audio")
-        
+
         mock_session = MagicMock()
         orchestrator.session_manager.get_or_create_session.return_value = mock_session
-        
+
         # Debería manejar el error graciosamente
         with pytest.raises(Exception):
             await orchestrator.handle_unified_message(audio_message)
@@ -156,25 +149,25 @@ async def test_audio_error_handling_integration(orchestrator, audio_message):
 @pytest.mark.asyncio
 async def test_audio_fallback_to_text_response(orchestrator, audio_message):
     """Test del fallback a respuesta de texto cuando TTS falla."""
-    
+
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.return_value = {
             "text": "Hola, ¿cuáles son sus precios?",
             "confidence": 0.85,
             "success": True,
-            "language": "es"
+            "language": "es",
         }
-        
+
         # Mock TTS que falla
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
             mock_tts.return_value = None  # Simular falla en TTS
-            
+
             mock_session = MagicMock()
             orchestrator.session_manager.get_or_create_session.return_value = mock_session
-            
+
             # Procesar mensaje
             result = await orchestrator.handle_unified_message(audio_message)
-            
+
             # Debería retornar respuesta de texto como fallback
             assert result is not None
             assert "response" in result or result.get("response_type") == "text"
@@ -183,33 +176,33 @@ async def test_audio_fallback_to_text_response(orchestrator, audio_message):
 @pytest.mark.asyncio
 async def test_audio_cache_integration(orchestrator, audio_message):
     """Test de integración del sistema de cache con audio."""
-    
+
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.return_value = {
             "text": "¿Dónde están ubicados?",
             "confidence": 0.91,
             "success": True,
-            "language": "es"
+            "language": "es",
         }
-        
+
         # Mock del servicio de cache a nivel de generación de audio
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
             mock_tts.return_value = b"location_audio_response"
-            
+
             mock_session = MagicMock()
             orchestrator.session_manager.get_or_create_session.return_value = mock_session
-            
+
             # Primera llamada - debería generar audio
             result1 = await orchestrator.handle_unified_message(audio_message)
-            
+
             # Verificar que se procesó
             assert result1 is not None
             assert mock_tts.call_count >= 0  # Puede no llamar TTS si no es intent de audio
-            
+
             # Segunda llamada con el mismo mensaje
             audio_message.message_id = "test_audio_msg_124"  # Nuevo ID
             result2 = await orchestrator.handle_unified_message(audio_message)
-            
+
             # Verificar que ambas respuestas son válidas
             assert result2 is not None
 
@@ -217,36 +210,36 @@ async def test_audio_cache_integration(orchestrator, audio_message):
 @pytest.mark.asyncio
 async def test_audio_multilingual_support(orchestrator):
     """Test del soporte multiidioma en el flujo de audio."""
-    
+
     # Test con mensaje en inglés
     english_message = UnifiedMessage(
         message_id="test_audio_eng_123",
-        canal="whatsapp", 
+        canal="whatsapp",
         user_id="5491123456789",
         timestamp_iso="2023-09-20T15:30:00Z",
         tipo="audio",
         texto=None,
         media_url="https://mock-whatsapp-media.com/audio_en.ogg",
-        tenant_id="hotel_test"
+        tenant_id="hotel_test",
     )
-    
+
     with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
         mock_stt.return_value = {
             "text": "Do you have rooms available for this weekend?",
             "confidence": 0.88,
             "success": True,
-            "language": "en"
+            "language": "en",
         }
-        
+
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
             mock_tts.return_value = b"english_audio_response"
-            
+
             mock_session = MagicMock()
             orchestrator.session_manager.get_or_create_session.return_value = mock_session
-            
+
             # Procesar mensaje en inglés
             result = await orchestrator.handle_unified_message(english_message)
-            
+
             # Verificar que se procesó correctamente
             assert result is not None
             assert english_message.texto == "Do you have rooms available for this weekend?"

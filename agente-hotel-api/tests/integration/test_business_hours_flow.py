@@ -6,14 +6,13 @@ Tests para el orchestrator con lógica de business hours.
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.services.orchestrator import Orchestrator
 from app.services.session_manager import SessionManager
 from app.services.lock_service import LockService
 from app.models.unified_message import UnifiedMessage
-from app.core.settings import settings
 
 
 class TestBusinessHoursIntegration:
@@ -23,7 +22,7 @@ class TestBusinessHoursIntegration:
     async def orchestrator(self):
         """Fixture que crea instancia del orchestrator."""
         from app.services.pms_adapter import get_pms_adapter
-        
+
         pms_adapter = await get_pms_adapter()
         session_manager = SessionManager()
         lock_service = LockService()
@@ -33,18 +32,14 @@ class TestBusinessHoursIntegration:
     async def test_after_hours_response_standard(self, orchestrator):
         """Test: Respuesta estándar fuera de horario."""
         # Arrange - Mensaje a las 22:00 (fuera de horario)
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch('app.utils.business_hours.datetime') as mock_datetime:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch("app.utils.business_hours.datetime") as mock_datetime:
                 # Mock weekday para que no sea fin de semana
                 mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)  # Jueves
                 mock_datetime.now.return_value.weekday.return_value = 3  # Jueves = 3
-                
+
                 message = UnifiedMessage(
-                    user_id="5491112345678",
-                    texto="¿tienen disponibilidad?",
-                    canal="whatsapp",
-                    tipo="text",
-                    metadata={}
+                    user_id="5491112345678", texto="¿tienen disponibilidad?", canal="whatsapp", tipo="text", metadata={}
                 )
 
                 # Act
@@ -53,28 +48,23 @@ class TestBusinessHoursIntegration:
                 # Assert
                 assert result is not None
                 assert "response" in result or "content" in result
-                
+
                 # Verificar que menciona horario o "fuera de horario"
                 response_text = result.get("response") or result.get("content", "")
-                assert any(keyword in response_text.lower() for keyword in 
-                          ["horario", "fuera", "mañana", "urgente"])
+                assert any(keyword in response_text.lower() for keyword in ["horario", "fuera", "mañana", "urgente"])
 
     @pytest.mark.asyncio
     async def test_after_hours_weekend_response(self, orchestrator):
         """Test: Respuesta específica para fin de semana."""
         # Arrange - Mensaje el sábado
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch('app.utils.business_hours.datetime') as mock_datetime:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch("app.utils.business_hours.datetime") as mock_datetime:
                 # Mock para sábado
                 saturday = datetime(2025, 10, 11, 22, 0)  # Sábado
                 mock_datetime.now.return_value = saturday
-                
+
                 message = UnifiedMessage(
-                    user_id="5491112345678",
-                    texto="necesito una habitación",
-                    canal="whatsapp",
-                    tipo="text",
-                    metadata={}
+                    user_id="5491112345678", texto="necesito una habitación", canal="whatsapp", tipo="text", metadata={}
                 )
 
                 # Act
@@ -83,7 +73,7 @@ class TestBusinessHoursIntegration:
                 # Assert
                 assert result is not None
                 response_text = result.get("response") or result.get("content", "")
-                
+
                 # Verificar mensaje de fin de semana
                 # Puede mencionar "fin de semana", "lunes", etc.
                 assert isinstance(response_text, str)
@@ -92,13 +82,13 @@ class TestBusinessHoursIntegration:
     async def test_urgent_keyword_escalation(self, orchestrator):
         """Test: Escalamiento cuando mensaje contiene palabra URGENTE."""
         # Arrange - Mensaje urgente fuera de horario
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(
                 user_id="5491112345678",
                 texto="URGENTE necesito una habitación",
                 canal="whatsapp",
                 tipo="text",
-                metadata={}
+                metadata={},
             )
 
             # Act
@@ -107,25 +97,20 @@ class TestBusinessHoursIntegration:
             # Assert
             assert result is not None
             response_text = result.get("response") or result.get("content", "")
-            
+
             # Verificar que menciona escalamiento o personal de guardia
-            assert any(keyword in response_text.lower() for keyword in 
-                      ["guardia", "derivando", "personal", "escalado"])
+            assert any(keyword in response_text.lower() for keyword in ["guardia", "derivando", "personal", "escalado"])
 
     @pytest.mark.asyncio
     async def test_urgent_variations_detection(self, orchestrator):
         """Test: Detección de variaciones de urgente."""
         # Arrange - Diferentes formas de urgencia
         urgent_keywords = ["urgente", "urgent", "emergency", "URGENTE"]
-        
+
         for keyword in urgent_keywords:
-            with patch('app.utils.business_hours.is_business_hours', return_value=False):
+            with patch("app.utils.business_hours.is_business_hours", return_value=False):
                 message = UnifiedMessage(
-                    user_id="5491112345678",
-                    texto=f"esto es {keyword}",
-                    canal="whatsapp",
-                    tipo="text",
-                    metadata={}
+                    user_id="5491112345678", texto=f"esto es {keyword}", canal="whatsapp", tipo="text", metadata={}
                 )
 
                 # Act
@@ -134,7 +119,7 @@ class TestBusinessHoursIntegration:
                 # Assert
                 assert result is not None, f"Failed for keyword: {keyword}"
                 response_text = result.get("response") or result.get("content", "")
-                
+
                 # Debe activar respuesta de escalamiento
                 assert isinstance(response_text, str)
 
@@ -142,13 +127,9 @@ class TestBusinessHoursIntegration:
     async def test_normal_response_during_business_hours(self, orchestrator):
         """Test: Respuesta normal durante horario comercial."""
         # Arrange - Mensaje a las 14:00 (dentro de horario)
-        with patch('app.utils.business_hours.is_business_hours', return_value=True):
+        with patch("app.utils.business_hours.is_business_hours", return_value=True):
             message = UnifiedMessage(
-                user_id="5491112345678",
-                texto="¿tienen disponibilidad?",
-                canal="whatsapp",
-                tipo="text",
-                metadata={}
+                user_id="5491112345678", texto="¿tienen disponibilidad?", canal="whatsapp", tipo="text", metadata={}
             )
 
             # Act
@@ -158,8 +139,8 @@ class TestBusinessHoursIntegration:
             assert result is not None
             # Durante horario comercial, debe procesar normalmente
             # No debe mostrar mensaje de "fuera de horario"
-            response_text = str(result.get("response", "")) + str(result.get("content", ""))
-            
+            str(result.get("response", "")) + str(result.get("content", ""))
+
             # La respuesta NO debe mencionar "fuera de horario"
             # (aunque puede mencionar otras cosas relacionadas con disponibilidad)
 
@@ -167,13 +148,9 @@ class TestBusinessHoursIntegration:
     async def test_business_hours_with_location_request(self, orchestrator):
         """Test: Solicitud de ubicación fuera de horario (debe responder)."""
         # Arrange - Ubicación no debería estar bloqueada por horario
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(
-                user_id="5491112345678",
-                texto="¿dónde están ubicados?",
-                canal="whatsapp",
-                tipo="text",
-                metadata={}
+                user_id="5491112345678", texto="¿dónde están ubicados?", canal="whatsapp", tipo="text", metadata={}
             )
 
             # Act
@@ -188,22 +165,18 @@ class TestBusinessHoursIntegration:
     async def test_after_hours_includes_next_open_time(self, orchestrator):
         """Test: Mensaje fuera de horario incluye próximo horario de apertura."""
         # Arrange
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch('app.utils.business_hours.get_next_business_open_time') as mock_next_open:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch("app.utils.business_hours.get_next_business_open_time") as mock_next_open:
                 # Mock próxima apertura a las 9:00 AM
                 next_open = datetime(2025, 10, 10, 9, 0, tzinfo=ZoneInfo("America/Argentina/Buenos_Aires"))
                 mock_next_open.return_value = next_open
-                
-                with patch('app.utils.business_hours.datetime') as mock_datetime:
+
+                with patch("app.utils.business_hours.datetime") as mock_datetime:
                     mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)
                     mock_datetime.now.return_value.weekday.return_value = 3
-                    
+
                     message = UnifiedMessage(
-                        user_id="5491112345678",
-                        texto="consulta",
-                        canal="whatsapp",
-                        tipo="text",
-                        metadata={}
+                        user_id="5491112345678", texto="consulta", canal="whatsapp", tipo="text", metadata={}
                     )
 
                     # Act
@@ -212,7 +185,7 @@ class TestBusinessHoursIntegration:
                     # Assert
                     assert result is not None
                     response_text = result.get("response") or result.get("content", "")
-                    
+
                     # Debe mencionar horario de apertura
                     assert "9" in response_text or "09:00" in response_text
 
@@ -220,18 +193,14 @@ class TestBusinessHoursIntegration:
     async def test_business_hours_logging(self, orchestrator):
         """Test: Verificar logging de verificación de horarios."""
         # Arrange
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch('app.core.logging.logger') as mock_logger:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch("app.core.logging.logger"):
                 message = UnifiedMessage(
-                    user_id="5491112345678",
-                    texto="consulta",
-                    canal="whatsapp",
-                    tipo="text",
-                    metadata={}
+                    user_id="5491112345678", texto="consulta", canal="whatsapp", tipo="text", metadata={}
                 )
 
                 # Act
-                result = await orchestrator.handle_unified_message(message)
+                await orchestrator.handle_unified_message(message)
 
                 # Assert
                 # Verificar que se registró el log de verificación de horarios
@@ -241,18 +210,18 @@ class TestBusinessHoursIntegration:
     async def test_after_hours_no_pms_call(self, orchestrator):
         """Test: Fuera de horario NO debe llamar al PMS innecesariamente."""
         # Arrange
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch.object(orchestrator.pms_adapter, 'check_availability', new_callable=AsyncMock) as mock_pms:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch.object(orchestrator.pms_adapter, "check_availability", new_callable=AsyncMock):
                 message = UnifiedMessage(
                     user_id="5491112345678",
                     texto="disponibilidad para mañana",
                     canal="whatsapp",
                     tipo="text",
-                    metadata={}
+                    metadata={},
                 )
 
                 # Act
-                result = await orchestrator.handle_unified_message(message)
+                await orchestrator.handle_unified_message(message)
 
                 # Assert
                 # Fuera de horario, no debería llamar al PMS
@@ -263,24 +232,23 @@ class TestBusinessHoursIntegration:
     async def test_business_hours_with_audio_message(self, orchestrator):
         """Test: Verificación de horarios con mensaje de audio."""
         # Arrange
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
-            with patch.object(orchestrator.audio_processor, 'transcribe_whatsapp_audio', new_callable=AsyncMock) as mock_stt:
-                mock_stt.return_value = {
-                    "text": "necesito una habitación",
-                    "confidence": 0.95
-                }
-                
-                with patch('app.utils.business_hours.datetime') as mock_datetime:
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
+            with patch.object(
+                orchestrator.audio_processor, "transcribe_whatsapp_audio", new_callable=AsyncMock
+            ) as mock_stt:
+                mock_stt.return_value = {"text": "necesito una habitación", "confidence": 0.95}
+
+                with patch("app.utils.business_hours.datetime") as mock_datetime:
                     mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)
                     mock_datetime.now.return_value.weekday.return_value = 3
-                    
+
                     message = UnifiedMessage(
                         user_id="5491112345678",
                         texto=None,
                         canal="whatsapp",
                         tipo="audio",
                         media_url="https://example.com/audio.ogg",
-                        metadata={}
+                        metadata={},
                     )
 
                     # Act
@@ -295,15 +263,11 @@ class TestBusinessHoursIntegration:
     async def test_timezone_aware_business_hours(self, orchestrator):
         """Test: Verificación de horarios es timezone-aware."""
         # Arrange - Usar timezone de Buenos Aires
-        with patch('app.utils.business_hours.is_business_hours') as mock_is_hours:
+        with patch("app.utils.business_hours.is_business_hours") as mock_is_hours:
             mock_is_hours.return_value = False
-            
+
             message = UnifiedMessage(
-                user_id="5491112345678",
-                texto="consulta",
-                canal="whatsapp",
-                tipo="text",
-                metadata={}
+                user_id="5491112345678", texto="consulta", canal="whatsapp", tipo="text", metadata={}
             )
 
             # Act
@@ -318,13 +282,13 @@ class TestBusinessHoursIntegration:
     async def test_multiple_urgent_keywords_in_message(self, orchestrator):
         """Test: Múltiples keywords urgentes en un mensaje."""
         # Arrange
-        with patch('app.utils.business_hours.is_business_hours', return_value=False):
+        with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(
                 user_id="5491112345678",
                 texto="URGENTE emergency necesito habitación",
                 canal="whatsapp",
                 tipo="text",
-                metadata={}
+                metadata={},
             )
 
             # Act
@@ -333,7 +297,7 @@ class TestBusinessHoursIntegration:
             # Assert
             assert result is not None
             response_text = result.get("response") or result.get("content", "")
-            
+
             # Debe detectar urgencia y escalar
             assert isinstance(response_text, str)
             assert len(response_text) > 0

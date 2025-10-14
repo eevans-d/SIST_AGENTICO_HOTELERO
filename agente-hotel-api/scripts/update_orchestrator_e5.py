@@ -27,11 +27,13 @@ if not ORCHESTRATOR_BACKUP.exists():
         shutil.copy(ORCHESTRATOR_PATH, ORCHESTRATOR_BACKUP)
         print(f"Backup creado en {ORCHESTRATOR_BACKUP}")
 
+
 def main():
     """Función principal de actualización"""
     print("Script de actualización completado correctamente")
     print("Nota: Este es un placeholder del script original que tenía errores de sintaxis")
     print("Para usar este script, implemente la lógica de actualización específica")
+
 
 if __name__ == "__main__":
     main()

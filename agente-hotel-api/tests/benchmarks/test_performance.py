@@ -1,4 +1,5 @@
 """Performance benchmarks for critical paths."""
+
 import pytest
 from httpx import AsyncClient
 
@@ -49,7 +50,7 @@ def test_pydantic_validation_performance(benchmark):
             timestamp_iso=datetime.now().isoformat(),
             tipo="text",
             texto="Hola, quiero hacer una reserva para 2 personas",
-            metadata={"tenant_id": "default"}
+            metadata={"tenant_id": "default"},
         )
 
     result = benchmark(validate_message)

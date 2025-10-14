@@ -4,7 +4,7 @@ Feature 1: Compartir Ubicación del Hotel
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 from app.services.whatsapp_client import WhatsAppMetaClient
 from app.core.settings import settings
 
@@ -30,33 +30,28 @@ class TestWhatsAppLocation:
         # Mock de la respuesta HTTP
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "messaging_product": "whatsapp",
-            "messages": [{"id": "wamid.test123"}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={"messaging_product": "whatsapp", "messages": [{"id": "wamid.test123"}]}
+        )
 
         # Mock del cliente HTTP
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Act
             result = await whatsapp_client.send_location(
-                to=to,
-                latitude=latitude,
-                longitude=longitude,
-                name=name,
-                address=address
+                to=to, latitude=latitude, longitude=longitude, name=name, address=address
             )
 
             # Assert
             assert result is not None
             assert result.get("messages")[0]["id"] == "wamid.test123"
-            
+
             # Verificar que se llamó con los parámetros correctos
             mock_post.assert_called_once()
             call_kwargs = mock_post.call_args.kwargs
             assert "json" in call_kwargs
-            
+
             json_data = call_kwargs["json"]
             assert json_data["messaging_product"] == "whatsapp"
             assert json_data["to"] == to
@@ -79,28 +74,23 @@ class TestWhatsAppLocation:
         # Mock de la respuesta HTTP
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "messaging_product": "whatsapp",
-            "messages": [{"id": "wamid.test456"}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={"messaging_product": "whatsapp", "messages": [{"id": "wamid.test456"}]}
+        )
 
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Act
             result = await whatsapp_client.send_location(
-                to=to,
-                latitude=latitude,
-                longitude=longitude,
-                name=name,
-                address=address
+                to=to, latitude=latitude, longitude=longitude, name=name, address=address
             )
 
             # Assert
             assert result is not None
             call_kwargs = mock_post.call_args.kwargs
             json_data = call_kwargs["json"]
-            
+
             # Verificar que usó los valores de settings
             assert json_data["location"]["latitude"] == settings.hotel_latitude
             assert json_data["location"]["longitude"] == settings.hotel_longitude
@@ -110,19 +100,15 @@ class TestWhatsAppLocation:
         """Test: Manejo de timeout al enviar ubicación."""
         # Arrange
         to = "5491112345678"
-        
+
         # Mock que lanza TimeoutError
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = TimeoutError("Request timeout")
 
             # Act & Assert
             with pytest.raises(TimeoutError):
                 await whatsapp_client.send_location(
-                    to=to,
-                    latitude=-34.6037,
-                    longitude=-58.3816,
-                    name="Hotel Test",
-                    address="Test Address"
+                    to=to, latitude=-34.6037, longitude=-58.3816, name="Hotel Test", address="Test Address"
                 )
 
     @pytest.mark.asyncio
@@ -130,21 +116,17 @@ class TestWhatsAppLocation:
         """Test: Manejo de error de red al enviar ubicación."""
         # Arrange
         to = "5491112345678"
-        
+
         # Mock que lanza Exception genérico (simulando error de red)
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = Exception("Network error")
 
             # Act & Assert
             with pytest.raises(Exception) as exc_info:
                 await whatsapp_client.send_location(
-                    to=to,
-                    latitude=-34.6037,
-                    longitude=-58.3816,
-                    name="Hotel Test",
-                    address="Test Address"
+                    to=to, latitude=-34.6037, longitude=-58.3816, name="Hotel Test", address="Test Address"
                 )
-            
+
             assert "Network error" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -158,24 +140,15 @@ class TestWhatsAppLocation:
         # Mock de la respuesta HTTP (WhatsApp API podría rechazar)
         mock_response = MagicMock()
         mock_response.status = 400
-        mock_response.json = AsyncMock(return_value={
-            "error": {
-                "message": "Invalid coordinates",
-                "code": 400
-            }
-        })
+        mock_response.json = AsyncMock(return_value={"error": {"message": "Invalid coordinates", "code": 400}})
 
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Act & Assert
             # Dependiendo de la implementación, podría lanzar excepción o retornar error
             result = await whatsapp_client.send_location(
-                to=to,
-                latitude=invalid_latitude,
-                longitude=invalid_longitude,
-                name="Hotel Test",
-                address="Test Address"
+                to=to, latitude=invalid_latitude, longitude=invalid_longitude, name="Hotel Test", address="Test Address"
             )
 
             # Si la API retorna error pero no lanza excepción
@@ -193,28 +166,23 @@ class TestWhatsAppLocation:
         # Mock de la respuesta HTTP
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "messaging_product": "whatsapp",
-            "messages": [{"id": "wamid.test789"}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={"messaging_product": "whatsapp", "messages": [{"id": "wamid.test789"}]}
+        )
 
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Act
             result = await whatsapp_client.send_location(
-                to=to,
-                latitude=-34.6037,
-                longitude=-58.3816,
-                name=name,
-                address=address
+                to=to, latitude=-34.6037, longitude=-58.3816, name=name, address=address
             )
 
             # Assert
             assert result is not None
             call_kwargs = mock_post.call_args.kwargs
             json_data = call_kwargs["json"]
-            
+
             # Verificar que los caracteres especiales se pasaron correctamente
             assert json_data["location"]["name"] == name
             assert json_data["location"]["address"] == address
@@ -228,23 +196,18 @@ class TestWhatsAppLocation:
         # Mock de la respuesta HTTP
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "messaging_product": "whatsapp",
-            "messages": [{"id": "wamid.test999"}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={"messaging_product": "whatsapp", "messages": [{"id": "wamid.test999"}]}
+        )
 
-        with patch.object(whatsapp_client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(whatsapp_client.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value = mock_response
 
             # Mock de métricas (si existen en el código)
-            with patch('app.services.whatsapp_client.whatsapp_messages_sent') as mock_metric:
+            with patch("app.services.whatsapp_client.whatsapp_messages_sent"):
                 # Act
                 await whatsapp_client.send_location(
-                    to=to,
-                    latitude=-34.6037,
-                    longitude=-58.3816,
-                    name="Hotel Test",
-                    address="Test Address"
+                    to=to, latitude=-34.6037, longitude=-58.3816, name="Hotel Test", address="Test Address"
                 )
 
                 # Assert

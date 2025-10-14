@@ -15,11 +15,11 @@ def utc_now():
 class LockAudit(Base):
     """
     Modelo de auditoría para operaciones de locks distribuidos.
-    
+
     Registra el ciclo de vida completo de locks: adquisición, extensión,
     liberación y expiración. Útil para debugging, monitoreo y análisis
     de contención de recursos.
-    
+
     Attributes:
         id (int): Primary key autoincremental
         lock_key (str): Identificador único del lock (ej: "reservation:12345")
@@ -30,7 +30,7 @@ class LockAudit(Base):
             - ttl: Time-to-live en segundos
             - reason: Razón de liberación/expiración
             - stack_trace: Stack trace si hay error
-    
+
     Example:
         >>> audit = LockAudit(
         ...     lock_key="reservation:guest123",
@@ -38,6 +38,7 @@ class LockAudit(Base):
         ...     details={"holder_id": "worker-1", "ttl": 30}
         ... )
     """
+
     __tablename__ = "lock_audit"
 
     id = Column(Integer, primary_key=True, index=True)

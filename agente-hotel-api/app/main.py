@@ -12,7 +12,6 @@ from slowapi.util import get_remote_address
 from fastapi import Request
 from starlette.responses import Response
 import asyncio
-import logging
 
 from app.core.settings import settings, Environment
 from app.core.logging import setup_logging, logger
@@ -30,6 +29,7 @@ from app.routers import health, metrics, webhooks, admin, monitoring
 # Importar router de performance optimization
 try:
     from app.routers import performance
+
     PERFORMANCE_ROUTER_AVAILABLE = True
 except ImportError:
     PERFORMANCE_ROUTER_AVAILABLE = False
@@ -49,6 +49,7 @@ try:
     from .monitoring.performance_service import get_performance_service
     from .monitoring.health_service import get_health_service
     from .monitoring.tracing_service import get_tracing_service
+
     MONITORING_AVAILABLE = True
 except ImportError:
     MONITORING_AVAILABLE = False
@@ -62,6 +63,7 @@ try:
     from .services.resource_monitor import get_resource_monitor
     from .services.auto_scaler import get_auto_scaler
     from .services.performance_scheduler import get_performance_scheduler
+
     OPTIMIZATION_AVAILABLE = True
 except ImportError:
     OPTIMIZATION_AVAILABLE = False
@@ -85,34 +87,42 @@ _session_manager_cleanup = None
 async def lifespan(app: FastAPI):
     """Gestión completa del ciclo de vida de la aplicación"""
     global _session_manager_cleanup
-    logger.info("🚀 Sistema de Agente Hotelero IA iniciando...", 
-                app_name=settings.app_name, 
-                env=settings.environment,
-                version=APP_VERSION)
-    
+    logger.info(
+        "🚀 Sistema de Agente Hotelero IA iniciando...",
+        app_name=settings.app_name,
+        env=settings.environment,
+        version=APP_VERSION,
+    )
+
     # Servicios inicializados durante el startup
     initialized_services = []
-    
+
     try:
         # 1. Inicializar servicios de monitoreo si están disponibles
         if MONITORING_AVAILABLE:
             try:
                 # Inicializar servicios de monitoreo
-                health_service = await get_health_service()
-                performance_service = await get_performance_service()
-                business_metrics_service = await get_business_metrics_service()
-                alerting_service = await get_alerting_service()
-                tracing_service = await get_tracing_service()
-                dashboard_service = await get_dashboard_service()
-                
-                initialized_services.extend([
-                    "health_service", "performance_service", "business_metrics_service",
-                    "alerting_service", "tracing_service", "dashboard_service"
-                ])
+                await get_health_service()
+                await get_performance_service()
+                await get_business_metrics_service()
+                await get_alerting_service()
+                await get_tracing_service()
+                await get_dashboard_service()
+
+                initialized_services.extend(
+                    [
+                        "health_service",
+                        "performance_service",
+                        "business_metrics_service",
+                        "alerting_service",
+                        "tracing_service",
+                        "dashboard_service",
+                    ]
+                )
                 logger.info("✅ Servicios de monitoreo inicializados")
             except Exception as e:
                 logger.warning(f"⚠️  Error inicializando servicios de monitoreo: {e}")
-        
+
         # 1.5. Inicializar servicios de optimización de performance
         if OPTIMIZATION_AVAILABLE:
             try:
@@ -123,7 +133,7 @@ async def lifespan(app: FastAPI):
                 resource_monitor = await get_resource_monitor()
                 auto_scaler = await get_auto_scaler()
                 performance_scheduler = await get_performance_scheduler()
-                
+
                 # Iniciar servicios
                 await performance_optimizer.start()
                 await database_tuner.start()
@@ -131,20 +141,26 @@ async def lifespan(app: FastAPI):
                 await resource_monitor.start()
                 await auto_scaler.start()
                 await performance_scheduler.start()
-                
+
                 # Iniciar tareas de background para monitoreo y optimización continua
                 asyncio.create_task(resource_monitor.continuous_monitoring())
                 asyncio.create_task(auto_scaler.continuous_scaling())
                 asyncio.create_task(performance_scheduler.continuous_scheduling())
-                
-                initialized_services.extend([
-                    "performance_optimizer", "database_tuner", "cache_optimizer",
-                    "resource_monitor", "auto_scaler", "performance_scheduler"
-                ])
+
+                initialized_services.extend(
+                    [
+                        "performance_optimizer",
+                        "database_tuner",
+                        "cache_optimizer",
+                        "resource_monitor",
+                        "auto_scaler",
+                        "performance_scheduler",
+                    ]
+                )
                 logger.info("✅ Servicios de optimización de performance inicializados")
             except Exception as e:
                 logger.warning(f"⚠️  Error inicializando servicios de optimización: {e}")
-        
+
         # 2. Inicializar servicio de tenants dinámico
         try:
             ff = await get_feature_flag_service()
@@ -156,7 +172,7 @@ async def lifespan(app: FastAPI):
                 logger.info("ℹ️  Servicio de tenants dinámico deshabilitado por feature flag")
         except Exception as e:
             logger.warning(f"⚠️  Error inicializando servicio de tenants: {e}")
-        
+
         # 3. Inicializar gestión de sesiones
         try:
             redis_client = await get_redis()
@@ -166,7 +182,7 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Gestor de sesiones inicializado")
         except Exception as e:
             logger.warning(f"⚠️  Error inicializando gestor de sesiones: {e}")
-        
+
         # 4. Verificar conexiones críticas
         try:
             redis_client = await get_redis()
@@ -174,23 +190,25 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Conexión Redis verificada")
         except Exception as e:
             logger.error(f"❌ Error conectando a Redis: {e}")
-        
+
         # 5. Log de servicios inicializados
-        logger.info("🎯 Sistema completamente inicializado", 
-                   services_count=len(initialized_services),
-                   services=initialized_services)
-        
+        logger.info(
+            "🎯 Sistema completamente inicializado",
+            services_count=len(initialized_services),
+            services=initialized_services,
+        )
+
         # Aplicación lista para recibir requests
         yield
-        
+
     except Exception as e:
         logger.error(f"💥 Error crítico durante la inicialización: {e}")
         raise
-    
+
     finally:
         # Cleanup durante shutdown
         logger.info("🔄 Iniciando shutdown del sistema...")
-        
+
         # Detener gestión de sesiones
         if _session_manager_cleanup:
             try:
@@ -198,14 +216,14 @@ async def lifespan(app: FastAPI):
                 logger.info("✅ Gestor de sesiones detenido")
             except Exception as e:
                 logger.warning(f"⚠️  Error deteniendo gestor de sesiones: {e}")
-        
+
         # Detener servicio de tenants
         try:
             await dynamic_tenant_service.stop()
             logger.info("✅ Servicio de tenants detenido")
         except Exception as e:
             logger.warning(f"⚠️  Error deteniendo servicio de tenants: {e}")
-        
+
         # Detener servicios de optimización
         if OPTIMIZATION_AVAILABLE:
             try:
@@ -215,25 +233,25 @@ async def lifespan(app: FastAPI):
                 resource_monitor = await get_resource_monitor()
                 auto_scaler = await get_auto_scaler()
                 performance_scheduler = await get_performance_scheduler()
-                
+
                 await performance_optimizer.stop()
                 await database_tuner.stop()
                 await cache_optimizer.stop()
                 await resource_monitor.stop()
                 await auto_scaler.stop()
                 await performance_scheduler.stop()
-                
+
                 logger.info("✅ Servicios de optimización detenidos")
             except Exception as e:
                 logger.warning(f"⚠️  Error deteniendo servicios de optimización: {e}")
-        
+
         # Cerrar conexiones
         try:
             # Aquí se cerrarían las conexiones a bases de datos, etc.
             logger.info("✅ Conexiones cerradas")
         except Exception as e:
             logger.warning(f"⚠️  Error cerrando conexiones: {e}")
-        
+
         logger.info("🏁 Sistema de Agente Hotelero IA detenido correctamente")
 
 
@@ -302,6 +320,7 @@ if PERFORMANCE_ROUTER_AVAILABLE:
 else:
     logger.warning("⚠️  Router de optimización no disponible")
 
+
 # Endpoints adicionales para información del sistema
 @app.get("/")
 async def root():
@@ -316,12 +335,13 @@ async def root():
             "performance_optimization": OPTIMIZATION_AVAILABLE,
             "dynamic_tenancy": True,
             "rate_limiting": True,
-            "security_headers": True
+            "security_headers": True,
         },
         "docs": "/docs",
         "health": "/health",
-        "metrics": "/metrics"
+        "metrics": "/metrics",
     }
+
 
 @app.get("/info")
 async def system_info():
@@ -331,7 +351,7 @@ async def system_info():
             "name": "Sistema de Agente Hotelero IA",
             "version": APP_VERSION,
             "environment": settings.environment,
-            "debug": APP_DEBUG
+            "debug": APP_DEBUG,
         },
         "capabilities": {
             "audio_processing": "WhatsApp/Gmail audio message handling",
@@ -340,7 +360,9 @@ async def system_info():
             "multi_channel": "WhatsApp, Email, API support",
             "security": "JWT auth, encryption, rate limiting",
             "monitoring": "Business intelligence and observability" if MONITORING_AVAILABLE else "Basic monitoring",
-            "optimization": "Auto-scaling, performance tuning, resource monitoring" if OPTIMIZATION_AVAILABLE else "Manual optimization"
+            "optimization": "Auto-scaling, performance tuning, resource monitoring"
+            if OPTIMIZATION_AVAILABLE
+            else "Manual optimization",
         },
         "endpoints": {
             "health_checks": "/health/*",
@@ -348,8 +370,9 @@ async def system_info():
             "webhooks": "/webhooks/*",
             "admin": "/admin/*",
             "monitoring": "/monitoring/*" if MONITORING_AVAILABLE else "Not available",
-            "performance": "/api/v1/performance/*" if OPTIMIZATION_AVAILABLE else "Not available"
-        }
+            "performance": "/api/v1/performance/*" if OPTIMIZATION_AVAILABLE else "Not available",
+        },
     }
+
 
 # (Startup/Shutdown gestionados por lifespan)

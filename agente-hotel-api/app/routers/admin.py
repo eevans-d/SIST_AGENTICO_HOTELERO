@@ -126,10 +126,7 @@ async def clear_audio_cache(request: Request):
     """Limpia toda la caché de audio."""
     audio_processor = AudioProcessor()
     deleted_count = await audio_processor.clear_audio_cache()
-    return {
-        "status": "cache_cleared",
-        "deleted_entries": deleted_count
-    }
+    return {"status": "cache_cleared", "deleted_entries": deleted_count}
 
 
 @router.delete("/audio-cache/entry")
@@ -142,7 +139,7 @@ async def remove_cache_entry(request: Request, text: str, voice: str = "default"
         "status": "entry_removed" if removed else "entry_not_found",
         "text": text,
         "voice": voice,
-        "removed": removed
+        "removed": removed,
     }
 
 
@@ -151,26 +148,24 @@ async def remove_cache_entry(request: Request, text: str, voice: str = "default"
 async def trigger_audio_cache_cleanup(request: Request):
     """Ejecuta manualmente la limpieza de caché basada en tamaño."""
     from ..services.audio_cache_service import get_audio_cache_service
-    
+
     cache_service = await get_audio_cache_service()
     cleanup_result = await cache_service._check_and_cleanup_cache()
-    
-    return {
-        "status": "cleanup_triggered",
-        "result": cleanup_result
-    }
+
+    return {"status": "cleanup_triggered", "result": cleanup_result}
 
 
 # ============================================================
 # FEATURE 6: REVIEW MANAGEMENT ENDPOINTS
 # ============================================================
 
+
 @router.post("/reviews/send")
 @limit("10/minute")
 async def send_review_request(request: Request, body: dict):
     """
     Envía una solicitud de reseña manualmente a un huésped.
-    
+
     Body:
         {
             "guest_id": "5491112345678",
@@ -178,19 +173,19 @@ async def send_review_request(request: Request, body: dict):
         }
     """
     from ..services.review_service import get_review_service
-    
+
     guest_id = body.get("guest_id")
     if not guest_id:
         raise HTTPException(status_code=400, detail="guest_id es requerido")
-    
+
     force_send = body.get("force_send", False)
-    
+
     review_service = get_review_service()
     result = await review_service.send_review_request(guest_id, force_send)
-    
+
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to send review request"))
-    
+
     return result
 
 
@@ -199,7 +194,7 @@ async def send_review_request(request: Request, body: dict):
 async def schedule_review_request_admin(request: Request, body: dict):
     """
     Programa una solicitud de reseña para envío diferido.
-    
+
     Body:
         {
             "guest_id": "5491112345678",
@@ -212,25 +207,25 @@ async def schedule_review_request_admin(request: Request, body: dict):
     """
     from ..services.review_service import get_review_service, GuestSegment
     from datetime import datetime
-    
+
     required_fields = ["guest_id", "guest_name", "booking_id", "checkout_date"]
     for field in required_fields:
         if field not in body:
             raise HTTPException(status_code=400, detail=f"{field} es requerido")
-    
+
     # Parse segment
     segment_str = body.get("segment", "couple")
     try:
         segment = GuestSegment(segment_str)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Segment inválido: {segment_str}")
-    
+
     # Parse checkout date
     try:
         checkout_date = datetime.fromisoformat(body["checkout_date"].replace("Z", "+00:00"))
     except ValueError:
         raise HTTPException(status_code=400, detail="checkout_date debe ser ISO 8601")
-    
+
     review_service = get_review_service()
     result = await review_service.schedule_review_request(
         guest_id=body["guest_id"],
@@ -238,9 +233,9 @@ async def schedule_review_request_admin(request: Request, body: dict):
         booking_id=body["booking_id"],
         checkout_date=checkout_date,
         segment=segment,
-        language=body.get("language", "es")
+        language=body.get("language", "es"),
     )
-    
+
     return result
 
 
@@ -249,7 +244,7 @@ async def schedule_review_request_admin(request: Request, body: dict):
 async def mark_review_submitted_admin(request: Request, body: dict):
     """
     Marca una reseña como enviada (cuando se confirma externamente).
-    
+
     Body:
         {
             "guest_id": "5491112345678",
@@ -257,24 +252,24 @@ async def mark_review_submitted_admin(request: Request, body: dict):
         }
     """
     from ..services.review_service import get_review_service, ReviewPlatform
-    
+
     guest_id = body.get("guest_id")
     platform_str = body.get("platform")
-    
+
     if not guest_id or not platform_str:
         raise HTTPException(status_code=400, detail="guest_id y platform son requeridos")
-    
+
     try:
         platform = ReviewPlatform(platform_str)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Platform inválida: {platform_str}")
-    
+
     review_service = get_review_service()
     result = await review_service.mark_review_submitted(guest_id, platform)
-    
+
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result.get("error", "Review request not found"))
-    
+
     return result
 
 
@@ -283,7 +278,7 @@ async def mark_review_submitted_admin(request: Request, body: dict):
 async def get_review_analytics(request: Request):
     """
     Obtiene estadísticas y analytics del sistema de reseñas.
-    
+
     Returns:
         {
             "overview": {
@@ -297,10 +292,10 @@ async def get_review_analytics(request: Request):
         }
     """
     from ..services.review_service import get_review_service
-    
+
     review_service = get_review_service()
     analytics = review_service.get_review_analytics()
-    
+
     return analytics
 
 
@@ -316,17 +311,17 @@ async def get_audit_logs(
 ):
     """
     Obtiene logs de auditoría con paginación y filtros opcionales.
-    
+
     Este endpoint implementa paginación para prevenir sobrecarga al consultar
     miles de registros. Soporta filtros múltiples para queries específicas.
-    
+
     Query Parameters:
         tenant_id (str, optional): Filtrar por tenant/hotel específico
         user_id (str, optional): Filtrar por usuario específico
         event_type (str, optional): Tipo de evento (login_success, access_denied, etc.)
         page (int, optional): Número de página (1-indexed, default: 1)
         page_size (int, optional): Registros por página (default: 20, max: 100)
-    
+
     Returns:
         {
             "logs": [
@@ -350,27 +345,24 @@ async def get_audit_logs(
                 "pages": 77
             }
         }
-    
+
     Raises:
         HTTPException 400: Si page < 1 o page_size fuera de rango
-    
+
     Example:
         GET /admin/audit-logs?tenant_id=hotel_abc&page=2&page_size=50
         GET /admin/audit-logs?user_id=user123&event_type=login_failed
     """
     from ..services.security.audit_logger import get_audit_logger, AuditEventType
     from ..core.constants import MAX_PAGE_SIZE, MIN_PAGE_SIZE
-    
+
     # Validar parámetros
     if page < 1:
         raise HTTPException(status_code=400, detail="page debe ser >= 1")
-    
+
     if page_size < MIN_PAGE_SIZE or page_size > MAX_PAGE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"page_size debe estar entre {MIN_PAGE_SIZE} y {MAX_PAGE_SIZE}"
-        )
-    
+        raise HTTPException(status_code=400, detail=f"page_size debe estar entre {MIN_PAGE_SIZE} y {MAX_PAGE_SIZE}")
+
     # Convertir event_type string a enum si fue proporcionado
     event_type_enum = None
     if event_type:
@@ -379,9 +371,9 @@ async def get_audit_logs(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"event_type inválido: {event_type}. Valores permitidos: {[e.value for e in AuditEventType]}"
+                detail=f"event_type inválido: {event_type}. Valores permitidos: {[e.value for e in AuditEventType]}",
             )
-    
+
     # Obtener logs con paginación
     audit_logger = get_audit_logger()
     logs, total = await audit_logger.get_audit_logs(
@@ -391,11 +383,12 @@ async def get_audit_logs(
         page=page,
         page_size=page_size,
     )
-    
+
     # Calcular número total de páginas
     import math
+
     total_pages = math.ceil(total / page_size) if total > 0 else 0
-    
+
     # Convertir logs a dict para respuesta JSON
     logs_data = [
         {
@@ -411,7 +404,7 @@ async def get_audit_logs(
         }
         for log in logs
     ]
-    
+
     return {
         "logs": logs_data,
         "pagination": {

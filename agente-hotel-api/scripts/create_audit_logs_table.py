@@ -13,18 +13,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.database import engine
-from app.models.audit_log import Base, AuditLog
+from app.models.audit_log import Base
 
 
 async def create_audit_logs_table():
     """Crear tabla audit_logs en PostgreSQL"""
     print("📋 Creando tabla audit_logs...")
-    
+
     try:
         async with engine.begin() as conn:
             # Crear solo la tabla AuditLog
             await conn.run_sync(Base.metadata.create_all)
-        
+
         print("✅ Tabla audit_logs creada exitosamente")
         print("\nEstructura de la tabla:")
         print("  - id (INTEGER, PK, autoincrement)")
@@ -41,7 +41,7 @@ async def create_audit_logs_table():
         print("  - idx_audit_timestamp_event (timestamp, event_type)")
         print("  - idx_audit_user_timestamp (user_id, timestamp)")
         print("  - idx_audit_tenant_timestamp (tenant_id, timestamp)")
-        
+
     except Exception as e:
         print(f"❌ Error al crear tabla: {e}")
         raise
@@ -50,19 +50,19 @@ async def create_audit_logs_table():
 async def verify_table():
     """Verificar que la tabla fue creada correctamente"""
     from sqlalchemy import text
-    
+
     print("\n🔍 Verificando tabla...")
-    
+
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
                 text("SELECT table_name FROM information_schema.tables WHERE table_name = 'audit_logs'")
             )
             row = result.fetchone()
-            
+
             if row:
                 print("✅ Tabla 'audit_logs' verificada en PostgreSQL")
-                
+
                 # Verificar columnas
                 columns_result = await conn.execute(
                     text("""
@@ -72,13 +72,13 @@ async def verify_table():
                         ORDER BY ordinal_position
                     """)
                 )
-                
+
                 print("\nColumnas:")
                 for col in columns_result:
                     print(f"  - {col[0]}: {col[1]}")
             else:
                 print("❌ Tabla 'audit_logs' no encontrada")
-                
+
     except Exception as e:
         print(f"❌ Error al verificar tabla: {e}")
 
@@ -88,10 +88,10 @@ async def main():
     print("=" * 60)
     print("MIGRACIÓN: Crear tabla audit_logs")
     print("=" * 60)
-    
+
     await create_audit_logs_table()
     await verify_table()
-    
+
     print("\n" + "=" * 60)
     print("✅ Migración completada")
     print("=" * 60)

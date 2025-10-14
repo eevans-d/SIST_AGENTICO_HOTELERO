@@ -125,7 +125,7 @@ class MessageGateway:
     def normalize_gmail_message(self, email_dict: dict) -> UnifiedMessage:
         """
         Convert Gmail email dictionary to UnifiedMessage.
-        
+
         Args:
             email_dict: Dictionary from GmailIMAPClient.poll_new_messages() with:
                 - message_id: str
@@ -133,10 +133,10 @@ class MessageGateway:
                 - subject: str
                 - body: str
                 - timestamp: str (ISO 8601)
-                
+
         Returns:
             UnifiedMessage instance
-            
+
         Raises:
             MessageNormalizationError: If email_dict is invalid
         """
@@ -144,16 +144,16 @@ class MessageGateway:
             # Validar campos requeridos
             if not isinstance(email_dict, dict):
                 raise MessageNormalizationError("email_dict must be a dictionary")
-            
+
             required_fields = ["message_id", "from", "body", "timestamp"]
             for field in required_fields:
                 if field not in email_dict:
                     raise MessageNormalizationError(f"Missing required field: {field}")
-            
+
             # Extraer email address del campo From (puede ser "Name <email@example.com>")
             from_field = email_dict["from"]
             user_id = self._extract_email_address(from_field)
-            
+
             # Crear UnifiedMessage
             unified = UnifiedMessage(
                 message_id=email_dict["message_id"],
@@ -163,23 +163,20 @@ class MessageGateway:
                 tipo="text",  # Gmail siempre es texto (por ahora)
                 texto=email_dict["body"],
                 media_url=None,
-                metadata={
-                    "subject": email_dict.get("subject", ""),
-                    "from_full": from_field
-                }
+                metadata={"subject": email_dict.get("subject", ""), "from_full": from_field},
             )
-            
+
             logger.info(
                 "gmail.message.normalized",
                 extra={
                     "message_id": unified.message_id,
                     "user_id": unified.user_id,
-                    "subject": email_dict.get("subject", "")[:50]
-                }
+                    "subject": email_dict.get("subject", "")[:50],
+                },
             )
-            
+
             return unified
-            
+
         except MessageNormalizationError:
             raise
         except Exception as e:
@@ -189,23 +186,24 @@ class MessageGateway:
     def _extract_email_address(self, from_field: str) -> str:
         """
         Extract email address from 'From' header.
-        
+
         Examples:
             "user@example.com" → "user@example.com"
             "John Doe <user@example.com>" → "user@example.com"
             "John Doe <user@example.com>, Other <other@example.com>" → "user@example.com"
         """
         import re
+
         # Buscar email entre < >
-        match = re.search(r'<([^>]+)>', from_field)
+        match = re.search(r"<([^>]+)>", from_field)
         if match:
             return match.group(1).strip()
-        
+
         # Si no hay < >, buscar patrón de email
-        match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', from_field)
+        match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", from_field)
         if match:
             return match.group(0).strip()
-        
+
         # Fallback: retornar campo completo limpiado
         return from_field.strip()
 
