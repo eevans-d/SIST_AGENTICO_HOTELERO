@@ -53,6 +53,23 @@ class Orchestrator:
         self.audio_processor = AudioProcessor()
         self.template_service = TemplateService()
 
+        # Intent Handler Dispatcher Pattern
+        # Maps intent names to their corresponding handler methods
+        self._intent_handlers = {
+            "check_availability": self._handle_availability,
+            "make_reservation": self._handle_make_reservation,
+            "hotel_location": self._handle_hotel_location,
+            "ask_location": self._handle_hotel_location,
+            "show_room_options": self._handle_room_options,
+            "guest_services": self._handle_info_intent,
+            "hotel_amenities": self._handle_info_intent,
+            "check_in_info": self._handle_info_intent,
+            "check_out_info": self._handle_info_intent,
+            "cancellation_policy": self._handle_info_intent,
+            "late_checkout": self._handle_late_checkout,
+            "review_response": self._handle_review_request,
+        }
+
     async def _escalate_to_staff(
         self, message: UnifiedMessage, reason: str, intent: str = "unknown", session_data: dict = None
     ) -> dict:
@@ -1231,125 +1248,28 @@ class Orchestrator:
             if interactive_id:
                 return await self._handle_interactive_response(interactive_id, session, message)
 
-        if intent == "check_availability":
-            return await self._handle_availability(nlp_result, session, message, respond_with_audio)
-
-        elif intent == "make_reservation":
-            return await self._handle_make_reservation(nlp_result, session, message)
-
-        elif intent == "hotel_location" or intent == "ask_location":
-            return await self._handle_hotel_location(nlp_result, session, message)
-
-        elif intent == "show_room_options":
-            return await self._handle_room_options(nlp_result, session, message)
-
-        elif intent == "payment_confirmation" and message.tipo == "image":
+        # ============================================================
+        # INTENT DISPATCH PATTERN
+        # ============================================================
+        # Handle payment confirmation with image (special case)
+        if intent == "payment_confirmation" and message.tipo == "image":
             return await self._handle_payment_confirmation(nlp_result, session, message)
 
-        elif intent == "guest_services":
-            # Información sobre servicios para huéspedes
-            response_text = self.template_service.get_response("guest_services")
+        # Dispatch to appropriate handler using the intent map
+        handler = self._intent_handlers.get(intent)
+        if handler:
+            # Check if handler needs audio response flag
+            handler_params = {
+                "nlp_result": nlp_result,
+                "session": session,
+                "message": message,
+            }
 
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
+            # Some handlers need respond_with_audio parameter
+            if intent in ["check_availability"]:
+                handler_params["respond_with_audio"] = respond_with_audio
 
-                    if audio_data:
-                        logger.info("Generated audio response for guest services inquiry", audio_bytes=len(audio_data))
-
-                        return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for guest services: {e}")
-
-            # Respuesta de texto por defecto
-            return {"response_type": "text", "content": response_text}
-
-        elif intent == "hotel_amenities":
-            # Información sobre amenidades del hotel
-            response_text = self.template_service.get_response("hotel_amenities")
-
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-
-                    if audio_data:
-                        logger.info("Generated audio response for hotel amenities inquiry", audio_bytes=len(audio_data))
-
-                        return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for hotel amenities: {e}")
-
-            # Respuesta de texto por defecto
-            return {"response_type": "text", "content": response_text}
-
-        elif intent == "check_in_info":
-            # Información sobre proceso de check-in
-            response_text = self.template_service.get_response("check_in_info")
-
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-
-                    if audio_data:
-                        logger.info("Generated audio response for check-in info", audio_bytes=len(audio_data))
-
-                        return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for check-in info: {e}")
-
-            # Respuesta de texto por defecto
-            return {"response_type": "text", "content": response_text}
-
-        elif intent == "check_out_info":
-            # Información sobre proceso de check-out
-            response_text = self.template_service.get_response("check_out_info")
-
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-
-                    if audio_data:
-                        logger.info("Generated audio response for check-out info", audio_bytes=len(audio_data))
-
-                        return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for check-out info: {e}")
-
-            # Respuesta de texto por defecto
-            return {"response_type": "text", "content": response_text}
-
-        elif intent == "cancellation_policy":
-            # Información sobre política de cancelación
-            response_text = self.template_service.get_response("cancellation_policy")
-
-            # Si el mensaje original era de audio, responder con audio también
-            if message.tipo == "audio":
-                try:
-                    audio_data = await self.audio_processor.generate_audio_response(response_text)
-
-                    if audio_data:
-                        logger.info("Generated audio response for cancellation policy", audio_bytes=len(audio_data))
-
-                        return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
-                except Exception as e:
-                    logger.error(f"Failed to generate audio response for cancellation policy: {e}")
-
-            # Respuesta de texto por defecto
-            return {"response_type": "text", "content": response_text}
-
-        elif intent == "late_checkout":
-            # Feature 4: Solicitud de late checkout (nueva solicitud)
-            return await self._handle_late_checkout(nlp_result, session, message)
-
-        # ============================================================
-        # FEATURE 6: REVIEW REQUESTS
-        # ============================================================
-        elif intent == "review_response":
-            return await self._handle_review_request(nlp_result, session, message)
+            return await handler(**handler_params)
 
         # ============================================================
         # CHECKOUT TRIGGER FOR REVIEW SCHEDULING
@@ -1361,22 +1281,11 @@ class Orchestrator:
                 return result
             # Otherwise continue with normal flow
 
+        # ============================================================
+        # FALLBACK RESPONSE
+        # ============================================================
         # Si llegamos aquí, devolver respuesta por defecto
-        default_text = "No entendí tu consulta. ¿Podrías reformularla?"
-
-        # Si el mensaje original era de audio, responder con audio también
-        if message.tipo == "audio":
-            try:
-                audio_data = await self.audio_processor.generate_audio_response(default_text)
-
-                if audio_data:
-                    logger.info("Generated audio response for fallback message")
-                    return {"response_type": "audio", "content": {"text": default_text, "audio_data": audio_data}}
-            except Exception as e:
-                logger.error(f"Failed to generate audio for fallback response: {e}")
-
-        # Respuesta de texto por defecto
-        return {"response_type": "text", "content": default_text}
+        return await self._handle_fallback_response(message, respond_with_audio)
 
     async def _handle_interactive_response(self, interactive_id: str, session: dict, message: UnifiedMessage) -> dict:
         """
@@ -1487,6 +1396,66 @@ class Orchestrator:
                 "No estoy seguro de haber entendido. ¿Puedes reformular o elegir una opción: "
                 "disponibilidad, precios, información del hotel?"
             )
+
+    async def _handle_info_intent(self, nlp_result: dict, session: dict, message: UnifiedMessage) -> dict:
+        """
+        Generic handler for informational intents (guest services, amenities, check-in info, etc.)
+
+        Args:
+            nlp_result: NLP processing result with intent
+            session: User session data
+            message: Unified message object
+
+        Returns:
+            Response dict with text or audio content
+        """
+        intent = nlp_result.get("intent")
+        if isinstance(intent, dict):
+            intent = intent.get("name")
+
+        # Get response template based on intent
+        response_text = self.template_service.get_response(intent)
+
+        # If original message was audio, respond with audio too
+        if message.tipo == "audio":
+            try:
+                audio_data = await self.audio_processor.generate_audio_response(response_text)
+
+                if audio_data:
+                    logger.info(f"Generated audio response for {intent} inquiry", audio_bytes=len(audio_data))
+                    return {"response_type": "audio", "content": {"text": response_text, "audio_data": audio_data}}
+            except Exception as e:
+                logger.error(f"Failed to generate audio response for {intent}: {e}")
+
+        # Text response fallback
+        return {"response_type": "text", "content": response_text}
+
+    async def _handle_fallback_response(self, message: UnifiedMessage, respond_with_audio: bool = False) -> dict:
+        """
+        Generate fallback response when no intent handler matches
+
+        Args:
+            message: Unified message object
+            respond_with_audio: Whether to respond with audio
+
+        Returns:
+            Response dict with fallback message
+        """
+        default_text = "No entendí tu consulta. ¿Podrías reformularla?"
+
+        # If original message was audio, respond with audio
+        if respond_with_audio or message.tipo == "audio":
+            try:
+                audio_data = await self.audio_processor.generate_audio_response(default_text)
+
+                if audio_data:
+                    logger.info("Generated audio response for fallback message")
+                    return {"response_type": "audio", "content": {"text": default_text, "audio_data": audio_data}}
+            except Exception as e:
+                logger.error(f"Failed to generate audio for fallback response: {e}")
+
+        # Text response fallback
+        return {"response_type": "text", "content": default_text}
 
 
 # Prometheus metrics (module-level)
