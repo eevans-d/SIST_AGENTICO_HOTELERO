@@ -12,6 +12,7 @@
 .PHONY: secret-scan secret-scan-json secret-scan-strict fix-permissions
 .PHONY: owasp-scan owasp-scan-json owasp-scan-category owasp-report owasp-report-json
 .PHONY: compliance-report compliance-report-json compliance-show
+.PHONY: perf-smoke perf-load perf-stress perf-spike perf-soak perf-validate perf-baseline perf-clean
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -818,6 +819,87 @@ update-operational-metrics: ## Actualizar métricas operacionales del hotel (occ
 		exit 1; \
 	fi
 	@poetry run python scripts/update_operational_metrics.py
+
+# ==============================================================================
+# Performance Testing (P015)
+# ==============================================================================
+
+perf-smoke: ## Run smoke test (1 VU, 1 min) - quick validation
+	@echo "🚬 Running smoke test..."
+	@mkdir -p .performance
+	@k6 run --env SCENARIO=smoke \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/results-smoke-$$(date +%Y%m%d-%H%M%S).json \
+		tests/load/k6-performance-suite.js
+	@echo "✅ Smoke test complete. Run 'make perf-validate' to check SLOs."
+
+perf-load: ## Run load test (10 VUs, 14 min) - validate SLOs
+	@echo "📊 Running load test..."
+	@mkdir -p .performance
+	@k6 run --env SCENARIO=load \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/results-load-$$(date +%Y%m%d-%H%M%S).json \
+		tests/load/k6-performance-suite.js
+	@echo "✅ Load test complete. Run 'make perf-validate' to check SLOs."
+
+perf-stress: ## Run stress test (up to 50 VUs, 27 min) - find breaking point
+	@echo "💪 Running stress test..."
+	@mkdir -p .performance
+	@k6 run --env SCENARIO=stress \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/results-stress-$$(date +%Y%m%d-%H%M%S).json \
+		tests/load/k6-performance-suite.js
+	@echo "✅ Stress test complete. Run 'make perf-validate' to check results."
+
+perf-spike: ## Run spike test (0→100→0 VUs, 4 min) - test resilience
+	@echo "⚡ Running spike test..."
+	@mkdir -p .performance
+	@k6 run --env SCENARIO=spike \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/results-spike-$$(date +%Y%m%d-%H%M%S).json \
+		tests/load/k6-performance-suite.js
+	@echo "✅ Spike test complete. Check if rate limiting activated."
+
+perf-soak: ## Run soak test (5 VUs, 30 min) - detect memory leaks
+	@echo "🛁 Running soak test..."
+	@mkdir -p .performance
+	@k6 run --env SCENARIO=soak \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/results-soak-$$(date +%Y%m%d-%H%M%S).json \
+		tests/load/k6-performance-suite.js
+	@echo "✅ Soak test complete. Monitor memory usage trends."
+
+perf-validate: ## Validate latest performance test results against SLOs
+	@echo "🎯 Validating performance results..."
+	@if [ ! -f tests/load/validate_performance.py ]; then \
+		echo "❌ Error: tests/load/validate_performance.py not found"; \
+		exit 1; \
+	fi
+	@chmod +x tests/load/validate_performance.py
+	@python3 tests/load/validate_performance.py
+
+perf-baseline: ## Establish performance baseline
+	@echo "📈 Establishing performance baseline..."
+	@mkdir -p .performance
+	@echo "Running smoke test..."
+	@k6 run --env SCENARIO=smoke \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/baseline-smoke.json \
+		tests/load/k6-performance-suite.js
+	@echo "Running load test..."
+	@k6 run --env SCENARIO=load \
+		--env BASE_URL=http://localhost:8000 \
+		--out json=.performance/baseline-load.json \
+		tests/load/k6-performance-suite.js
+	@echo "Validating baselines..."
+	@python3 tests/load/validate_performance.py --results .performance/baseline-load.json \
+		--format markdown --output .performance/baseline-report.md
+	@echo "✅ Baseline established. Results in .performance/baseline-report.md"
+
+perf-clean: ## Clean performance test results
+	@echo "🧹 Cleaning performance results..."
+	@rm -rf .performance/*.json .performance/*.html .performance/*.md
+	@echo "✅ Performance results cleaned"
 
 
 .DEFAULT_GOAL := help

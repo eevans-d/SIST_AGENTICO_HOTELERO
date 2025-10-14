@@ -1,0 +1,116 @@
+{
+  "version": "1.0.0",
+  "created_at": "2025-10-14T00:00:00Z",
+  "description": "Performance baseline configuration for Agente Hotelero IA System",
+  "environment": {
+    "type": "local",
+    "base_url": "http://localhost:8000",
+    "docker_compose": true,
+    "pms_type": "mock"
+  },
+  "slo_targets": {
+    "p95_latency_ms": {
+      "target": 3000,
+      "warning": 2500,
+      "level": "P0",
+      "description": "95th percentile response time must be under 3 seconds"
+    },
+    "p99_latency_ms": {
+      "target": 5000,
+      "warning": 4000,
+      "level": "P1",
+      "description": "99th percentile response time must be under 5 seconds"
+    },
+    "error_rate_percent": {
+      "target": 1.0,
+      "warning": 0.5,
+      "level": "P0",
+      "description": "Error rate must be below 1%"
+    },
+    "throughput_rps": {
+      "target": 10.0,
+      "warning": 15.0,
+      "level": "P2",
+      "description": "Minimum throughput of 10 requests per second"
+    },
+    "check_pass_rate_percent": {
+      "target": 99.0,
+      "warning": 99.5,
+      "level": "P1",
+      "description": "Check pass rate must be above 99%"
+    },
+    "http_req_duration_avg_ms": {
+      "target": 1500,
+      "warning": 1000,
+      "level": "P2",
+      "description": "Average response time should be under 1.5 seconds"
+    }
+  },
+  "test_scenarios": {
+    "smoke": {
+      "purpose": "Quick validation",
+      "duration_seconds": 60,
+      "virtual_users": 1,
+      "use_case": "Pre-deployment sanity check"
+    },
+    "load": {
+      "purpose": "Normal operational load",
+      "duration_seconds": 840,
+      "virtual_users": 10,
+      "use_case": "SLO validation"
+    },
+    "stress": {
+      "purpose": "Find breaking point",
+      "duration_seconds": 1620,
+      "max_virtual_users": 50,
+      "use_case": "Capacity planning"
+    },
+    "spike": {
+      "purpose": "Traffic burst resilience",
+      "duration_seconds": 240,
+      "spike_virtual_users": 100,
+      "use_case": "Auto-scaling validation"
+    },
+    "soak": {
+      "purpose": "Memory leak detection",
+      "duration_seconds": 1800,
+      "virtual_users": 5,
+      "use_case": "Long-term stability"
+    }
+  },
+  "baseline_results": {
+    "smoke": {
+      "measured_at": null,
+      "p95_latency_ms": null,
+      "p99_latency_ms": null,
+      "error_rate_percent": null,
+      "throughput_rps": null,
+      "check_pass_rate_percent": null,
+      "avg_latency_ms": null,
+      "total_requests": null,
+      "duration_seconds": null
+    },
+    "load": {
+      "measured_at": null,
+      "p95_latency_ms": null,
+      "p99_latency_ms": null,
+      "error_rate_percent": null,
+      "throughput_rps": null,
+      "check_pass_rate_percent": null,
+      "avg_latency_ms": null,
+      "total_requests": null,
+      "duration_seconds": null
+    }
+  },
+  "notes": [
+    "Baseline should be established after P015 implementation",
+    "Run 'make perf-baseline' to populate baseline results",
+    "Update this file when infrastructure changes significantly",
+    "Compare future test runs against these baselines"
+  ],
+  "metadata": {
+    "created_by": "AI Agent",
+    "prompt": "P015",
+    "purpose": "Performance testing baseline for FASE 4"
+  }
+}
