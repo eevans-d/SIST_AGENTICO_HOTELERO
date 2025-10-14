@@ -514,3 +514,231 @@ Flag:
 
 Test:
 pytest -q tests/unit/test_message_gateway_normalization.py
+
+## Grafana Dashboards
+
+### Acceso
+
+**URL:** http://localhost:3000  
+**Credenciales por defecto:**
+- Usuario: `admin`
+- Password: `admin` (cambiar en primer login)
+
+**Datasource:** Prometheus (`http://prometheus:9090`)
+
+### Dashboards Disponibles
+
+#### 1. Database & PMS Performance (`database-performance.json`)
+
+**Propósito:** Monitoreo completo de la salud de la base de datos PostgreSQL, connection pool y operaciones PMS.
+
+**Ubicación:** `docker/grafana/dashboards/database-performance.json`
+
+**Paneles Principales:**
+
+1. **Connection Pool Utilization** (Gauge)
+   - Métrica: `db_pool_utilization_percent`
+   - Umbrales:
+     - Verde: <75%
+     - Amarillo: 75-90%
+     - Rojo: >90%
+   - **Acción si rojo:** Aumentar `POSTGRES_POOL_SIZE` o `POSTGRES_MAX_OVERFLOW`
+
+2. **Database Connections by State** (Time Series)
+   - Métricas:
+     - `db_pool_active_connections` (verde) - Ejecutando queries
+     - `db_pool_idle_connections` (azul) - Disponibles en pool
+     - `db_pool_idle_in_transaction` (rojo) - Transaction leak indicator
+   - **Alerta:** Si `idle_in_transaction` > 3, revisar commit/rollback en código
+
+3. **Long Running Queries (>30s)** (Stat)
+   - Métrica: `db_pool_long_running_queries`
+   - Umbrales:
+     - Verde: 0
+     - Amarillo: 1-2
+     - Rojo: ≥3
+   - **Acción si rojo:** Ejecutar `python scripts/monitor_connections.py` para ver queries
+
+4. **PMS API Latency (P50/P95/P99)** (Time Series)
+   - Métricas:
+     - P50: `histogram_quantile(0.50, sum(rate(pms_api_latency_seconds_bucket[5m])) by (le, endpoint))`
+     - P95: `histogram_quantile(0.95, ...)`
+     - P99: `histogram_quantile(0.99, ...)`
+   - **Threshold crítico:** P95 > 2s (dispara alerta `HighPmsLatencyP95`)
+   - **Acción:** Revisar cache hit ratio, circuit breaker state
+
+5. **PMS Circuit Breaker State** (Stat)
+   - Métrica: `pms_circuit_breaker_state`
+   - Valores:
+     - 0 = CLOSED (verde) - Normal
+     - 1 = OPEN (rojo) - PMS no disponible
+     - 2 = HALF-OPEN (amarillo) - Recuperándose
+   - **Alerta:** Dispara `CircuitBreakerOpen` si state=1 por >2 minutos
+
+6. **PMS Operations Rate (Success vs Error)** (Time Series)
+   - Métricas:
+     - Success: `rate(pms_operations_total{status="success"}[5m])`
+     - Error: `rate(pms_operations_total{status="error"}[5m])`
+   - **Visualización:** Stacked area (verde=success, rojo=error)
+   - **Análisis:** Picos de error correlacionados con circuit breaker open
+
+7. **PMS Cache Hit Ratio** (Gauge)
+   - Métrica: `(rate(pms_cache_hits_total[5m]) / (rate(pms_cache_hits_total[5m]) + rate(pms_cache_misses_total[5m]))) * 100`
+   - Umbrales:
+     - Rojo: <50%
+     - Amarillo: 50-70%
+     - Verde: >70%
+   - **Acción si bajo:** Revisar TTL config, ejecutar `python scripts/analyze_redis_cache.py`
+
+8. **Circuit Breaker Call Distribution** (Time Series)
+   - Métricas por estado:
+     - Closed - Success
+     - Closed - Failure
+     - Open - Rejected
+     - Half-Open - Test
+   - **Análisis:** Observar transiciones CLOSED→OPEN para identificar patrones
+
+9. **Pool Overflow Usage** (Stat)
+   - Métrica: `db_pool_overflow`
+   - Umbrales:
+     - Verde: 0
+     - Amarillo: 1-10
+     - Rojo: >20
+   - **Interpretación:** Conexiones más allá del pool base (indica necesidad de incrementar `POSTGRES_POOL_SIZE`)
+
+10. **API Error Rate (5xx responses)** (Time Series)
+    - Métrica: `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))`
+    - **Threshold crítico:** >5% (0.05)
+    - **Correlación:** Errores 5xx suelen correlacionar con pool exhaustion o circuit breaker open
+
+**Configuración del Dashboard:**
+
+- **Refresh:** 10 segundos (ajustable en tiempo real)
+- **Time Range:** Última hora (default)
+- **Tags:** `database`, `performance`, `pms`, `monitoring`
+- **Auto-refresh:** Activado para monitoreo en vivo
+
+**Uso Recomendado:**
+
+1. **Monitoreo diario:** Revisar P95 latency y pool utilization
+2. **Incidentes:** Abrir dashboard al recibir alerta de Prometheus/AlertManager
+3. **Capacity planning:** Analizar tendencias semanales de overflow y utilization
+4. **Debugging:** Correlacionar long queries con spikes de latencia API
+
+#### 2. Otros Dashboards Existentes
+
+- **agente-overview.json** - Métricas generales de la API
+- **alerts-overview.json** - Estado de todas las alertas
+- **audio-cache-dashboard.json** - Cache de archivos de audio
+- **audio-system-dashboard.json** - Sistema de procesamiento de audio
+- **business_metrics.json** - Métricas de negocio
+- **readiness-overview.json** - Health checks de dependencias
+- **resilience-dashboard.json** - Circuit breakers y retries
+- **slo-health.json** - SLO y error budget tracking
+- **webhooks-rate-limit.json** - Rate limiting de webhooks
+
+### Provisioning Automático
+
+**Configuración:** `docker/grafana/provisioning/dashboards/dashboards.yml`
+
+```yaml
+apiVersion: 1
+
+providers:
+  - name: default
+    orgId: 1
+    folder: "Agente Hotel"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+```
+
+**Proceso:**
+1. Dashboards en formato JSON se colocan en `docker/grafana/dashboards/`
+2. Al iniciar Grafana, automáticamente se cargan en la carpeta "Agente Hotel"
+3. Los dashboards son editables desde la UI (cambios no persisten en archivos)
+4. Para cambios permanentes, editar los archivos JSON y reiniciar Grafana
+
+### Scripts de Monitoreo Relacionados
+
+**1. Connection Pool Monitor:**
+```bash
+# Análisis único
+python scripts/monitor_connections.py
+
+# Monitoreo continuo (10s interval)
+python scripts/monitor_connections.py --watch
+
+# Con threshold de alerta
+python scripts/monitor_connections.py --threshold 80
+
+# Export Prometheus metrics
+python scripts/monitor_connections.py --prometheus
+```
+
+**Output:** `.playbook/connection_pool_report.json`, `.playbook/connection_pool_metrics.prom`
+
+**2. Redis Cache Analyzer:**
+```bash
+# Análisis completo
+python scripts/analyze_redis_cache.py
+
+# Con credenciales custom
+python scripts/analyze_redis_cache.py --host redis-prod --password secret
+```
+
+**Output:** `.playbook/redis_analysis.json`
+
+**3. Database Index Validator:**
+```bash
+# Validar índices
+./scripts/validate_indexes.sh
+
+# Con database custom
+./scripts/validate_indexes.sh --host db-prod --database agente_hotel_prod
+```
+
+**Output:** `.playbook/index_analysis.json`
+
+### Troubleshooting Grafana
+
+**Dashboard no aparece:**
+1. Verificar JSON válido: `cat docker/grafana/dashboards/database-performance.json | jq .`
+2. Revisar logs: `docker compose logs grafana | grep -i error`
+3. Reiniciar servicio: `docker compose restart grafana`
+
+**Métricas no muestran datos:**
+1. Verificar Prometheus: http://localhost:9090/targets (todos UP)
+2. Verificar datasource en Grafana: Settings → Data Sources → Prometheus
+3. Test query en Prometheus: `db_pool_utilization_percent` debe devolver valores
+4. Revisar si los scripts de monitoreo han exportado métricas: `ls -l .playbook/*.prom`
+
+**Permisos de datasource:**
+1. Si Grafana no puede conectar a Prometheus, verificar red Docker: `docker network inspect agente-hotel-api_backend_network`
+2. Prometheus debe estar en la misma red backend
+3. URL del datasource debe ser `http://prometheus:9090` (nombre del servicio Docker)
+
+### Integración con AlertManager
+
+Los paneles en los dashboards están configurados para mostrar thresholds visuales que coinciden con las reglas de alerta de Prometheus:
+
+| Dashboard Panel | Alert Rule | Threshold |
+|-----------------|------------|-----------|
+| Pool Utilization | N/A (manual) | >90% rojo |
+| Long Queries | N/A (manual) | ≥3 rojo |
+| PMS Latency P95 | `HighPmsLatencyP95` | >1s por 10min |
+| Circuit Breaker | `CircuitBreakerOpen` | state=1 por 2min |
+| Error Rate | `HighHttp5xxRate` | >10% por 5min |
+| Cache Hit Ratio | `PmsCacheHitRatioLowCritical` | <50% por 10min |
+
+**Ver alertas activas:** http://localhost:9093 (AlertManager UI)
+
+### Best Practices
+
+1. **No editar dashboards en UI:** Los cambios no persisten. Editar JSON y reiniciar Grafana.
+2. **Usar variables de templating:** Para filtrar por tenant, endpoint, etc (futuro)
+3. **Exportar dashboards editados:** Settings → JSON Model → Copy → Pegar en archivo
+4. **Configurar retención de datos:** Prometheus default 15d, ajustar según necesidad
+5. **Crear snapshots para debugging:** Share → Snapshot para compartir con equipo
