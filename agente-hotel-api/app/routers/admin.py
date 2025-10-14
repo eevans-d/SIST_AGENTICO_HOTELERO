@@ -303,3 +303,121 @@ async def get_review_analytics(request: Request):
     
     return analytics
 
+
+@router.get("/audit-logs")
+@limit("60/minute")
+async def get_audit_logs(
+    request: Request,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
+    event_type: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """
+    Obtiene logs de auditoría con paginación y filtros opcionales.
+    
+    Este endpoint implementa paginación para prevenir sobrecarga al consultar
+    miles de registros. Soporta filtros múltiples para queries específicas.
+    
+    Query Parameters:
+        tenant_id (str, optional): Filtrar por tenant/hotel específico
+        user_id (str, optional): Filtrar por usuario específico
+        event_type (str, optional): Tipo de evento (login_success, access_denied, etc.)
+        page (int, optional): Número de página (1-indexed, default: 1)
+        page_size (int, optional): Registros por página (default: 20, max: 100)
+    
+    Returns:
+        {
+            "logs": [
+                {
+                    "id": 123,
+                    "timestamp": "2025-10-14T10:30:00Z",
+                    "event_type": "login_success",
+                    "user_id": "user123",
+                    "ip_address": "192.168.1.100",
+                    "resource": "/api/auth/login",
+                    "details": {...},
+                    "tenant_id": "hotel_abc",
+                    "severity": "info"
+                },
+                ...
+            ],
+            "pagination": {
+                "page": 1,
+                "page_size": 20,
+                "total": 1534,
+                "pages": 77
+            }
+        }
+    
+    Raises:
+        HTTPException 400: Si page < 1 o page_size fuera de rango
+    
+    Example:
+        GET /admin/audit-logs?tenant_id=hotel_abc&page=2&page_size=50
+        GET /admin/audit-logs?user_id=user123&event_type=login_failed
+    """
+    from ..services.security.audit_logger import get_audit_logger, AuditEventType
+    from ..core.constants import MAX_PAGE_SIZE, MIN_PAGE_SIZE
+    
+    # Validar parámetros
+    if page < 1:
+        raise HTTPException(status_code=400, detail="page debe ser >= 1")
+    
+    if page_size < MIN_PAGE_SIZE or page_size > MAX_PAGE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_size debe estar entre {MIN_PAGE_SIZE} y {MAX_PAGE_SIZE}"
+        )
+    
+    # Convertir event_type string a enum si fue proporcionado
+    event_type_enum = None
+    if event_type:
+        try:
+            event_type_enum = AuditEventType(event_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"event_type inválido: {event_type}. Valores permitidos: {[e.value for e in AuditEventType]}"
+            )
+    
+    # Obtener logs con paginación
+    audit_logger = get_audit_logger()
+    logs, total = await audit_logger.get_audit_logs(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        event_type=event_type_enum,
+        page=page,
+        page_size=page_size,
+    )
+    
+    # Calcular número total de páginas
+    import math
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
+    
+    # Convertir logs a dict para respuesta JSON
+    logs_data = [
+        {
+            "id": log.id,
+            "timestamp": log.timestamp.isoformat(),
+            "event_type": log.event_type,
+            "user_id": log.user_id,
+            "ip_address": log.ip_address,
+            "resource": log.resource,
+            "details": log.details,
+            "tenant_id": log.tenant_id,
+            "severity": log.severity,
+        }
+        for log in logs
+    ]
+    
+    return {
+        "logs": logs_data,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "pages": total_pages,
+        },
+    }

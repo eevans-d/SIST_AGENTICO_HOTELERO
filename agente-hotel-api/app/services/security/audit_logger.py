@@ -429,6 +429,160 @@ class AuditLogger:
                 },
                 exc_info=True
             )
+    
+    async def get_audit_logs(
+        self,
+        tenant_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        event_type: Optional[AuditEventType] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        page: int = 1,
+        page_size: Optional[int] = None,
+    ) -> tuple[list[AuditLog], int]:
+        """
+        Obtiene logs de auditoría con paginación y filtros opcionales.
+        
+        Este método implementa paginación para prevenir OOM (Out of Memory)
+        al cargar miles de registros. Soporta filtros múltiples para queries
+        específicas.
+        
+        Args:
+            tenant_id: Filtrar por tenant/hotel específico (opcional)
+            user_id: Filtrar por usuario específico (opcional)
+            event_type: Filtrar por tipo de evento (opcional)
+            start_date: Fecha de inicio del rango (inclusive, opcional)
+            end_date: Fecha de fin del rango (inclusive, opcional)
+            page: Número de página (1-indexed, default: 1)
+            page_size: Registros por página (default: DEFAULT_PAGE_SIZE=20)
+        
+        Returns:
+            Tuple[List[AuditLog], int]: 
+                - Lista de audit logs de la página solicitada
+                - Total de registros que cumplen los filtros
+        
+        Raises:
+            ValueError: Si page < 1 o page_size fuera de rango permitido
+        
+        Ejemplo:
+            ```python
+            # Obtener primera página (20 registros)
+            logs, total = await audit_logger.get_audit_logs(
+                tenant_id="hotel_abc",
+                page=1
+            )
+            print(f"Mostrando {len(logs)} de {total} registros")
+            
+            # Obtener logs de login fallidos de un usuario
+            logs, total = await audit_logger.get_audit_logs(
+                user_id="user123",
+                event_type=AuditEventType.LOGIN_FAILED,
+                page=1,
+                page_size=50
+            )
+            
+            # Rango de fechas con paginación
+            from datetime import datetime, timedelta
+            start = datetime.now() - timedelta(days=7)
+            end = datetime.now()
+            logs, total = await audit_logger.get_audit_logs(
+                start_date=start,
+                end_date=end,
+                page=2,
+                page_size=100
+            )
+            ```
+        
+        Performance:
+            - Query optimizada con LIMIT/OFFSET
+            - Índices recomendados: (tenant_id, timestamp), (user_id, timestamp)
+            - Evita cargar todos los registros en memoria
+        """
+        from sqlalchemy import select, func
+        from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE
+        
+        # Validar page
+        if page < 1:
+            raise ValueError(f"page debe ser >= 1, recibido: {page}")
+        
+        # Validar y normalizar page_size
+        if page_size is None:
+            page_size = DEFAULT_PAGE_SIZE
+        
+        if page_size < MIN_PAGE_SIZE:
+            raise ValueError(f"page_size debe ser >= {MIN_PAGE_SIZE}, recibido: {page_size}")
+        
+        if page_size > MAX_PAGE_SIZE:
+            raise ValueError(f"page_size debe ser <= {MAX_PAGE_SIZE}, recibido: {page_size}")
+        
+        # Calcular offset
+        offset = (page - 1) * page_size
+        
+        try:
+            async with AsyncSessionFactory() as session:
+                # Construir query base con filtros
+                query = select(AuditLog)
+                
+                if tenant_id:
+                    query = query.where(AuditLog.tenant_id == tenant_id)
+                
+                if user_id:
+                    query = query.where(AuditLog.user_id == user_id)
+                
+                if event_type:
+                    query = query.where(AuditLog.event_type == event_type.value)
+                
+                if start_date:
+                    query = query.where(AuditLog.timestamp >= start_date)
+                
+                if end_date:
+                    query = query.where(AuditLog.timestamp <= end_date)
+                
+                # Ordenar por timestamp descendente (más recientes primero)
+                query = query.order_by(AuditLog.timestamp.desc())
+                
+                # Query para contar total de registros (sin paginación)
+                count_query = select(func.count()).select_from(query.subquery())
+                total_result = await session.execute(count_query)
+                total = total_result.scalar() or 0
+                
+                # Aplicar paginación
+                query = query.offset(offset).limit(page_size)
+                
+                # Ejecutar query paginada
+                result = await session.execute(query)
+                logs = result.scalars().all()
+                
+                logger.info(
+                    "audit_logger.get_audit_logs",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "event_type": event_type.value if event_type else None,
+                        "page": page,
+                        "page_size": page_size,
+                        "total": total,
+                        "returned": len(logs),
+                    }
+                )
+                
+                return list(logs), total
+                
+        except Exception as e:
+            logger.error(
+                "audit_logger.get_audit_logs_failed",
+                extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                exc_info=True
+            )
+            # Devolver lista vacía en caso de error (no romper flujo)
+            return [], 0
 
 
 # Instancia global del audit logger
