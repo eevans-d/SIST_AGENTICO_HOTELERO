@@ -1,0 +1,214 @@
+name: Dependency Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  schedule:
+    # Ejecutar diariamente a las 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Permitir ejecución manual
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  python-dependency-scan:
+    name: Python Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Install dependencies
+        run: |
+          poetry install --no-root
+      
+      - name: Export requirements
+        run: |
+          poetry export -f requirements.txt --output requirements.txt --without-hashes
+      
+      - name: Run pip-audit
+        id: pip-audit
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --format json --output pip-audit-report.json --requirement requirements.txt || true
+          
+          # Contar vulnerabilidades
+          VULNS=$(jq -r '.vulnerabilities | length' pip-audit-report.json 2>/dev/null || echo "0")
+          echo "vulnerabilities=$VULNS" >> $GITHUB_OUTPUT
+          
+          if [ "$VULNS" -gt 0 ]; then
+            echo "## 🔍 Vulnerabilidades Encontradas" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Total: **$VULNS** vulnerabilidades" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Paquete | Versión | CVE | Severidad | Fix |" >> $GITHUB_STEP_SUMMARY
+            echo "|---------|---------|-----|-----------|-----|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.vulnerabilities[] | "| \(.name) | \(.version) | \(.id) | \(.fix_versions[0] // "N/A") |"' pip-audit-report.json >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Run Safety
+        id: safety
+        continue-on-error: true
+        run: |
+          pip install safety
+          safety check --file=requirements.txt --json --output safety-report.json || true
+      
+      - name: Run Bandit
+        id: bandit
+        continue-on-error: true
+        run: |
+          pip install bandit
+          bandit -r app -f json -o bandit-report.json -ll || true
+          
+          # Resumen de Bandit
+          HIGH=$(jq -r '[.results[] | select(.issue_severity=="HIGH")] | length' bandit-report.json 2>/dev/null || echo "0")
+          MEDIUM=$(jq -r '[.results[] | select(.issue_severity=="MEDIUM")] | length' bandit-report.json 2>/dev/null || echo "0")
+          
+          echo "## 🛡️ Bandit Security Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **HIGH:** $HIGH issues" >> $GITHUB_STEP_SUMMARY
+          echo "- **MEDIUM:** $MEDIUM issues" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-security-reports
+          path: |
+            pip-audit-report.json
+            safety-report.json
+            bandit-report.json
+          retention-days: 30
+      
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && steps.pip-audit.outputs.vulnerabilities > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const vulns = ${{ steps.pip-audit.outputs.vulnerabilities }};
+            const message = `## 🔍 Security Scan Results
+            
+            **⚠️ ${vulns} vulnerabilities encontradas en dependencias Python**
+            
+            Por favor revisa el reporte detallado en los artifacts de este workflow.
+            
+            Para ver los detalles: \`pip-audit-report.json\`
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+      
+      - name: Fail on Critical Vulnerabilities
+        run: |
+          VULNS=${{ steps.pip-audit.outputs.vulnerabilities }}
+          if [ "$VULNS" -gt 0 ]; then
+            echo "❌ Encontradas $VULNS vulnerabilidades"
+            echo "⚠️  Revisar antes de hacer merge"
+            # No fallar en PRs, solo advertir
+            if [ "${{ github.event_name }}" != "pull_request" ]; then
+              exit 1
+            fi
+          fi
+
+  docker-scan:
+    name: Docker Image Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: |
+          docker build -t agente-hotel-api:scan -f Dockerfile .
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'agente-hotel-api:scan'
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: Process Trivy results
+        run: |
+          CRITICAL=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
+          HIGH=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results.json 2>/dev/null || echo "0")
+          
+          echo "## 🐳 Docker Image Security Scan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **CRITICAL:** $CRITICAL vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "- **HIGH:** $HIGH vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Action Required:** Critical vulnerabilities must be fixed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: trivy-results.json
+          retention-days: 30
+
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: sbom.json
+      
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90
+      
+      - name: Scan SBOM with Grype
+        uses: anchore/scan-action@v3
+        with:
+          sbom: sbom.json
+          fail-build: false
+          severity-cutoff: high
+      
+      - name: Upload Grype results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-scan-results
+          path: grype-scan-results.json
+          retention-days: 30

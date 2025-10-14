@@ -1,0 +1,107 @@
+{
+  "timestamp": "2025-10-14T07:39:23.318396",
+  "risk_assessment": {
+    "risk_score": 0,
+    "risk_level": "CRITICAL",
+    "severity_breakdown": {
+      "CRITICAL": 5,
+      "HIGH": 118,
+      "MEDIUM": 4,
+      "LOW": 0
+    },
+    "total_findings": 127
+  },
+  "compliance_metrics": {
+    "owasp_coverage": 100.0,
+    "owasp_score": 0,
+    "cwe_coverage": 8,
+    "nist_controls": [
+      "AC-3 (Access Enforcement)",
+      "SC-13 (Cryptographic Protection)"
+    ],
+    "pci_requirements": [
+      "Req 6.5.1 (Injection Flaws)",
+      "Req 4.1 (Strong Cryptography)"
+    ]
+  },
+  "findings_summary": {
+    "P011": 0,
+    "P012": 0,
+    "P013": 127
+  },
+  "remediation_roadmap": [
+    {
+      "phase": 1,
+      "name": "CRITICAL Remediation",
+      "timeframe": "< 24 hours",
+      "priority": "BLOCKER",
+      "findings_count": 5,
+      "actions": [
+        "A02: Cryptographic Failures: Hardcoded encryption key detected...",
+        "A07: Authentication Failures: JWT with hardcoded secret...",
+        "A08: Data Integrity Failures: Insecure deserialization with pickle...",
+        "A08: Data Integrity Failures: Insecure deserialization with pickle...",
+        "A08: Data Integrity Failures: Insecure deserialization with pickle..."
+      ],
+      "blocking_deployment": true
+    },
+    {
+      "phase": 2,
+      "name": "HIGH Priority Fixes",
+      "timeframe": "< 1 week",
+      "priority": "HIGH",
+      "findings_count": 118,
+      "actions": [
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator...",
+        "A01: Broken Access Control: Route endpoint without authorization decorator..."
+      ],
+      "blocking_deployment": false
+    },
+    {
+      "phase": 3,
+      "name": "MEDIUM Priority Improvements",
+      "timeframe": "< 1 month",
+      "priority": "MEDIUM",
+      "findings_count": 4,
+      "actions": [
+        "Batch remediation of medium priority issues"
+      ],
+      "blocking_deployment": false
+    }
+  ],
+  "slo_status": {
+    "critical_findings": {
+      "max": 0,
+      "current": 5,
+      "status": "FAIL"
+    },
+    "high_findings": {
+      "max": 5,
+      "current": 118,
+      "status": "FAIL"
+    },
+    "compliance_score": {
+      "min": 70,
+      "current": 0,
+      "status": "FAIL"
+    },
+    "outdated_dependencies": {
+      "max": 30,
+      "current": 0,
+      "status": "PASS"
+    },
+    "hardcoded_secrets": {
+      "max": 0,
+      "current": 0,
+      "status": "PASS"
+    }
+  }
+}

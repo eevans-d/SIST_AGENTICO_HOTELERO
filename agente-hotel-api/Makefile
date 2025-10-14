@@ -8,6 +8,10 @@
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 .PHONY: test-unit test-integration test-e2e test-business-metrics load-test chaos-test
+.PHONY: security-deps security-deps-json security-deps-html install-security-tools
+.PHONY: secret-scan secret-scan-json secret-scan-strict fix-permissions
+.PHONY: owasp-scan owasp-scan-json owasp-scan-category owasp-report owasp-report-json
+.PHONY: compliance-report compliance-report-json compliance-show
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -60,6 +64,149 @@ security-fast: ## Escaneo rápido (solo HIGH/CRITICAL) con trivy fs (vuln + secr
 security-scan: ## Escaneo completo (deps, config, secretos, imagen) -> scripts/security-scan.sh
 	@echo "Security full scan..."
 	@bash scripts/security-scan.sh
+
+security-deps: ## P011: Escaneo de vulnerabilidades en dependencias (CVE, licenses, outdated)
+	@echo "🔐 P011: Dependency Vulnerability Scan..."
+	@python scripts/security/vulnerability_scan.py --format markdown --output .security/vuln-scan-latest.md
+	@echo "✅ Reporte generado: .security/vuln-scan-latest.md"
+
+security-deps-json: ## P011: Escaneo de dependencias (output JSON)
+	@echo "🔐 P011: Dependency Vulnerability Scan (JSON)..."
+	@python scripts/security/vulnerability_scan.py --format json --output .security/vuln-scan-latest.json
+	@echo "✅ Reporte generado: .security/vuln-scan-latest.json"
+
+security-deps-html: ## P011: Escaneo de dependencias (output HTML)
+	@echo "🔐 P011: Dependency Vulnerability Scan (HTML)..."
+	@python scripts/security/vulnerability_scan.py --format html --output .security/vuln-scan-latest.html
+	@echo "✅ Reporte generado: .security/vuln-scan-latest.html"
+	@echo "Abrir con: xdg-open .security/vuln-scan-latest.html"
+
+install-security-tools: ## Instalar herramientas de seguridad (pip-audit, safety, pip-licenses)
+	@echo "📦 Instalando herramientas de seguridad..."
+	pip install pip-audit safety pip-licenses
+	@echo "✅ Herramientas instaladas: pip-audit, safety, pip-licenses"
+
+secret-scan: ## P012: Escaneo de secretos hardcodeados (output Markdown)
+	@echo "🔍 P012: Secret Scanning & Hardening..."
+	@python scripts/security/secret_scanner.py --format markdown --output .security/secret-scan-latest.md
+	@echo "✅ Reporte generado: .security/secret-scan-latest.md"
+
+secret-scan-json: ## P012: Escaneo de secretos (output JSON para CI/CD)
+	@echo "🔍 P012: Secret Scanning (JSON)..."
+	@python scripts/security/secret_scanner.py --format json --output .security/secret-scan-latest.json
+	@echo "✅ Reporte generado: .security/secret-scan-latest.json"
+
+secret-scan-strict: ## Escaneo estricto de secretos (falla en cualquier hallazgo)
+	@echo "🔐 Ejecutando escaneo estricto de secretos..."
+	@mkdir -p .security
+	@if [ ! -f scripts/security/secret_scanner.py ]; then \
+		echo "❌ Error: scripts/security/secret_scanner.py no encontrado"; \
+		exit 1; \
+	fi
+	@python3 scripts/security/secret_scanner.py --format markdown --strict || { \
+		echo "❌ Escaneo estricto detectó hallazgos"; \
+		echo "Ver reporte en .security/secret-scan-latest.md"; \
+		exit 1; \
+	}
+	@echo "✅ Escaneo estricto completado sin hallazgos críticos"
+
+fix-permissions: ## Corregir permisos de archivos sensibles (auto-remediación)
+	@echo "� Corrigiendo permisos de archivos sensibles..."
+	@if [ -f .env ]; then \
+		chmod 600 .env && echo "✅ .env permisos actualizados a 0600"; \
+	fi
+	@if [ -f .env.production ]; then \
+		chmod 600 .env.production && echo "✅ .env.production permisos actualizados a 0600"; \
+	fi
+	@find . -name "*.pem" -type f -exec chmod 600 {} + 2>/dev/null && echo "✅ Archivos .pem actualizados" || echo "No .pem files found"
+	@find . -name "*.key" -type f -exec chmod 600 {} + 2>/dev/null && echo "✅ Archivos .key actualizados" || echo "No .key files found"
+	@echo "✅ Permisos corregidos"
+
+# ------------------------------------------------------------------------------
+# P013: OWASP Top 10 2021 Validation
+# ------------------------------------------------------------------------------
+
+owasp-scan: ## Escaneo completo OWASP Top 10 (Markdown)
+	@echo "🛡️ Ejecutando validación OWASP Top 10 2021..."
+	@mkdir -p .security
+	@if [ ! -f scripts/security/owasp_validator.py ]; then \
+		echo "❌ Error: scripts/security/owasp_validator.py no encontrado"; \
+		exit 1; \
+	fi
+	@python3 scripts/security/owasp_validator.py --format markdown
+	@echo "✅ Escaneo completado. Ver reporte en .security/owasp-scan-latest.md"
+	@echo "📊 Ejecuta 'make owasp-report' para ver el reporte"
+
+owasp-scan-json: ## Escaneo OWASP Top 10 en formato JSON (CI/CD)
+	@echo "🛡️ Ejecutando validación OWASP Top 10 (JSON)..."
+	@mkdir -p .security
+	@if [ ! -f scripts/security/owasp_validator.py ]; then \
+		echo "❌ Error: scripts/security/owasp_validator.py no encontrado"; \
+		exit 1; \
+	fi
+	@python3 scripts/security/owasp_validator.py --format json --output .security/owasp-scan-latest.json
+	@echo "✅ Escaneo JSON completado: .security/owasp-scan-latest.json"
+
+owasp-scan-category: ## Escaneo de categoría específica OWASP (uso: make owasp-scan-category CATEGORY=A03)
+	@echo "🛡️ Escaneando categoría OWASP $(CATEGORY)..."
+	@if [ -z "$(CATEGORY)" ]; then \
+		echo "❌ Error: Especifica CATEGORY (A01-A10)"; \
+		echo "Ejemplo: make owasp-scan-category CATEGORY=A03"; \
+		exit 1; \
+	fi
+	@mkdir -p .security
+	@python3 scripts/security/owasp_validator.py --category $(CATEGORY) --format markdown
+	@echo "✅ Escaneo $(CATEGORY) completado"
+
+owasp-report: ## Ver último reporte OWASP (Markdown)
+	@if [ ! -f .security/owasp-scan-latest.md ]; then \
+		echo "❌ No hay reporte disponible. Ejecuta 'make owasp-scan' primero"; \
+		exit 1; \
+	fi
+	@cat .security/owasp-scan-latest.md
+
+owasp-report-json: ## Ver último reporte OWASP (JSON formateado)
+	@if [ ! -f .security/owasp-scan-latest.json ]; then \
+		echo "❌ No hay reporte JSON disponible. Ejecuta 'make owasp-scan-json' primero"; \
+		exit 1; \
+	fi
+	@cat .security/owasp-scan-latest.json | jq '.'
+
+# ==============================================================================
+# P014: Compliance Report (Consolidated)
+# ==============================================================================
+
+compliance-report: ## Generate consolidated compliance report (JSON + Markdown)
+	@echo "🔐 Generating compliance report (P014)..."
+	@python3 scripts/security/compliance_report.py --format both
+	@echo ""
+	@echo "📊 Reports generated:"
+	@echo "  - JSON: .security/compliance-report-latest.json"
+	@echo "  - Markdown: .security/compliance-report-latest.md"
+	@echo ""
+	@echo "💡 View with: make compliance-show"
+
+compliance-report-json: ## Generate compliance report (JSON only)
+	@python3 scripts/security/compliance_report.py --format json
+
+compliance-show: ## Display last compliance report (Markdown)
+	@if [ -f .security/compliance-report-latest.md ]; then \
+		cat .security/compliance-report-latest.md; \
+	else \
+		echo "❌ No compliance report found. Run 'make compliance-report' first."; \
+		exit 1; \
+	fi
+
+# ==============================================================================
+# File Security
+# ==============================================================================
+
+fix-permissions: ## P012: Corregir permisos de archivos sensibles
+	@echo "🔒 Fixing file permissions..."
+	@chmod 600 .env .env.production 2>/dev/null || true
+	@chmod 600 private_key.pem id_rsa id_ed25519 2>/dev/null || true
+	@chmod 600 secrets.json credentials.json 2>/dev/null || true
+	@echo "✅ File permissions fixed (0600)"
 
 test: ## Ejecutar tests con pytest (usa Poetry si está disponible)
 ifeq ($(HAS_POETRY),1)

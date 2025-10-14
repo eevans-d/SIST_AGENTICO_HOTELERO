@@ -69,3 +69,12 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
+
+[tool.pytest.ini_options]
+markers = [
+    "security: Security-related tests",
+    "critical: Critical security findings (CRITICAL severity)",
+    "high: High severity security issues",
+    "ai: AI/LLM-specific security tests",
+    "owasp: OWASP Top 10 compliance tests"
+]
