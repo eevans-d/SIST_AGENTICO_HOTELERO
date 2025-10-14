@@ -19,6 +19,12 @@ class PMSRateLimitError(PMSError):
     pass
 
 
+class PMSNotFoundError(PMSError):
+    """Raised when a resource is not found in the PMS (404)."""
+
+    pass
+
+
 class PMSServerError(PMSError):
     """Raised for 5xx errors from the PMS."""
 
