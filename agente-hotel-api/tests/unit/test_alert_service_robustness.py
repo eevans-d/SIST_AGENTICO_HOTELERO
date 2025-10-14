@@ -288,7 +288,8 @@ async def test_get_cooldown_remaining():
     alert_manager = AlertManager(cooldown_seconds=2)
 
     violation = {"type": "test", "user_id": "user1"}
-    alert_key = "test"
+    # Alert key format: type:level
+    alert_key = "test:unknown"
 
     # Enviar alerta
     await alert_manager.send_alert(violation)
