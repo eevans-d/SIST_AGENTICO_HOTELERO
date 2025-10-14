@@ -200,6 +200,73 @@ groups:
           runbook_url: "https://grafana.local/runbooks#circuitbreakerimminent"
           dashboard: "grafana:/d/agente-overview/Agente%20Hotel%20-%20Overview?viewPanel=5"
 
+      # Database & Connection Pool Alerts
+      - alert: DatabasePoolExhaustionCritical
+        expr: db_pool_utilization_percent > 90
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Connection pool cerca de agotamiento (>90%)"
+          description: "La utilización del connection pool es {{ $value }}%. Riesgo de timeouts en nuevas conexiones. Aumentar POSTGRES_POOL_SIZE o POSTGRES_MAX_OVERFLOW."
+          runbook_url: "https://grafana.local/runbooks#databasepoolexhaustion"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=1"
+
+      - alert: DatabasePoolExhaustionWarning
+        expr: db_pool_utilization_percent > 75
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connection pool con alta utilización (>75%)"
+          description: "La utilización del connection pool es {{ $value }}%. Monitorear de cerca y considerar incremento de pool_size."
+          runbook_url: "https://grafana.local/runbooks#databasepoolexhaustion"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=1"
+
+      - alert: DatabaseLongRunningQueries
+        expr: db_pool_long_running_queries >= 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Múltiples queries de larga duración detectadas"
+          description: "{{ $value }} queries ejecutándose por más de 30s. Puede indicar missing indexes, locks o N+1 queries. Ejecutar monitor_connections.py para detalles."
+          runbook_url: "https://grafana.local/runbooks#databaselongqueries"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=3"
+
+      - alert: DatabaseIdleInTransaction
+        expr: db_pool_idle_in_transaction > 3
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conexiones idle-in-transaction detectadas"
+          description: "{{ $value }} conexiones en estado idle-in-transaction. Posible transaction leak - revisar commit/rollback en código."
+          runbook_url: "https://grafana.local/runbooks#databaseidleintransaction"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=2"
+
+      - alert: DatabasePoolOverflowHigh
+        expr: db_pool_overflow > 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alto uso de overflow connections"
+          description: "{{ $value }} conexiones usando el overflow pool. El pool base es insuficiente para la carga actual. Aumentar POSTGRES_POOL_SIZE."
+          runbook_url: "https://grafana.local/runbooks#databasepooloverflow"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=9"
+
+      - alert: HighErrorRate5xx
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alta tasa de errores 5xx (>5%)"
+          description: "{{ $value | humanizePercentage }} de requests retornando 5xx. Correlacionar con pool exhaustion o circuit breaker state."
+          runbook_url: "https://grafana.local/runbooks#higherrorrate5xx"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=10"
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.
