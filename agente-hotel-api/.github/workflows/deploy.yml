@@ -1,0 +1,550 @@
+name: Automated Deployment Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+          - canary
+      deployment_strategy:
+        description: 'Deployment strategy'
+        required: true
+        type: choice
+        default: 'blue-green'
+        options:
+          - blue-green
+          - rolling
+          - canary
+          - recreate
+      skip_tests:
+        description: 'Skip tests (emergency only)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/agente-hotel-api
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # PRE-DEPLOYMENT VALIDATION
+  # ═══════════════════════════════════════════════════════════════
+  
+  pre-deployment-checks:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      environment: ${{ steps.environment.outputs.environment }}
+      should_deploy: ${{ steps.gates.outputs.should_deploy }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Determine version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "📦 Version: ${VERSION}"
+      
+      - name: Determine environment
+        id: environment
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="staging"
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            ENV="staging"
+          else
+            ENV="develop"
+          fi
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "🎯 Target environment: ${ENV}"
+      
+      - name: Check deployment gates
+        id: gates
+        run: |
+          SHOULD_DEPLOY="true"
+          
+          # Check if commit message has [skip-deploy]
+          if git log -1 --pretty=%B | grep -q "\[skip-deploy\]"; then
+            echo "⏭️  Skipping deployment (commit message)"
+            SHOULD_DEPLOY="false"
+          fi
+          
+          # Check if only docs changed
+          CHANGED_FILES=$(git diff --name-only HEAD~1)
+          if echo "$CHANGED_FILES" | grep -qv "^docs/\|^README\|\.md$"; then
+            echo "✅ Code changes detected"
+          else
+            echo "📄 Only documentation changed"
+            SHOULD_DEPLOY="false"
+          fi
+          
+          echo "should_deploy=${SHOULD_DEPLOY}" >> $GITHUB_OUTPUT
+
+  # ═══════════════════════════════════════════════════════════════
+  # BUILD & TEST
+  # ═══════════════════════════════════════════════════════════════
+  
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    if: needs.pre-deployment-checks.outputs.should_deploy == 'true'
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: agente_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --all-extras --no-root
+      
+      - name: Run linting
+        run: |
+          poetry run ruff check --output-format=github .
+          poetry run ruff format --check .
+      
+      - name: Run type checking
+        run: |
+          poetry run mypy app/ --ignore-missing-imports || true
+      
+      - name: Run unit tests
+        if: ${{ !github.event.inputs.skip_tests }}
+        env:
+          POSTGRES_URL: postgresql://postgres:test_password@localhost:5432/agente_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          poetry run pytest tests/unit/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
+      
+      - name: Run integration tests
+        if: ${{ !github.event.inputs.skip_tests }}
+        env:
+          POSTGRES_URL: postgresql://postgres:test_password@localhost:5432/agente_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          poetry run pytest tests/integration/ -v
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-agente-hotel
+
+  # ═══════════════════════════════════════════════════════════════
+  # SECURITY SCANNING
+  # ═══════════════════════════════════════════════════════════════
+  
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    if: needs.pre-deployment-checks.outputs.should_deploy == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Run secret scanning
+        run: |
+          docker run --rm -v $(pwd):/src zricethezav/gitleaks:latest \
+            detect --source /src --no-git --report-path /src/gitleaks-report.json || true
+
+  # ═══════════════════════════════════════════════════════════════
+  # BUILD DOCKER IMAGE
+  # ═══════════════════════════════════════════════════════════════
+  
+  build-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.pre-deployment-checks.outputs.version }}
+      
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+
+  # ═══════════════════════════════════════════════════════════════
+  # DEPLOY TO STAGING
+  # ═══════════════════════════════════════════════════════════════
+  
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-image]
+    if: |
+      needs.pre-deployment-checks.outputs.should_deploy == 'true' &&
+      (needs.pre-deployment-checks.outputs.environment == 'staging' || github.ref == 'refs/heads/main')
+    environment:
+      name: staging
+      url: https://staging.agente-hotel.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy with blue-green strategy
+        run: |
+          ssh -i ~/.ssh/staging_key ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd /opt/agente-hotel
+            
+            # Pull latest code
+            git pull origin main
+            
+            # Run blue-green deployment
+            ./scripts/blue-green-deploy.sh \
+              --image ${{ needs.build-image.outputs.image_tag }} \
+              --environment staging \
+              --health-check-timeout 300
+          EOF
+      
+      - name: Run smoke tests
+        run: |
+          # Wait for deployment to stabilize
+          sleep 30
+          
+          # Run smoke tests
+          curl -f https://staging.agente-hotel.com/health/ready || exit 1
+          curl -f https://staging.agente-hotel.com/health/live || exit 1
+      
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Staging deployment successful"
+          echo "🔗 URL: https://staging.agente-hotel.com"
+          echo "📦 Version: ${{ needs.pre-deployment-checks.outputs.version }}"
+
+  # ═══════════════════════════════════════════════════════════════
+  # CANARY DEPLOYMENT
+  # ═══════════════════════════════════════════════════════════════
+  
+  deploy-canary:
+    name: Deploy Canary (10% traffic)
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-image, deploy-staging]
+    if: |
+      needs.pre-deployment-checks.outputs.environment == 'canary' ||
+      (github.event.inputs.deployment_strategy == 'canary' && github.event_name == 'workflow_dispatch')
+    environment:
+      name: production-canary
+      url: https://canary.agente-hotel.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy canary
+        run: |
+          ./scripts/canary-deploy.sh \
+            --image ${{ needs.build-image.outputs.image_tag }} \
+            --traffic-percentage 10 \
+            --duration 600 \
+            --error-threshold 0.05 \
+            --latency-threshold 3000
+      
+      - name: Monitor canary metrics
+        run: |
+          sleep 600  # Monitor for 10 minutes
+          
+          # Check canary metrics
+          CANARY_ERROR_RATE=$(curl -s http://prometheus:9090/api/v1/query \
+            --data-urlencode 'query=rate(http_requests_total{deployment="canary",status=~"5.."}[5m])')
+          
+          BASELINE_ERROR_RATE=$(curl -s http://prometheus:9090/api/v1/query \
+            --data-urlencode 'query=rate(http_requests_total{deployment="stable",status=~"5.."}[5m])')
+          
+          # Compare and decide
+          ./scripts/canary-decision.sh \
+            --canary-error-rate "$CANARY_ERROR_RATE" \
+            --baseline-error-rate "$BASELINE_ERROR_RATE"
+
+  # ═══════════════════════════════════════════════════════════════
+  # PRODUCTION DEPLOYMENT
+  # ═══════════════════════════════════════════════════════════════
+  
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-image, deploy-staging]
+    if: |
+      needs.pre-deployment-checks.outputs.environment == 'production' &&
+      github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+      url: https://agente-hotel.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Require manual approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ github.repository_owner }}
+          minimum-approvals: 1
+          issue-title: "Deploy to Production - v${{ needs.pre-deployment-checks.outputs.version }}"
+          issue-body: |
+            ## Production Deployment Request
+            
+            **Version:** ${{ needs.pre-deployment-checks.outputs.version }}
+            **Strategy:** ${{ github.event.inputs.deployment_strategy }}
+            **Triggered by:** @${{ github.actor }}
+            
+            ### Pre-Deployment Checklist
+            - [ ] Staging tests passed
+            - [ ] Security scans passed
+            - [ ] Database migrations tested
+            - [ ] Rollback plan confirmed
+            - [ ] On-call team notified
+            
+            Please review and approve this deployment.
+      
+      - name: Create backup
+        run: |
+          # Backup database
+          ./scripts/backup.sh --target production --type full
+          
+          # Tag current production image
+          docker tag ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+                     ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:rollback-$(date +%Y%m%d-%H%M%S)
+      
+      - name: Run database migrations
+        run: |
+          ./scripts/safe-migration.sh \
+            --environment production \
+            --backup-before \
+            --dry-run false
+      
+      - name: Deploy with selected strategy
+        run: |
+          STRATEGY="${{ github.event.inputs.deployment_strategy }}"
+          
+          case "$STRATEGY" in
+            blue-green)
+              ./scripts/blue-green-deploy.sh \
+                --image ${{ needs.build-image.outputs.image_tag }} \
+                --environment production
+              ;;
+            rolling)
+              ./scripts/rolling-deploy.sh \
+                --image ${{ needs.build-image.outputs.image_tag }} \
+                --batch-size 2 \
+                --wait-time 60
+              ;;
+            canary)
+              ./scripts/canary-deploy.sh \
+                --image ${{ needs.build-image.outputs.image_tag }} \
+                --traffic-percentage 100 \
+                --promote
+              ;;
+            recreate)
+              ./scripts/recreate-deploy.sh \
+                --image ${{ needs.build-image.outputs.image_tag }}
+              ;;
+          esac
+      
+      - name: Validate deployment
+        run: |
+          ./tests/deployment/validate_deployment.sh \
+            --environment production \
+            --timeout 600
+      
+      - name: Run smoke tests
+        run: |
+          poetry install
+          poetry run pytest tests/e2e/smoke/ \
+            --base-url https://agente-hotel.com \
+            --browser chromium \
+            --headed false
+      
+      - name: Monitor post-deployment
+        run: |
+          # Monitor for 15 minutes
+          ./scripts/deployment-monitor.sh \
+            --duration 900 \
+            --error-threshold 0.01 \
+            --latency-p95-threshold 3000 \
+            --auto-rollback true
+      
+      - name: Notify deployment success
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: |
+            🚀 Production deployment successful!
+            Version: ${{ needs.pre-deployment-checks.outputs.version }}
+            Strategy: ${{ github.event.inputs.deployment_strategy }}
+            Deployed by: @${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ═══════════════════════════════════════════════════════════════
+  # AUTOMATIC ROLLBACK
+  # ═══════════════════════════════════════════════════════════════
+  
+  auto-rollback:
+    name: Automatic Rollback
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: failure()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Trigger rollback
+        run: |
+          echo "🚨 Deployment failed - triggering automatic rollback"
+          
+          ./scripts/auto-rollback.sh \
+            --environment production \
+            --preserve-data \
+            --notify true
+      
+      - name: Restore database
+        if: failure()
+        run: |
+          ./scripts/restore.sh \
+            --target production \
+            --backup latest \
+            --verify
+      
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            ⚠️ Production deployment failed - automatic rollback triggered
+            Version attempted: ${{ needs.pre-deployment-checks.outputs.version }}
+            Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}

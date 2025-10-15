@@ -15,6 +15,8 @@
 .PHONY: perf-smoke perf-load perf-stress perf-spike perf-soak perf-validate perf-baseline perf-clean
 .PHONY: chaos-network chaos-service chaos-database chaos-pms chaos-resource chaos-all chaos-resilience
 .PHONY: chaos-report chaos-monkey chaos-dry-run
+.PHONY: deploy-staging deploy-production deploy-canary rollback validate-deployment migration-safe
+.PHONY: deploy-status deploy-logs deploy-test
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -1056,6 +1058,82 @@ chaos-dry-run: ## Run chaos experiments in dry-run mode (no actual injection)
 	asyncio.run(run()); \
 	"
 	@echo "✅ Dry run completed (no actual faults injected)"
+
+# ==============================================================================
+# DEPLOYMENT AUTOMATION (P018)
+# ==============================================================================
+
+deploy-staging: ## Deploy to staging environment with blue-green strategy
+	@echo "🚀 Deploying to STAGING..."
+	@./scripts/blue-green-deploy.sh \
+		--image $(IMAGE_TAG) \
+		--environment staging \
+		--health-check-timeout 300
+	@echo "✅ Staging deployment complete"
+	@echo "🔗 URL: https://staging.agente-hotel.com"
+
+deploy-production: ## Deploy to production (requires manual approval)
+	@echo "🚀 Deploying to PRODUCTION..."
+	@echo "⚠️  This requires manual approval in GitHub Actions"
+	@echo "Triggering workflow..."
+	@gh workflow run deploy.yml \
+		--ref main \
+		-f environment=production \
+		-f deployment_strategy=blue-green
+
+deploy-canary: ## Deploy canary with 10% traffic
+	@echo "🐦 Deploying CANARY (10% traffic)..."
+	@./scripts/canary-deploy.sh \
+		--image $(IMAGE_TAG) \
+		--traffic-percentage 10 \
+		--duration 600 \
+		--auto-promote
+	@echo "✅ Canary deployment complete"
+
+rollback: ## Automatic rollback to previous version
+	@echo "🔄 Triggering ROLLBACK..."
+	@./scripts/auto-rollback.sh \
+		--environment $(ENV) \
+		--preserve-data \
+		--notify
+	@echo "✅ Rollback complete"
+
+validate-deployment: ## Run deployment validation tests
+	@echo "🧪 Validating deployment..."
+	@poetry run pytest tests/deployment/test_deployment_validation.py \
+		-v \
+		-m deployment \
+		--tb=short
+	@echo "✅ Deployment validation passed"
+
+migration-safe: ## Run database migrations safely with backup
+	@echo "🗄️  Running safe database migration..."
+	@./scripts/safe-migration.sh \
+		--environment $(ENV) \
+		--backup-before \
+		--dry-run false \
+		--verify
+	@echo "✅ Migration complete"
+
+deploy-status: ## Check deployment status
+	@echo "📊 Deployment Status:"
+	@echo ""
+	@echo "Active Containers:"
+	@docker ps --filter "name=agente-api" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+	@echo ""
+	@echo "Health Status:"
+	@curl -sf http://localhost:8000/health/ready | jq '.' || echo "❌ Not reachable"
+
+deploy-logs: ## View deployment logs
+	@echo "📋 Deployment Logs:"
+	@docker logs --tail 100 --follow agente-api-blue || \
+	 docker logs --tail 100 --follow agente-api-green || \
+	 docker logs --tail 100 --follow agente-api
+
+deploy-test: ## Test deployment validation locally
+	@echo "🧪 Testing deployment validation..."
+	@poetry run pytest tests/deployment/ -v --tb=short
+	@echo "✅ Deployment tests passed"
 
 
 .DEFAULT_GOAL := help
