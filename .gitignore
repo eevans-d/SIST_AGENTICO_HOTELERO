@@ -66,3 +66,4 @@ agente-hotel-api/.cache/
 .playbook/*.json
 .playbook/*_report.json
 *.code-workspace
+archive/legacy-docs/
