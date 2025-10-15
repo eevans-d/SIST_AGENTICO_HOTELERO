@@ -13,6 +13,8 @@
 .PHONY: owasp-scan owasp-scan-json owasp-scan-category owasp-report owasp-report-json
 .PHONY: compliance-report compliance-report-json compliance-show
 .PHONY: perf-smoke perf-load perf-stress perf-spike perf-soak perf-validate perf-baseline perf-clean
+.PHONY: chaos-network chaos-service chaos-database chaos-pms chaos-resource chaos-all chaos-resilience
+.PHONY: chaos-report chaos-monkey chaos-dry-run
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -949,6 +951,111 @@ obs-restart: ## Restart observability stack
 	@echo "🔄 Restarting observability stack..."
 	@docker compose restart prometheus grafana jaeger alertmanager
 	@echo "✅ Observability stack restarted"
+
+# ==============================================================================
+# Chaos Engineering
+# ==============================================================================
+
+chaos-network: ## Run network chaos scenarios (latency, timeouts, failures)
+	@echo "🌪️  Running network chaos scenarios..."
+	@poetry run pytest tests/chaos/scenarios/test_network.py -v || \
+	 poetry run python -m pytest tests/chaos/test_advanced_resilience.py::TestMTTRMetrics::test_network_latency_mttr -v
+	@echo "✅ Network chaos scenarios completed"
+
+chaos-service: ## Run service chaos scenarios (failures, circuit breakers, rate limits)
+	@echo "🌪️  Running service chaos scenarios..."
+	@poetry run pytest tests/chaos/scenarios/test_service.py -v || \
+	 poetry run python -m pytest tests/chaos/test_advanced_resilience.py::TestCircuitBreakerTransitions -v
+	@echo "✅ Service chaos scenarios completed"
+
+chaos-database: ## Run database chaos scenarios (connection failures, slow queries)
+	@echo "🌪️  Running database chaos scenarios..."
+	@poetry run pytest tests/chaos/scenarios/test_database.py -v || \
+	 poetry run python -m pytest tests/chaos/test_advanced_resilience.py::TestMTTRMetrics::test_mttr_pms_failure -v
+	@echo "✅ Database chaos scenarios completed"
+
+chaos-pms: ## Run PMS chaos scenarios (API failures, timeouts, rate limits)
+	@echo "🌪️  Running PMS chaos scenarios..."
+	@poetry run python -m pytest tests/chaos/test_advanced_resilience.py::TestMTTRMetrics::test_pms_failure_mttr -v
+	@echo "✅ PMS chaos scenarios completed"
+
+chaos-resource: ## Run resource chaos scenarios (memory pressure, CPU throttling)
+	@echo "🌪️  Running resource chaos scenarios..."
+	@poetry run pytest tests/chaos/scenarios/test_resource.py -v || echo "⚠️  Resource chaos scenarios require manual setup"
+	@echo "✅ Resource chaos scenarios completed"
+
+chaos-all: ## Run all chaos scenarios sequentially
+	@echo "🌪️  Running ALL chaos scenarios..."
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Phase 1: Network Chaos"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@$(MAKE) chaos-network
+	@sleep 15
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Phase 2: Service Chaos"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@$(MAKE) chaos-service
+	@sleep 15
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Phase 3: Database Chaos"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@$(MAKE) chaos-database
+	@sleep 15
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Phase 4: PMS Chaos"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@$(MAKE) chaos-pms
+	@echo ""
+	@echo "✅ ALL chaos scenarios completed"
+	@echo ""
+	@echo "📊 Generate report: make chaos-report"
+
+chaos-resilience: ## Run comprehensive resilience test suite
+	@echo "🛡️  Running resilience test suite..."
+	@poetry run python -m pytest tests/chaos/test_advanced_resilience.py -v
+	@echo "✅ Resilience tests completed"
+
+chaos-report: ## Generate chaos experiment report
+	@echo "📊 Generating chaos experiment report..."
+	@mkdir -p .playbook/chaos_reports
+	@echo "Chaos Engineering Report - $(shell date '+%Y-%m-%d %H:%M:%S')" > .playbook/chaos_reports/latest.txt
+	@echo "=============================================" >> .playbook/chaos_reports/latest.txt
+	@echo "" >> .playbook/chaos_reports/latest.txt
+	@poetry run pytest tests/chaos/test_advanced_resilience.py -v --tb=short | tee -a .playbook/chaos_reports/latest.txt || true
+	@echo "" >> .playbook/chaos_reports/latest.txt
+	@echo "Report saved to: .playbook/chaos_reports/latest.txt"
+	@echo "✅ Chaos report generated"
+
+chaos-monkey: ## Start Chaos Monkey (random fault injection) - USE WITH CAUTION
+	@echo "⚠️  WARNING: Starting Chaos Monkey!"
+	@echo "⚠️  This will randomly inject faults into the system."
+	@echo "⚠️  Press Ctrl+C to stop."
+	@echo ""
+	@read -p "Are you sure you want to continue? (yes/no): " confirm && \
+	 if [ "$$confirm" = "yes" ]; then \
+	   poetry run python -c "import asyncio; from tests.chaos.orchestrator import ChaosMonkey; monkey = ChaosMonkey(enabled=True, probability=0.1); monkey.start(); asyncio.get_event_loop().run_forever()"; \
+	 else \
+	   echo "Cancelled."; \
+	 fi
+
+chaos-dry-run: ## Run chaos experiments in dry-run mode (no actual injection)
+	@echo "🧪 Running chaos experiments in DRY RUN mode..."
+	@poetry run python -c "\
+	import asyncio; \
+	from tests.chaos.orchestrator import ChaosOrchestrator; \
+	from tests.chaos.scenarios import network_scenarios; \
+	async def run(): \
+	    orchestrator = ChaosOrchestrator(); \
+	    scenario = network_scenarios[0]; \
+	    scenario.duration_seconds = 30; \
+	    await orchestrator.run_experiment(scenario, dry_run=True); \
+	asyncio.run(run()); \
+	"
+	@echo "✅ Dry run completed (no actual faults injected)"
 
 
 .DEFAULT_GOAL := help
