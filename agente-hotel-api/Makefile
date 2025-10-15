@@ -17,6 +17,7 @@
 .PHONY: chaos-report chaos-monkey chaos-dry-run
 .PHONY: deploy-staging deploy-production deploy-canary rollback validate-deployment migration-safe
 .PHONY: deploy-status deploy-logs deploy-test
+.PHONY: incident-detect incident-simulate incident-report on-call-schedule post-mortem incident-test
 
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
@@ -1134,6 +1135,69 @@ deploy-test: ## Test deployment validation locally
 	@echo "🧪 Testing deployment validation..."
 	@poetry run pytest tests/deployment/ -v --tb=short
 	@echo "✅ Deployment tests passed"
+
+# ==============================================================================
+# P019: Incident Response & Recovery
+# ==============================================================================
+
+.PHONY: incident-detect incident-simulate incident-report on-call-schedule post-mortem incident-test
+
+incident-detect: ## Run incident detector
+	@echo "🔍 Running incident detection..."
+	@python scripts/incident-detector.py --prometheus-url=${PROMETHEUS_URL:-http://localhost:9090}
+
+incident-simulate: ## Simulate incident scenarios for testing
+	@echo "🧪 Simulating incident scenarios..."
+	@echo "Available scenarios:"
+	@echo "  1. Database down (stop postgres)"
+	@echo "  2. High latency (stress CPU)"
+	@echo "  3. High error rate (inject errors)"
+	@echo "  4. Circuit breaker open (break PMS)"
+	@echo ""
+	@read -p "Select scenario [1-4]: " scenario; \
+	case $$scenario in \
+		1) docker-compose stop postgres && echo "✅ Postgres stopped. Run 'make docker-up' to recover." ;; \
+		2) docker exec agente-api stress --cpu 4 --timeout 60s ;; \
+		3) echo "Injecting errors..." && docker exec agente-api python -c "import requests; [requests.get('http://localhost:8000/force-error') for _ in range(100)]" ;; \
+		4) docker-compose stop qloapps && echo "✅ PMS stopped. Circuit breaker should open." ;; \
+		*) echo "❌ Invalid scenario" ;; \
+	esac
+
+incident-report: ## Generate incident report from detector
+	@echo "📊 Generating incident report..."
+	@python scripts/incident-detector.py --report | jq .
+	@echo ""
+	@echo "Detailed history in .incidents.json"
+
+on-call-schedule: ## Show current on-call rotation schedule
+	@echo "📅 On-Call Schedule"
+	@echo "===================="
+	@echo ""
+	@echo "Current Week:"
+	@echo "  Primary:   [Check docs/ON-CALL-GUIDE.md]"
+	@echo "  Secondary: [Check docs/ON-CALL-GUIDE.md]"
+	@echo "  IC:        [Check docs/ON-CALL-GUIDE.md]"
+	@echo ""
+	@echo "See docs/ON-CALL-GUIDE.md for full rotation schedule"
+	@echo "Update schedule: Edit docs/ON-CALL-GUIDE.md"
+
+post-mortem: ## Create post-mortem from template
+	@echo "📝 Creating post-mortem document..."
+	@read -p "Incident ID (e.g., INC-20241015-001): " inc_id; \
+	read -p "Incident Title: " title; \
+	incident_file="docs/post-mortems/$$inc_id-$$(echo $$title | tr '[:upper:]' '[:lower:]' | tr ' ' '-').md"; \
+	mkdir -p docs/post-mortems; \
+	cp templates/post-mortem-template.md "$$incident_file"; \
+	sed -i "s/INC-YYYYMMDD-XXXX/$$inc_id/g" "$$incident_file"; \
+	sed -i "s/\[Incident Title\]/$$title/g" "$$incident_file"; \
+	sed -i "s/YYYY-MM-DD/$$(date +%Y-%m-%d)/g" "$$incident_file"; \
+	echo "✅ Post-mortem created: $$incident_file"; \
+	echo "📝 Please fill out all sections in the post-mortem"
+
+incident-test: ## Run incident response tests
+	@echo "🧪 Running incident response tests..."
+	@poetry run pytest tests/incident/ -v --tb=short
+	@echo "✅ Incident response tests passed"
 
 
 .DEFAULT_GOAL := help
