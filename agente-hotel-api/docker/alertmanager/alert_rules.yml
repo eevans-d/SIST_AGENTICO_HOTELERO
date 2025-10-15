@@ -1,0 +1,230 @@
+# Prometheus Alert Rules for Agente Hotel System
+# SLO violations, performance degradation, and critical errors
+#
+# Author: AI Agent
+# Date: October 14, 2025
+# Version: 1.0.0
+
+groups:
+  # ════════════════════════════════════════════════════════════════════
+  # SLO COMPLIANCE ALERTS
+  # ════════════════════════════════════════════════════════════════════
+  
+  - name: slo_violations
+    interval: 30s
+    rules:
+      # P95 Latency SLO Violation
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 3
+        for: 5m
+        labels:
+          severity: critical
+          slo: latency_p95
+          priority: P0
+        annotations:
+          summary: "P95 latency exceeds 3s SLO"
+          description: "P95 latency is {{ $value }}s (threshold: 3s) for endpoint {{ $labels.endpoint }}"
+          runbook: "https://docs/runbooks/high-latency"
+      
+      # P99 Latency SLO Violation
+      - alert: HighP99Latency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency_p99
+          priority: P1
+        annotations:
+          summary: "P99 latency exceeds 5s SLO"
+          description: "P99 latency is {{ $value }}s (threshold: 5s)"
+      
+      # Error Rate SLO Violation
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status_code=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          slo: error_rate
+          priority: P0
+        annotations:
+          summary: "Error rate exceeds 1% SLO"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 1%)"
+          runbook: "https://docs/runbooks/high-errors"
+      
+      # Low Availability
+      - alert: LowAvailability
+        expr: slo_availability < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+          priority: P0
+        annotations:
+          summary: "Service availability below 99.9% SLO"
+          description: "Availability is {{ $value | humanizePercentage }} (threshold: 99.9%)"
+
+  # ════════════════════════════════════════════════════════════════════
+  # PERFORMANCE ALERTS
+  # ════════════════════════════════════════════════════════════════════
+  
+  - name: performance_degradation
+    interval: 30s
+    rules:
+      # PMS API Slow
+      - alert: PMSAPISlowResponse
+        expr: histogram_quantile(0.95, rate(pms_api_latency_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          component: pms
+          priority: P1
+        annotations:
+          summary: "PMS API responding slowly"
+          description: "PMS P95 latency is {{ $value }}s for {{ $labels.endpoint }}"
+      
+      # Database Slow Queries
+      - alert: DatabaseSlowQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+          priority: P1
+        annotations:
+          summary: "Database queries are slow"
+          description: "DB P95 latency is {{ $value }}s for table {{ $labels.table }}"
+      
+      # High Request Rate
+      - alert: HighRequestRate
+        expr: rate(http_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          component: api
+        annotations:
+          summary: "Unusual high request rate detected"
+          description: "Request rate is {{ $value }} req/s"
+
+  # ════════════════════════════════════════════════════════════════════
+  # BUSINESS METRIC ALERTS
+  # ════════════════════════════════════════════════════════════════════
+  
+  - name: business_metrics
+    interval: 1m
+    rules:
+      # High Reservation Failure Rate
+      - alert: HighReservationFailureRate
+        expr: rate(reservations_total{status="failed"}[10m]) / rate(reservations_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: reservations
+          priority: P1
+        annotations:
+          summary: "High reservation failure rate"
+          description: "{{ $value | humanizePercentage }} of reservations are failing"
+      
+      # Low Occupancy Rate
+      - alert: LowOccupancyRate
+        expr: avg(rooms_occupancy_rate) < 0.3
+        for: 1h
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "Low room occupancy detected"
+          description: "Average occupancy is {{ $value | humanizePercentage }}"
+      
+      # Message Processing Failures
+      - alert: HighMessageErrorRate
+        expr: rate(messages_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+          priority: P1
+        annotations:
+          summary: "High message processing error rate"
+          description: "{{ $value }} message errors/s on channel {{ $labels.channel }}"
+
+  # ════════════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE ALERTS
+  # ════════════════════════════════════════════════════════════════════
+  
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: system_cpu_usage > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}%"
+      
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: system_memory_usage_bytes > 2147483648
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanize1024 }}"
+      
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolNearLimit
+        expr: sum(db_connections_total) > 15
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool near limit"
+          description: "{{ $value }} database connections active"
+      
+      # Low Cache Hit Rate
+      - alert: LowCacheHitRate
+        expr: cache_hit_rate < 0.7
+        for: 10m
+        labels:
+          severity: info
+          component: cache
+        annotations:
+          summary: "Cache hit rate is low"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"
+
+  # ════════════════════════════════════════════════════════════════════
+  # CIRCUIT BREAKER ALERTS
+  # ════════════════════════════════════════════════════════════════════
+  
+  - name: circuit_breakers
+    interval: 30s
+    rules:
+      # PMS Circuit Breaker Open
+      - alert: PMSCircuitBreakerOpen
+        expr: pms_circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: pms
+          priority: P0
+        annotations:
+          summary: "PMS circuit breaker is OPEN"
+          description: "PMS is unavailable, circuit breaker triggered"
+          runbook: "https://docs/runbooks/pms-circuit-breaker"
+      
+      # PMS Circuit Breaker Half-Open
+      - alert: PMSCircuitBreakerHalfOpen
+        expr: pms_circuit_breaker_state == 2
+        for: 2m
+        labels:
+          severity: warning
+          component: pms
+        annotations:
+          summary: "PMS circuit breaker in HALF_OPEN state"
+          description: "PMS recovering, monitoring for stability"

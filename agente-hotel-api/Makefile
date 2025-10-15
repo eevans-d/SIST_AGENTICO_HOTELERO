@@ -901,5 +901,54 @@ perf-clean: ## Clean performance test results
 	@rm -rf .performance/*.json .performance/*.html .performance/*.md
 	@echo "✅ Performance results cleaned"
 
+# ══════════════════════════════════════════════════════════════════════════════
+# OBSERVABILITY TARGETS (P016)
+# ══════════════════════════════════════════════════════════════════════════════
+
+obs-up: ## Start observability stack (Prometheus, Grafana, Jaeger, AlertManager)
+	@echo "🔭 Starting observability stack..."
+	@docker compose up -d prometheus grafana jaeger alertmanager
+	@echo "✅ Observability stack started"
+	@echo "📊 Prometheus: http://localhost:9090"
+	@echo "📈 Grafana: http://localhost:3000 (admin/admin)"
+	@echo "🔍 Jaeger: http://localhost:16686"
+	@echo "🚨 AlertManager: http://localhost:9093"
+
+obs-down: ## Stop observability stack
+	@echo "🛑 Stopping observability stack..."
+	@docker compose stop prometheus grafana jaeger alertmanager
+	@echo "✅ Observability stack stopped"
+
+obs-prometheus: ## Open Prometheus UI in browser
+	@echo "📊 Opening Prometheus..."
+	@xdg-open http://localhost:9090 2>/dev/null || open http://localhost:9090 2>/dev/null || echo "Open http://localhost:9090 in your browser"
+
+obs-grafana: ## Open Grafana UI in browser
+	@echo "📈 Opening Grafana..."
+	@xdg-open http://localhost:3000 2>/dev/null || open http://localhost:3000 2>/dev/null || echo "Open http://localhost:3000 in your browser (admin/admin)"
+
+obs-jaeger: ## Open Jaeger UI in browser
+	@echo "🔍 Opening Jaeger..."
+	@xdg-open http://localhost:16686 2>/dev/null || open http://localhost:16686 2>/dev/null || echo "Open http://localhost:16686 in your browser"
+
+obs-health: ## Check health of observability services
+	@echo "🔍 Checking observability stack health..."
+	@echo "Prometheus:"
+	@curl -sf http://localhost:9090/-/healthy > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+	@echo "Grafana:"
+	@curl -sf http://localhost:3000/api/health > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+	@echo "Jaeger:"
+	@curl -sf http://localhost:14269/ > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+	@echo "AlertManager:"
+	@curl -sf http://localhost:9093/-/healthy > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+
+obs-logs: ## Follow logs of observability services
+	@docker compose logs -f prometheus grafana jaeger alertmanager
+
+obs-restart: ## Restart observability stack
+	@echo "🔄 Restarting observability stack..."
+	@docker compose restart prometheus grafana jaeger alertmanager
+	@echo "✅ Observability stack restarted"
+
 
 .DEFAULT_GOAL := help
