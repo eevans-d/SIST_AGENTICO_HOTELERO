@@ -30,14 +30,15 @@
 
 ---
 
-## 📚 DOCUMENTOS EN RAÍZ
+## 📚 DOCUMENTOS EN RAÍZ (CONSOLIDADOS)
 
 | Archivo | Propósito | Tamaño |
 |---------|-----------|--------|
-| **VERIFICACION-100-ESQUEMA-MAESTRO.md** | Esquema validación 100% | ~860 líneas |
-| **ESTADO-FINAL-PROYECTO.md** | Estado final consolidado | ~138 líneas |
-| **CONSOLIDACION-DOCUMENTACION-RESUMEN.md** | Resumen consolidación | ~207 líneas |
-| **PROYECTO-FINAL-RESUMEN.txt** | Resumen texto plano | ~286 líneas |
+| **00-INDICE-NAVEGACION.md** | Índice rápido navegación | ~205 líneas |
+| **VERIFICACION-100-ESQUEMA-MAESTRO.md** | Esquema validación 100% completo | ~860 líneas |
+| **README.md** | Info general proyecto | ~300 líneas |
+
+**Total**: 3 archivos esenciales (consolidado de 8 originales)
 
 ---
 
@@ -45,10 +46,9 @@
 
 ```
 SIST_AGENTICO_HOTELERO/
-├── VERIFICACION-100-ESQUEMA-MAESTRO.md ← LEE PRIMERO (Esquema Maestro)
-├── ESTADO-FINAL-PROYECTO.md           ← Estado final
-├── CONSOLIDACION-DOCUMENTACION-RESUMEN.md
-├── PROYECTO-FINAL-RESUMEN.txt
+├── 00-INDICE-NAVEGACION.md            ← PUNTO DE ENTRADA
+├── VERIFICACION-100-ESQUEMA-MAESTRO.md ← ESQUEMA COMPLETO (lee primero)
+├── README.md                           ← Info general
 │
 └── agente-hotel-api/
     ├── README.md                      ← Info general
@@ -68,14 +68,13 @@ SIST_AGENTICO_HOTELERO/
     │   ├── e2e/                       ← 4 tests
     │   └── conftest.py
     │
-    ├── docs/                          ← Documentación (28 activos)
+    ├── docs/                          ← Documentación (28 archivos críticos)
     │   ├── 00-DOCUMENTATION-CENTRAL-INDEX.md ← ÍNDICE MAESTRO
     │   ├── README.md                  ← Navegación
     │   ├── START-HERE.md              ← Onboarding
     │   ├── PRE-LAUNCH-*.md            ← Toolkit (6 docs)
     │   ├── P020-PRODUCTION-READINESS-CHECKLIST.md ← 145 ítems
-    │   ├── P011-P019-*.md             ← Guías específicas
-    │   └── archived/                  ← Histórico (5 docs)
+    │   └── P011-P019-*.md             ← Guías específicas
     │
     ├── scripts/                       ← 41 scripts shell
     │   ├── deploy.sh
@@ -145,7 +144,7 @@ make canary-deploy      # Canary deployment
 ✅ Código:           103 archivos Python (41,954 líneas)
 ✅ Tests:            102 archivos (36,018 líneas, >85% cobertura)
 ✅ Servicios Docker: 24 servicios (compose + healthchecks)
-✅ Documentación:    28 documentos activos + 5 archivados
+✅ Documentación:    28 archivos críticos (optimizada)
 ✅ Scripts:          41 scripts shell + 15+ Python
 ✅ CI/CD:            5 workflows GitHub Actions
 ✅ Makefile:         144 targets automatizados
