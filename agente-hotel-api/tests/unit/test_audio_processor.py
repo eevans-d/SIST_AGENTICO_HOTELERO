@@ -5,15 +5,15 @@ import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-from app.services.audio_processor import AudioProcessor, WhisperSTT, ESpeakTTS
+from app.services.audio_processor import AudioProcessor, OptimizedWhisperSTT, ESpeakTTS
 from app.exceptions.audio_exceptions import AudioDownloadError, AudioConversionError
 
 
-class TestWhisperSTT:
+class TestOptimizedWhisperSTT:
     @pytest.mark.asyncio
     async def test_transcribe_returns_mock_response(self):
-        """Test que WhisperSTT retorna respuesta mock"""
-        stt = WhisperSTT()
+        """Test que OptimizedWhisperSTT retorna respuesta mock"""
+        stt = OptimizedWhisperSTT()
         audio_file = Path("/fake/path/audio.wav")
 
         result = await stt.transcribe(audio_file)
