@@ -59,7 +59,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     ports:
-      - "8001:8000"  # Expose on port 8001 to avoid conflict with gad_api_dev
+      - "8002:8000"  # Changed from 8001 to avoid conflict with gad_api_staging
     networks:
       - backend_network
     volumes:
