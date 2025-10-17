@@ -9,15 +9,15 @@ import tempfile
 import os
 from pathlib import Path
 
-from app.services.audio_processor import AudioProcessor, WhisperSTT, ESpeakTTS
+from app.services.audio_processor import AudioProcessor, OptimizedWhisperSTT, ESpeakTTS
 from app.exceptions.audio_exceptions import AudioTranscriptionError, AudioSynthesisError
 
 
 @pytest.mark.asyncio
 async def test_whisper_stt_mock_mode():
-    """Test que verifica el funcionamiento en modo mock de WhisperSTT."""
+    """Test que verifica el funcionamiento en modo mock de OptimizedWhisperSTT."""
 
-    stt = WhisperSTT()
+    stt = OptimizedWhisperSTT()
     stt._model_loaded = "mock"  # Forzar modo mock
 
     # Crear archivo temporal para la prueba
@@ -89,7 +89,7 @@ async def test_audio_processor_initialization():
     # Verificar que los componentes se inicializaron
     assert processor.stt is not None
     assert processor.tts is not None
-    assert isinstance(processor.stt, WhisperSTT)
+    assert isinstance(processor.stt, OptimizedWhisperSTT)
     assert isinstance(processor.tts, ESpeakTTS)
 
 

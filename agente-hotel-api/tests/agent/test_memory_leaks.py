@@ -18,6 +18,7 @@ import os
 import time
 from typing import Dict, List
 from dataclasses import dataclass
+from unittest.mock import MagicMock
 
 # Ajustar imports según estructura del proyecto
 from app.services.nlp_engine import NLPEngine
@@ -69,9 +70,10 @@ async def nlp_engine():
 @pytest.fixture
 async def session_manager():
     """Fixture del session manager"""
-    manager = SessionManager()
+    redis_mock = MagicMock()
+    manager = SessionManager(redis_client=redis_mock)
     yield manager
-    await manager.cleanup()
+    # SessionManager no tiene método cleanup() en la implementación actual
     del manager
     gc.collect()
 
@@ -79,7 +81,8 @@ async def session_manager():
 @pytest.fixture
 async def pms_adapter():
     """Fixture del PMS adapter"""
-    adapter = MockPMSAdapter(redis_client=None)  # Mock no requiere redis real
+    redis_mock = MagicMock()
+    adapter = MockPMSAdapter(redis_client=redis_mock)
     yield adapter
     # MockPMSAdapter no tiene método close()
     del adapter

@@ -20,7 +20,7 @@ from app.core.chaos import (
     ChaosMetrics,
     get_chaos_manager,
 )
-from app.core.logging import get_logger
+from app.core.logging import logger
 from tests.chaos.scenarios import (
     database_scenarios,
     network_scenarios,
@@ -29,7 +29,7 @@ from tests.chaos.scenarios import (
     service_scenarios,
 )
 
-logger = get_logger(__name__)
+# logger ya importado de app.core.logging
 
 
 class ChaosMonkey:

@@ -25,9 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, TypeVar
 
 from pydantic import BaseModel, Field
 
-from app.core.logging import get_logger
-
-logger = get_logger(__name__)
+from app.core.logging import logger
 
 T = TypeVar("T")
 
