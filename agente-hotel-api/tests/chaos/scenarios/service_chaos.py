@@ -26,14 +26,14 @@ def create_random_service_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create random service failure scenario.
-    
+
     Simulates random RuntimeError failures in service operations.
-    
+
     Args:
         target_service: Service to inject failures into
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -62,14 +62,14 @@ def create_circuit_breaker_trip_scenario(
 ) -> ChaosExperiment:
     """
     Create circuit breaker trip scenario.
-    
+
     Simulates conditions that cause circuit breaker to open.
-    
+
     Args:
         target_service: Service to inject circuit breaker failures into
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -97,15 +97,15 @@ def create_service_rate_limit_scenario(
 ) -> ChaosExperiment:
     """
     Create service rate limiting scenario.
-    
+
     Simulates aggressive rate limiting.
-    
+
     Args:
         target_service: Service to inject rate limiting into
         rate_limit_requests: Max requests allowed
         rate_limit_window_seconds: Time window in seconds
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -133,13 +133,13 @@ def create_cascading_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create cascading failure scenario.
-    
+
     Simulates failures that could cascade through the system.
-    
+
     Args:
         target_service: Initial service to fail
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -169,15 +169,15 @@ def create_slow_service_response_scenario(
 ) -> ChaosExperiment:
     """
     Create slow service response scenario.
-    
+
     Simulates a service that becomes very slow.
-    
+
     Args:
         target_service: Service to slow down
         latency_ms: Response latency in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -205,13 +205,13 @@ def create_service_unavailable_scenario(
 ) -> ChaosExperiment:
     """
     Create service unavailable scenario.
-    
+
     Simulates complete service unavailability.
-    
+
     Args:
         target_service: Service to make unavailable
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """

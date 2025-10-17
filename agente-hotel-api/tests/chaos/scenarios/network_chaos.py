@@ -28,16 +28,16 @@ def create_network_latency_scenario(
 ) -> ChaosExperiment:
     """
     Create network latency injection scenario.
-    
+
     Simulates slow network conditions by adding artificial latency.
-    
+
     Args:
         target_service: Service to inject latency into
         latency_ms: Base latency in milliseconds
         jitter_ms: Random jitter to add (+/-)
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -67,15 +67,15 @@ def create_network_timeout_scenario(
 ) -> ChaosExperiment:
     """
     Create network timeout scenario.
-    
+
     Simulates requests that timeout due to network issues.
-    
+
     Args:
         target_service: Service to inject timeouts into
         timeout_ms: Timeout duration in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -103,14 +103,14 @@ def create_connection_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create connection failure scenario.
-    
+
     Simulates failed network connections.
-    
+
     Args:
         target_service: Service to inject failures into
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -138,13 +138,13 @@ def create_high_latency_spike_scenario(
 ) -> ChaosExperiment:
     """
     Create high latency spike scenario.
-    
+
     Simulates sudden network degradation with very high latency.
-    
+
     Args:
         target_service: Service to inject latency spikes into
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -172,13 +172,13 @@ def create_intermittent_connectivity_scenario(
 ) -> ChaosExperiment:
     """
     Create intermittent connectivity scenario.
-    
+
     Simulates unstable network with random failures.
-    
+
     Args:
         target_service: Service to inject intermittent failures into
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """

@@ -18,7 +18,6 @@ from app.core.chaos import (
     ChaosExperiment,
     ChaosManager,
     ChaosMetrics,
-    ChaosState,
     get_chaos_manager,
 )
 from app.core.logging import get_logger
@@ -36,7 +35,7 @@ logger = get_logger(__name__)
 class ChaosMonkey:
     """
     Implements Netflix Chaos Monkey pattern.
-    
+
     Randomly terminates services/injects faults during business hours
     to ensure systems are resilient to unexpected failures.
     """
@@ -106,20 +105,14 @@ class ChaosMonkey:
 
     async def _inject_chaos(self) -> None:
         """Inject random chaos experiment."""
-        all_scenarios = (
-            network_scenarios
-            + service_scenarios
-            + database_scenarios
-            + pms_scenarios
-            + resource_scenarios
-        )
+        all_scenarios = network_scenarios + service_scenarios + database_scenarios + pms_scenarios + resource_scenarios
 
         if not all_scenarios:
             return
 
         # Pick random scenario
         scenario = random.choice(all_scenarios)
-        
+
         # Reduce duration for chaos monkey (30-60s instead of full duration)
         scenario.duration_seconds = random.randint(30, 60)
 
@@ -144,7 +137,7 @@ class ChaosMonkey:
 class ChaosScheduler:
     """
     Schedules chaos experiments.
-    
+
     Allows defining experiment schedules for automated resilience testing.
     """
 
@@ -161,7 +154,7 @@ class ChaosScheduler:
     ) -> None:
         """
         Add experiment to schedule.
-        
+
         Args:
             experiment: Chaos experiment to schedule
             cron_expression: Cron expression (not implemented)
@@ -215,10 +208,7 @@ class ChaosScheduler:
                     last_run = schedule["last_run"]
                     interval = schedule["interval_seconds"]
 
-                    should_run = (
-                        last_run is None
-                        or (now - last_run).total_seconds() >= interval
-                    )
+                    should_run = last_run is None or (now - last_run).total_seconds() >= interval
 
                     if should_run:
                         experiment = schedule["experiment"]
@@ -246,7 +236,7 @@ class ChaosScheduler:
 class ChaosOrchestrator:
     """
     Main orchestrator for chaos experiments.
-    
+
     Provides safe experiment execution with:
     - Pre-flight checks
     - Progress monitoring
@@ -266,14 +256,14 @@ class ChaosOrchestrator:
     ) -> ChaosMetrics:
         """
         Run a chaos experiment safely.
-        
+
         Args:
             experiment: Experiment to run
             dry_run: If True, simulate without actual injection
-            
+
         Returns:
             Final metrics from experiment
-            
+
         Raises:
             RuntimeError: If experiment fails safety checks
         """
@@ -291,7 +281,7 @@ class ChaosOrchestrator:
 
         # Register and start
         self.manager.register_experiment(experiment)
-        
+
         if not self.manager.start_experiment(experiment.id):
             raise RuntimeError(f"Failed to start experiment {experiment.id}")
 
@@ -311,7 +301,7 @@ class ChaosOrchestrator:
             # Monitor during execution
             while datetime.utcnow() < end_time:
                 await asyncio.sleep(10)  # Check every 10 seconds
-                
+
                 # Collect metrics
                 metrics = await self._collect_metrics(experiment)
                 self.manager.record_metrics(experiment.id, metrics)
@@ -327,7 +317,7 @@ class ChaosOrchestrator:
 
             # Final metrics
             final_metrics = await self._collect_metrics(experiment)
-            
+
             logger.info(
                 "chaos_experiment_completed",
                 experiment_id=experiment.id,
@@ -354,10 +344,10 @@ class ChaosOrchestrator:
     def _preflight_checks(self, experiment: ChaosExperiment) -> bool:
         """
         Perform pre-flight safety checks.
-        
+
         Args:
             experiment: Experiment to check
-            
+
         Returns:
             True if checks pass
         """
@@ -392,10 +382,10 @@ class ChaosOrchestrator:
     def _runtime_safety_checks(self, metrics: ChaosMetrics) -> bool:
         """
         Perform runtime safety checks during experiment.
-        
+
         Args:
             metrics: Current metrics
-            
+
         Returns:
             True if experiment should continue
         """
@@ -420,17 +410,17 @@ class ChaosOrchestrator:
     async def _collect_metrics(self, experiment: ChaosExperiment) -> ChaosMetrics:
         """
         Collect current metrics for experiment.
-        
+
         Args:
             experiment: Experiment to collect metrics for
-            
+
         Returns:
             Current metrics
         """
         # In real implementation, would query Prometheus/metrics service
         # For now, return mock metrics
         exp = self.manager._experiments.get(experiment.id)
-        
+
         if exp:
             total = max(exp.total_requests, 1)
             return ChaosMetrics(
@@ -442,7 +432,7 @@ class ChaosOrchestrator:
                 error_rate=exp.errors_induced / total if total > 0 else 0.0,
                 availability=1.0 - (exp.errors_induced / total) if total > 0 else 1.0,
             )
-        
+
         return ChaosMetrics(
             experiment_id=experiment.id,
             timestamp=datetime.utcnow(),
@@ -475,11 +465,11 @@ class ChaosOrchestrator:
     ) -> Dict[str, ChaosMetrics]:
         """
         Run a suite of chaos scenarios sequentially.
-        
+
         Args:
             scenarios: List of experiments to run
             delay_between_seconds: Delay between experiments
-            
+
         Returns:
             Dict mapping experiment ID to final metrics
         """
@@ -488,7 +478,7 @@ class ChaosOrchestrator:
         for i, scenario in enumerate(scenarios):
             logger.info(
                 "chaos_suite_running",
-                scenario=f"{i+1}/{len(scenarios)}",
+                scenario=f"{i + 1}/{len(scenarios)}",
                 experiment_id=scenario.id,
             )
 

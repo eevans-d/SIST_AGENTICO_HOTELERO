@@ -24,13 +24,13 @@ def create_memory_pressure_scenario(
 ) -> ChaosExperiment:
     """
     Create memory pressure scenario.
-    
+
     Simulates high memory usage.
-    
+
     Args:
         target_service: Service to inject memory pressure into
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -60,15 +60,15 @@ def create_cpu_throttling_scenario(
 ) -> ChaosExperiment:
     """
     Create CPU throttling scenario.
-    
+
     Simulates CPU resource limitation by slowing operations.
-    
+
     Args:
         target_service: Service to throttle
         latency_ms: Processing delay in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -98,15 +98,15 @@ def create_disk_io_slowdown_scenario(
 ) -> ChaosExperiment:
     """
     Create disk I/O slowdown scenario.
-    
+
     Simulates slow disk operations.
-    
+
     Args:
         target_service: Service to slow down
         latency_ms: I/O operation latency in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -134,13 +134,13 @@ def create_resource_exhaustion_scenario(
 ) -> ChaosExperiment:
     """
     Create resource exhaustion scenario.
-    
+
     Simulates complete resource exhaustion (memory, CPU, connections).
-    
+
     Args:
         target_service: Service to exhaust resources in
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -168,13 +168,13 @@ def create_memory_leak_scenario(
 ) -> ChaosExperiment:
     """
     Create memory leak scenario.
-    
+
     Simulates gradual memory leak.
-    
+
     Args:
         target_service: Service with memory leak
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """

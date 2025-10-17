@@ -19,9 +19,9 @@ import functools
 import random
 import time
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -101,12 +101,12 @@ class ChaosExperiment(BaseModel):
     duration_seconds: int = Field(ge=1, default=60)
     steady_state_hypothesis: str
     rollback_strategy: str = "immediate"
-    
+
     # Experiment state
     state: ChaosState = ChaosState.IDLE
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    
+
     # Metrics
     total_requests: int = 0
     affected_requests: int = 0
@@ -119,23 +119,23 @@ class ChaosMetrics(BaseModel):
 
     experiment_id: str
     timestamp: datetime
-    
+
     # Request metrics
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
     affected_requests: int = 0
-    
+
     # Latency metrics
     p50_latency_ms: Optional[float] = None
     p95_latency_ms: Optional[float] = None
     p99_latency_ms: Optional[float] = None
-    
+
     # Recovery metrics
     time_to_detect_seconds: Optional[float] = None
     time_to_resolve_seconds: Optional[float] = None
     mttr_seconds: Optional[float] = None  # Mean Time To Recovery
-    
+
     # System health
     error_rate: float = 0.0
     availability: float = 1.0
@@ -145,7 +145,7 @@ class ChaosMetrics(BaseModel):
 class ChaosManager:
     """
     Manages chaos experiments and fault injection.
-    
+
     Ensures safe execution with blast radius controls and automatic rollback.
     """
 
@@ -173,7 +173,7 @@ class ChaosManager:
     def start_experiment(self, experiment_id: str) -> bool:
         """
         Start a chaos experiment.
-        
+
         Returns:
             True if experiment started successfully, False otherwise.
         """
@@ -225,21 +225,17 @@ class ChaosManager:
             "chaos_experiment_stopped",
             experiment_id=experiment_id,
             state=experiment.state,
-            duration_actual=str(experiment.end_time - experiment.start_time)
-            if experiment.start_time
-            else None,
+            duration_actual=str(experiment.end_time - experiment.start_time) if experiment.start_time else None,
         )
 
-    def should_inject_fault(
-        self, service: str, endpoint: Optional[str] = None
-    ) -> bool:
+    def should_inject_fault(self, service: str, endpoint: Optional[str] = None) -> bool:
         """
         Determine if a fault should be injected for this request.
-        
+
         Args:
             service: Target service name
             endpoint: Optional endpoint path
-            
+
         Returns:
             True if fault should be injected based on probability.
         """
@@ -264,16 +260,14 @@ class ChaosManager:
             # Always affect when system-wide
             return True
 
-    async def inject_fault(
-        self, service: str, endpoint: Optional[str] = None
-    ) -> None:
+    async def inject_fault(self, service: str, endpoint: Optional[str] = None) -> None:
         """
         Inject configured fault.
-        
+
         Args:
             service: Target service name
             endpoint: Optional endpoint path
-            
+
         Raises:
             Exception: If fault injection requires raising an exception.
         """
@@ -370,9 +364,7 @@ class ChaosManager:
             self._rate_limit_windows[key] = []
 
         # Remove entries outside window
-        self._rate_limit_windows[key] = [
-            ts for ts in self._rate_limit_windows[key] if now - ts < window_seconds
-        ]
+        self._rate_limit_windows[key] = [ts for ts in self._rate_limit_windows[key] if now - ts < window_seconds]
 
         # Check if rate limit exceeded
         if len(self._rate_limit_windows[key]) >= rate_limit:
@@ -381,9 +373,7 @@ class ChaosManager:
                 requests_in_window=len(self._rate_limit_windows[key]),
                 limit=rate_limit,
             )
-            raise RuntimeError(
-                f"Rate limit exceeded: {rate_limit} requests per {window_seconds}s (chaos-induced)"
-            )
+            raise RuntimeError(f"Rate limit exceeded: {rate_limit} requests per {window_seconds}s (chaos-induced)")
 
         # Record this request
         self._rate_limit_windows[key].append(now)
@@ -399,11 +389,7 @@ class ChaosManager:
 
     def get_active_experiments(self) -> List[ChaosExperiment]:
         """Get all currently active experiments."""
-        return [
-            self._experiments[exp_id]
-            for exp_id in self._active_experiments
-            if exp_id in self._experiments
-        ]
+        return [self._experiments[exp_id] for exp_id in self._active_experiments if exp_id in self._experiments]
 
     def is_chaos_active(self, service: str) -> bool:
         """Check if chaos is currently active for a service."""
@@ -425,7 +411,7 @@ def get_chaos_manager() -> ChaosManager:
 def chaos_middleware(service_name: str):
     """
     Decorator for chaos injection in async functions.
-    
+
     Usage:
         @chaos_middleware(service_name="pms_adapter")
         async def make_pms_call():
@@ -463,7 +449,7 @@ def chaos_middleware(service_name: str):
 async def chaos_experiment_context(experiment: ChaosExperiment):
     """
     Context manager for running chaos experiments safely.
-    
+
     Usage:
         async with chaos_experiment_context(experiment):
             # Run your workload
@@ -511,7 +497,7 @@ def safe_chaos_injection(
 ):
     """
     Context manager for safe, scoped chaos injection.
-    
+
     Usage:
         with safe_chaos_injection(FaultType.LATENCY, latency_ms=500):
             # Code that may experience injected latency

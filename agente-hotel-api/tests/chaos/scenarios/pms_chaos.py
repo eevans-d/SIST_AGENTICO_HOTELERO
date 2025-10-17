@@ -25,13 +25,13 @@ def create_pms_api_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS API failure scenario.
-    
+
     Simulates PMS API returning errors.
-    
+
     Args:
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -60,14 +60,14 @@ def create_pms_slow_response_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS slow response scenario.
-    
+
     Simulates PMS API responding very slowly.
-    
+
     Args:
         latency_ms: Response latency in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -96,14 +96,14 @@ def create_pms_rate_limit_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS rate limiting scenario.
-    
+
     Simulates PMS API aggressively rate limiting requests.
-    
+
     Args:
         rate_limit_requests: Max requests allowed
         rate_limit_window_seconds: Time window in seconds
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -132,14 +132,14 @@ def create_pms_timeout_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS timeout scenario.
-    
+
     Simulates PMS API requests timing out.
-    
+
     Args:
         timeout_ms: Timeout duration in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -165,12 +165,12 @@ def create_pms_unavailable_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS unavailable scenario.
-    
+
     Simulates complete PMS unavailability.
-    
+
     Args:
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -197,12 +197,12 @@ def create_pms_intermittent_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create PMS intermittent failure scenario.
-    
+
     Simulates random, intermittent PMS failures.
-    
+
     Args:
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """

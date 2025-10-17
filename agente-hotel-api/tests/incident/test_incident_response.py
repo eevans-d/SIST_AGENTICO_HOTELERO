@@ -4,15 +4,13 @@ Tests for incident detection, classification, and response procedures.
 """
 
 import pytest
-import asyncio
 from datetime import datetime, timedelta
-from typing import List
-import httpx
 from unittest.mock import Mock, patch, AsyncMock
 
 # Import incident detector
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
 from incident_detector import (
@@ -275,9 +273,7 @@ class TestIncidentResponse:
     @pytest.mark.asyncio
     async def test_alert_sending(self, mock_alert_webhook):
         """Test alert webhook notification"""
-        detector = IncidentDetector(
-            alert_webhook="http://localhost/webhook", check_interval=30
-        )
+        detector = IncidentDetector(alert_webhook="http://localhost/webhook", check_interval=30)
 
         incident = Incident(
             id="INC-TEST-001",
@@ -356,13 +352,11 @@ class TestRunbookIntegration:
         # Verify runbooks exist
         from pathlib import Path
 
-        runbooks_dir = Path(__file__).parent.parent.parent / "docs" / "runbooks"
+        Path(__file__).parent.parent.parent / "docs" / "runbooks"
 
         for incident_type, runbook_path in incident_to_runbook.items():
             full_path = Path(__file__).parent.parent.parent / runbook_path
-            assert (
-                full_path.exists()
-            ), f"Runbook {runbook_path} not found for {incident_type}"
+            assert full_path.exists(), f"Runbook {runbook_path} not found for {incident_type}"
 
     @pytest.mark.asyncio
     async def test_runbook_validation(self):
@@ -383,9 +377,7 @@ class TestRunbookIntegration:
         for runbook in runbooks_dir.glob("*.md"):
             content = runbook.read_text()
             for section in required_sections:
-                assert (
-                    section in content
-                ), f"Runbook {runbook.name} missing section: {section}"
+                assert section in content, f"Runbook {runbook.name} missing section: {section}"
 
 
 class TestIncidentMetrics:
@@ -400,12 +392,8 @@ class TestIncidentMetrics:
                 description="Test",
                 severity=Severity.HIGH,
                 status=IncidentStatus.RESOLVED,
-                detected_at=(
-                    datetime.utcnow() - timedelta(minutes=60 + i * 10)
-                ).isoformat(),
-                resolved_at=(
-                    datetime.utcnow() - timedelta(minutes=i * 10)
-                ).isoformat(),
+                detected_at=(datetime.utcnow() - timedelta(minutes=60 + i * 10)).isoformat(),
+                resolved_at=(datetime.utcnow() - timedelta(minutes=i * 10)).isoformat(),
                 affected_services=["test"],
             )
             for i in range(5)
@@ -509,7 +497,7 @@ class TestIncidentResponseFlow:
             # Verify runbook exists and is accessible
             from pathlib import Path
 
-            full_path = Path(__file__).parent.parent.parent / runbook_path
+            Path(__file__).parent.parent.parent / runbook_path
             # Would exist in real deployment
 
 

@@ -21,10 +21,9 @@ Referencias:
 
 import os
 import re
-import stat
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import List, Set
+from typing import List
 
 import pytest
 
@@ -329,9 +328,9 @@ class TestEnvironmentVariables:
 
         # Check for dummy values
         dummy_indicators = ["REPLACE", "CHANGE", "TODO", "FIXME", "EXAMPLE", "YOUR_", "SECRET_KEY_HERE"]
-        assert not any(
-            indicator in secret_key.upper() for indicator in dummy_indicators
-        ), f"SECRET_KEY contains dummy value: {secret_key[:10]}..."
+        assert not any(indicator in secret_key.upper() for indicator in dummy_indicators), (
+            f"SECRET_KEY contains dummy value: {secret_key[:10]}..."
+        )
 
         # Check minimum length (should be at least 32 chars for good entropy)
         assert len(secret_key) >= 32, f"SECRET_KEY too short ({len(secret_key)} chars). Minimum: 32 chars."
@@ -348,9 +347,9 @@ class TestEnvironmentVariables:
 
         # Check for dummy values
         dummy_indicators = ["REPLACE", "CHANGE", "TODO", "PASSWORD", "ADMIN", "TEST"]
-        assert not any(
-            indicator in password.upper() for indicator in dummy_indicators
-        ), f"POSTGRES_PASSWORD contains dummy value"
+        assert not any(indicator in password.upper() for indicator in dummy_indicators), (
+            "POSTGRES_PASSWORD contains dummy value"
+        )
 
         # Check minimum length
         assert len(password) >= 16, f"POSTGRES_PASSWORD too short ({len(password)} chars). Minimum: 16 chars."
@@ -482,9 +481,9 @@ class TestFilePermissions:
         # Accept 600 (owner only) or 644 (owner write, others read - less secure but common)
         acceptable_perms = ["0600", "0400"]  # 0600 = rw-------, 0400 = r--------
 
-        assert (
-            current_perms in acceptable_perms
-        ), f".env has insecure permissions: {current_perms}. Should be 0600. Fix with: chmod 600 .env"
+        assert current_perms in acceptable_perms, (
+            f".env has insecure permissions: {current_perms}. Should be 0600. Fix with: chmod 600 .env"
+        )
 
     @pytest.mark.security
     @pytest.mark.high
@@ -508,9 +507,9 @@ class TestFilePermissions:
             if current_perms not in ["0600", "0400"]:
                 insecure_files.append(f"{key_file.name}: {current_perms}")
 
-        assert (
-            len(insecure_files) == 0
-        ), f"Private keys with insecure permissions:\n" + "\n".join(insecure_files) + "\n\nFix with: chmod 600 <file>"
+        assert len(insecure_files) == 0, (
+            "Private keys with insecure permissions:\n" + "\n".join(insecure_files) + "\n\nFix with: chmod 600 <file>"
+        )
 
 
 class TestSecretRotation:
@@ -536,9 +535,9 @@ class TestSecretRotation:
         days_since_update = (datetime.now() - mod_time).days
 
         # Warning if > 90 days
-        assert (
-            days_since_update <= 90
-        ), f".env not updated in {days_since_update} days. Consider rotating secrets (recommendation: every 90 days)."
+        assert days_since_update <= 90, (
+            f".env not updated in {days_since_update} days. Consider rotating secrets (recommendation: every 90 days)."
+        )
 
 
 class TestGitHistory:

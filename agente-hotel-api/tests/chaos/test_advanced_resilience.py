@@ -9,7 +9,6 @@ Extended resilience test suite using chaos engineering framework:
 - Fallback mechanism verification
 """
 
-import asyncio
 from datetime import datetime
 
 import pytest
@@ -53,7 +52,7 @@ class TestMTTRMetrics:
 
         # MTTR should be under 90 seconds
         assert mttr < 90, f"MTTR too high: {mttr}s (target: <90s)"
-        
+
         # Availability should drop but not to zero (cache provides fallback)
         assert metrics.availability > 0.3, "Cache fallback should maintain partial availability"
 
@@ -79,7 +78,7 @@ class TestMTTRMetrics:
         )
 
         start_time = datetime.utcnow()
-        metrics = await orchestrator.run_experiment(experiment)
+        await orchestrator.run_experiment(experiment)
         recovery_time = (datetime.utcnow() - start_time).total_seconds()
 
         # Should recover within 2 minutes
@@ -114,7 +113,7 @@ class TestGracefulDegradation:
 
         # System should not crash
         assert metrics.total_requests > 0, "System continued processing requests"
-        
+
         # Some operations should succeed (from cache)
         assert metrics.successful_requests > 0, "Cache fallback provided some successes"
 
@@ -318,7 +317,7 @@ class TestFallbackEffectiveness:
 async def test_comprehensive_resilience_validation():
     """
     Run comprehensive resilience validation suite.
-    
+
     Tests multiple failure scenarios in sequence to validate
     overall system resilience.
     """

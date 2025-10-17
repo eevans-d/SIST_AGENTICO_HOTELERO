@@ -76,9 +76,7 @@ class AlertManager:
         for attempt in range(MAX_RETRIES_DEFAULT):
             try:
                 # Send alert with timeout protection
-                result = await asyncio.wait_for(
-                    self._send_alert_internal(violation), timeout=self.timeout_seconds
-                )
+                result = await asyncio.wait_for(self._send_alert_internal(violation), timeout=self.timeout_seconds)
 
                 # Update cooldown cache only if send was successful
                 if result:

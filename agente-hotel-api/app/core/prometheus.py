@@ -14,10 +14,10 @@ Key Features:
 
 Usage:
     from app.core.prometheus import metrics
-    
+
     # Track reservation
     metrics.reservations_total.labels(status="confirmed", source="whatsapp").inc()
-    
+
     # Track latency
     with metrics.request_latency.labels(endpoint="/api/reservations", method="POST").time():
         result = await process_reservation()
@@ -37,8 +37,6 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
-from typing import Dict, Any, Optional, List
-from functools import wraps
 import time
 from contextlib import contextmanager
 import structlog
@@ -463,14 +461,14 @@ system_uptime_seconds = Gauge(
 def track_request_duration(method: str, endpoint: str):
     """
     Context manager to track HTTP request duration.
-    
+
     Usage:
         with track_request_duration("GET", "/api/health"):
             result = await process_request()
     """
     http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
     start_time = time.time()
-    
+
     try:
         yield
     finally:
@@ -482,7 +480,7 @@ def track_request_duration(method: str, endpoint: str):
 def track_reservation(status: str, source: str, room_type: str, revenue: float = 0.0, duration_nights: int = 1):
     """
     Track reservation metrics.
-    
+
     Args:
         status: Reservation status (confirmed, pending, cancelled)
         source: Source channel (whatsapp, gmail, web)
@@ -491,13 +489,13 @@ def track_reservation(status: str, source: str, room_type: str, revenue: float =
         duration_nights: Duration of reservation in nights
     """
     reservations_total.labels(status=status, source=source, room_type=room_type).inc()
-    
+
     if revenue > 0:
         reservations_revenue_total.labels(currency="USD", room_type=room_type).inc(revenue)
-    
+
     if duration_nights > 0:
         reservations_duration_nights.labels(room_type=room_type).observe(duration_nights)
-    
+
     logger.info(
         "reservation_tracked",
         status=status,
@@ -511,7 +509,7 @@ def track_reservation(status: str, source: str, room_type: str, revenue: float =
 def track_guest_interaction(channel: str, interaction_type: str):
     """
     Track guest interaction.
-    
+
     Args:
         channel: Communication channel (whatsapp, gmail, phone)
         interaction_type: Type of interaction (inquiry, booking, complaint, feedback)
@@ -522,7 +520,7 @@ def track_guest_interaction(channel: str, interaction_type: str):
 def track_pms_operation(operation: str, status: str, latency_seconds: float):
     """
     Track PMS operation metrics.
-    
+
     Args:
         operation: PMS operation (check_availability, create_reservation, etc.)
         status: Operation status (success, error, timeout)
@@ -535,7 +533,7 @@ def track_pms_operation(operation: str, status: str, latency_seconds: float):
 def track_message_processing(channel: str, message_type: str, processing_time: float, success: bool = True):
     """
     Track message processing metrics.
-    
+
     Args:
         channel: Communication channel (whatsapp, gmail)
         message_type: Type of message (text, audio, image)
@@ -545,7 +543,7 @@ def track_message_processing(channel: str, message_type: str, processing_time: f
     direction = "inbound"
     messages_total.labels(channel=channel, direction=direction, message_type=message_type).inc()
     messages_processing_time_seconds.labels(channel=channel, message_type=message_type).observe(processing_time)
-    
+
     if not success:
         messages_errors_total.labels(channel=channel, error_type="processing_failed").inc()
 
@@ -553,7 +551,7 @@ def track_message_processing(channel: str, message_type: str, processing_time: f
 def update_room_metrics(room_type: str, total: int, available: int, occupancy_rate: float):
     """
     Update room availability metrics.
-    
+
     Args:
         room_type: Type of room (standard, deluxe, suite)
         total: Total rooms of this type
@@ -568,7 +566,7 @@ def update_room_metrics(room_type: str, total: int, available: int, occupancy_ra
 def update_slo_metrics(endpoint: str, p95_latency: float, p99_latency: float, error_rate: float):
     """
     Update SLO compliance metrics.
-    
+
     Args:
         endpoint: API endpoint
         p95_latency: P95 latency in seconds
@@ -578,12 +576,12 @@ def update_slo_metrics(endpoint: str, p95_latency: float, p99_latency: float, er
     slo_latency_p95_seconds.labels(endpoint=endpoint).set(p95_latency)
     slo_latency_p99_seconds.labels(endpoint=endpoint).set(p99_latency)
     slo_error_rate.labels(endpoint=endpoint).set(error_rate)
-    
+
     # Check SLO compliance
     p95_compliant = p95_latency < 3.0
     p99_compliant = p99_latency < 5.0
     error_compliant = error_rate < 0.01
-    
+
     slo_compliance_status.labels(slo_name=f"{endpoint}_p95_latency").set(1 if p95_compliant else 0)
     slo_compliance_status.labels(slo_name=f"{endpoint}_p99_latency").set(1 if p99_compliant else 0)
     slo_compliance_status.labels(slo_name=f"{endpoint}_error_rate").set(1 if error_compliant else 0)
@@ -592,7 +590,7 @@ def update_slo_metrics(endpoint: str, p95_latency: float, p99_latency: float, er
 def track_db_operation(operation: str, table: str, status: str, duration: float):
     """
     Track database operation metrics.
-    
+
     Args:
         operation: Database operation (select, insert, update, delete)
         table: Table name
@@ -606,7 +604,7 @@ def track_db_operation(operation: str, table: str, status: str, duration: float)
 def get_metrics() -> str:
     """
     Generate Prometheus metrics output in text format.
-    
+
     Returns:
         str: Metrics in Prometheus exposition format
     """
@@ -616,7 +614,7 @@ def get_metrics() -> str:
 def get_metrics_content_type() -> str:
     """
     Get the content type for Prometheus metrics.
-    
+
     Returns:
         str: Content type header value
     """
@@ -631,21 +629,21 @@ def get_metrics_content_type() -> str:
 class PrometheusMetrics:
     """
     Centralized class for managing Prometheus metrics.
-    
+
     Provides convenient access to all metrics and helper functions.
     """
-    
+
     def __init__(self):
         """Initialize Prometheus metrics manager."""
         self.registry = registry
-        
+
         # HTTP metrics
         self.http_requests_total = http_requests_total
         self.http_request_duration_seconds = http_request_duration_seconds
         self.http_request_size_bytes = http_request_size_bytes
         self.http_response_size_bytes = http_response_size_bytes
         self.http_requests_in_progress = http_requests_in_progress
-        
+
         # Business metrics
         self.reservations_total = reservations_total
         self.reservations_revenue_total = reservations_revenue_total
@@ -653,23 +651,23 @@ class PrometheusMetrics:
         self.reservations_processing_time_seconds = reservations_processing_time_seconds
         self.reservations_active = reservations_active
         self.reservations_pending = reservations_pending
-        
+
         self.guests_total = guests_total
         self.guests_active = guests_active
         self.guest_satisfaction_score = guest_satisfaction_score
         self.guest_interactions_total = guest_interactions_total
-        
+
         self.rooms_total = rooms_total
         self.rooms_occupancy_rate = rooms_occupancy_rate
         self.rooms_available = rooms_available
-        
+
         # PMS metrics
         self.pms_operations_total = pms_operations_total
         self.pms_api_latency_seconds = pms_api_latency_seconds
         self.pms_circuit_breaker_state = pms_circuit_breaker_state
         self.pms_cache_hits_total = pms_cache_hits_total
         self.pms_cache_misses_total = pms_cache_misses_total
-        
+
         # Messaging metrics
         self.messages_total = messages_total
         self.messages_processing_time_seconds = messages_processing_time_seconds
@@ -677,41 +675,41 @@ class PrometheusMetrics:
         self.whatsapp_messages_sent_total = whatsapp_messages_sent_total
         self.whatsapp_messages_delivered_total = whatsapp_messages_delivered_total
         self.whatsapp_messages_read_total = whatsapp_messages_read_total
-        
+
         # NLP metrics
         self.nlp_intent_classification_total = nlp_intent_classification_total
         self.nlp_processing_time_seconds = nlp_processing_time_seconds
         self.nlp_confidence_score = nlp_confidence_score
-        
+
         # SLO metrics
         self.slo_latency_p95_seconds = slo_latency_p95_seconds
         self.slo_latency_p99_seconds = slo_latency_p99_seconds
         self.slo_error_rate = slo_error_rate
         self.slo_availability = slo_availability
         self.slo_compliance_status = slo_compliance_status
-        
+
         # Database metrics
         self.db_connections_total = db_connections_total
         self.db_query_duration_seconds = db_query_duration_seconds
         self.db_operations_total = db_operations_total
-        
+
         # Cache metrics
         self.cache_operations_total = cache_operations_total
         self.cache_hit_rate = cache_hit_rate
         self.cache_size_bytes = cache_size_bytes
         self.cache_evictions_total = cache_evictions_total
-        
+
         # System metrics
         self.system_cpu_usage = system_cpu_usage
         self.system_memory_usage_bytes = system_memory_usage_bytes
         self.system_uptime_seconds = system_uptime_seconds
-        
+
         logger.info("prometheus_metrics_initialized", total_metrics=len(self.registry._collector_to_names))
-    
+
     def export(self) -> str:
         """Export metrics in Prometheus format."""
         return get_metrics()
-    
+
     def content_type(self) -> str:
         """Get Prometheus metrics content type."""
         return get_metrics_content_type()

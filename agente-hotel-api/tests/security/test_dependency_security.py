@@ -20,9 +20,8 @@ Referencias:
 
 import json
 import subprocess
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Set
+from typing import Set
 
 import pytest
 
@@ -163,11 +162,12 @@ class TestDependencyVulnerabilities:
                 critical_pkg_vulns = [
                     v
                     for v in vulnerabilities
-                    if v["name"].lower() in critical_packages and v.get("severity", "").upper() in ["MEDIUM", "HIGH", "CRITICAL"]
+                    if v["name"].lower() in critical_packages
+                    and v.get("severity", "").upper() in ["MEDIUM", "HIGH", "CRITICAL"]
                 ]
 
                 assert len(critical_pkg_vulns) == 0, (
-                    f"Se encontraron vulnerabilidades MEDIUM+ en paquetes críticos:\n"
+                    "Se encontraron vulnerabilidades MEDIUM+ en paquetes críticos:\n"
                     + "\n".join(
                         [
                             f"  - {v['name']} {v['version']}: {v['id']} ({v.get('severity', 'UNKNOWN')})"
@@ -267,7 +267,7 @@ class TestDependencyFreshness:
                         severely_outdated.append(f"{pkg['name']}: {current} → {latest}")
 
             assert len(severely_outdated) == 0, (
-                f"Dependencias directas severamente desactualizadas (> 1 major version):\n"
+                "Dependencias directas severamente desactualizadas (> 1 major version):\n"
                 + "\n".join([f"  - {dep}" for dep in severely_outdated])
                 + "\n\nActualizar con: poetry update <package>"
             )
@@ -583,7 +583,7 @@ class TestDependencyIntegrity:
                         unconstrained_deps.append(dep_name)
 
         assert len(unconstrained_deps) == 0, (
-            f"Dependencias sin constraint de versión:\n"
+            "Dependencias sin constraint de versión:\n"
             + "\n".join([f"  - {dep}" for dep in unconstrained_deps])
             + '\n\nUsar: ^x.y.z (compatible), ~x.y.z (patch), o ">=x.y.z,<x+1.0.0" (range)'
         )
@@ -627,9 +627,7 @@ class TestDependencyIntegrity:
         Usa pip check para validar compatibilidad.
         """
         try:
-            result = subprocess.run(
-                ["pip", "check"], capture_output=True, text=True, timeout=60, cwd=project_root
-            )
+            result = subprocess.run(["pip", "check"], capture_output=True, text=True, timeout=60, cwd=project_root)
 
             assert result.returncode == 0, (
                 f"pip check encontró conflictos de dependencias:\n{result.stdout}\n{result.stderr}"
@@ -672,7 +670,7 @@ class TestProductionDependencies:
                 unpinned.append(line)
 
         assert len(unpinned) == 0, (
-            f"Dependencias de producción no pinneadas en requirements.prod.txt:\n"
+            "Dependencias de producción no pinneadas en requirements.prod.txt:\n"
             + "\n".join([f"  - {dep}" for dep in unpinned])
             + "\n\nGenerar con: poetry export -f requirements.txt --without-hashes > requirements.prod.txt"
         )
@@ -704,7 +702,7 @@ class TestProductionDependencies:
             installed_dev_packages = [pkg["name"] for pkg in packages if pkg["name"].lower() in dev_packages]
 
             assert len(installed_dev_packages) == 0, (
-                f"Dependencias de desarrollo encontradas en producción:\n"
+                "Dependencias de desarrollo encontradas en producción:\n"
                 + "\n".join([f"  - {pkg}" for pkg in installed_dev_packages])
             )
 

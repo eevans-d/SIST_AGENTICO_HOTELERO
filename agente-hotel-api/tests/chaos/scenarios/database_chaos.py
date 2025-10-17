@@ -26,14 +26,14 @@ def create_db_connection_failure_scenario(
 ) -> ChaosExperiment:
     """
     Create database connection failure scenario.
-    
+
     Simulates failed database connections.
-    
+
     Args:
         target_service: Database service identifier
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -63,15 +63,15 @@ def create_slow_query_scenario(
 ) -> ChaosExperiment:
     """
     Create slow database query scenario.
-    
+
     Simulates database queries that take longer than expected.
-    
+
     Args:
         target_service: Database service identifier
         latency_ms: Query execution latency in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -101,15 +101,15 @@ def create_query_timeout_scenario(
 ) -> ChaosExperiment:
     """
     Create database query timeout scenario.
-    
+
     Simulates queries that timeout.
-    
+
     Args:
         target_service: Database service identifier
         timeout_ms: Timeout duration in milliseconds
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -136,13 +136,13 @@ def create_connection_pool_exhaustion_scenario(
 ) -> ChaosExperiment:
     """
     Create connection pool exhaustion scenario.
-    
+
     Simulates all database connections being in use.
-    
+
     Args:
         target_service: Database service identifier
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """
@@ -171,14 +171,14 @@ def create_transaction_deadlock_scenario(
 ) -> ChaosExperiment:
     """
     Create transaction deadlock scenario.
-    
+
     Simulates database deadlocks.
-    
+
     Args:
         target_service: Database service identifier
         probability: Probability of injection (0.0-1.0)
         duration_seconds: How long to run experiment
-        
+
     Returns:
         ChaosExperiment configuration
     """

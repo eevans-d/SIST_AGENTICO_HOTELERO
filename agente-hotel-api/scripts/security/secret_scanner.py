@@ -30,15 +30,13 @@ Referencias:
 
 import argparse
 import json
-import os
 import re
-import stat
 import subprocess
 import sys
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -331,7 +329,7 @@ class SecretScanner:
 
     def _is_likely_false_positive(self, line: str, matched_text: str) -> bool:
         """Detecta falsos positivos comunes."""
-        line_lower = line.lower()
+        line.lower()
 
         # Skip comments
         if line.strip().startswith("#") or line.strip().startswith("//"):
@@ -365,7 +363,9 @@ class SecretScanner:
             "connection_string": "Use environment variables for credentials. Never commit connection strings with passwords.",
         }
 
-        return recommendations.get(secret_type, "Move secret to secure environment variable or secrets management system.")
+        return recommendations.get(
+            secret_type, "Move secret to secure environment variable or secrets management system."
+        )
 
     def validate_environment_variables(self):
         """Valida variables de entorno requeridas."""
@@ -512,7 +512,16 @@ class SecretScanner:
         """Ejecuta gitleaks para escanear git history."""
         try:
             result = subprocess.run(
-                ["gitleaks", "detect", "--no-git", "-v", "--report-format", "json", "--report-path", "/tmp/gitleaks.json"],
+                [
+                    "gitleaks",
+                    "detect",
+                    "--no-git",
+                    "-v",
+                    "--report-format",
+                    "json",
+                    "--report-path",
+                    "/tmp/gitleaks.json",
+                ],
                 cwd=self.project_root,
                 capture_output=True,
                 text=True,
@@ -568,7 +577,10 @@ class SecretScanner:
                         self.git_issues.append(
                             GitHistoryIssue(
                                 commit_hash="filesystem",
-                                file_path=finding.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file", "unknown"),
+                                file_path=finding.get("SourceMetadata", {})
+                                .get("Data", {})
+                                .get("Filesystem", {})
+                                .get("file", "unknown"),
                                 secret_type=finding.get("DetectorName", "unknown"),
                                 description="Secret detected by trufflehog",
                                 severity="HIGH",
@@ -667,10 +679,14 @@ class SecretScanner:
             recommendations.append("🔴 URGENT: Replace dummy values in .env with secure secrets")
 
         if len(self.git_issues) > 0:
-            recommendations.append(f"⚠️  {len(self.git_issues)} secrets found in git history - use git filter-repo to clean history")
+            recommendations.append(
+                f"⚠️  {len(self.git_issues)} secrets found in git history - use git filter-repo to clean history"
+            )
 
         if len(self.permission_issues) > 0:
-            recommendations.append(f"⚠️  Fix {len(self.permission_issues)} file permission issues with: chmod 600 <file>")
+            recommendations.append(
+                f"⚠️  Fix {len(self.permission_issues)} file permission issues with: chmod 600 <file>"
+            )
 
         if len(self.findings) > 0:
             recommendations.append("Move all hardcoded secrets to environment variables or secrets management system")
@@ -736,21 +752,21 @@ class SecretScanner:
 
 - **Fecha:** {result.scan_timestamp}
 - **Duración:** {result.scan_duration_seconds:.2f} segundos
-- **Estado:** {result.summary['scan_status']}
+- **Estado:** {result.summary["scan_status"]}
 
 ### Métricas
 
 | Métrica | Valor |
 |---------|-------|
-| Total issues | {result.summary['total_issues']} |
-| CRITICAL | {result.summary['severity_breakdown']['CRITICAL']} |
-| HIGH | {result.summary['severity_breakdown']['HIGH']} |
-| MEDIUM | {result.summary['severity_breakdown']['MEDIUM']} |
-| LOW | {result.summary['severity_breakdown']['LOW']} |
-| Secret findings | {result.summary['secret_findings_count']} |
-| Environment issues | {result.summary['environment_issues_count']} |
-| Permission issues | {result.summary['permission_issues_count']} |
-| Git history issues | {result.summary['git_history_issues_count']} |
+| Total issues | {result.summary["total_issues"]} |
+| CRITICAL | {result.summary["severity_breakdown"]["CRITICAL"]} |
+| HIGH | {result.summary["severity_breakdown"]["HIGH"]} |
+| MEDIUM | {result.summary["severity_breakdown"]["MEDIUM"]} |
+| LOW | {result.summary["severity_breakdown"]["LOW"]} |
+| Secret findings | {result.summary["secret_findings_count"]} |
+| Environment issues | {result.summary["environment_issues_count"]} |
+| Permission issues | {result.summary["permission_issues_count"]} |
+| Git history issues | {result.summary["git_history_issues_count"]} |
 
 ---
 
@@ -762,7 +778,7 @@ class SecretScanner:
 
 {self._md_git_issues(result.git_history_issues)}
 
-{self._md_recommendations(result.summary['recommendations'])}
+{self._md_recommendations(result.summary["recommendations"])}
 """
         output_path.write_text(md)
         print(f"✅ Reporte Markdown exportado a: {output_path}")

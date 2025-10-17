@@ -28,8 +28,7 @@ import sys
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Set, Optional
-import subprocess
+from typing import List, Dict, Optional
 
 
 @dataclass
@@ -109,22 +108,22 @@ class OWASPValidator:
     # Patrones de injection comunes
     INJECTION_PATTERNS = {
         "sql_injection": {
-            "pattern": r'(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+.*\+.*\s*(WHERE|FROM|INTO)',
+            "pattern": r"(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\s+.*\+.*\s*(WHERE|FROM|INTO)",
             "severity": "CRITICAL",
             "cwe": "CWE-89",
         },
         "nosql_injection": {
-            "pattern": r'\$where.*\$ne.*\$or.*\$and',
+            "pattern": r"\$where.*\$ne.*\$or.*\$and",
             "severity": "HIGH",
             "cwe": "CWE-943",
         },
         "command_injection": {
-            "pattern": r'(subprocess|os\.system|os\.popen|eval|exec)\s*\(.*\+.*\)',
+            "pattern": r"(subprocess|os\.system|os\.popen|eval|exec)\s*\(.*\+.*\)",
             "severity": "CRITICAL",
             "cwe": "CWE-78",
         },
         "ldap_injection": {
-            "pattern": r'ldap.*search.*\+.*\)',
+            "pattern": r"ldap.*search.*\+.*\)",
             "severity": "HIGH",
             "cwe": "CWE-90",
         },
@@ -133,12 +132,12 @@ class OWASPValidator:
     # Patrones de XSS
     XSS_PATTERNS = {
         "reflected_xss": {
-            "pattern": r'(innerHTML|outerHTML|document\.write)\s*=.*request\.',
+            "pattern": r"(innerHTML|outerHTML|document\.write)\s*=.*request\.",
             "severity": "HIGH",
             "cwe": "CWE-79",
         },
         "stored_xss": {
-            "pattern": r'(innerHTML|outerHTML)\s*=.*(?:database|db|mongo|redis)',
+            "pattern": r"(innerHTML|outerHTML)\s*=.*(?:database|db|mongo|redis)",
             "severity": "CRITICAL",
             "cwe": "CWE-79",
         },
@@ -147,12 +146,12 @@ class OWASPValidator:
     # Patrones de autenticación débil
     AUTH_PATTERNS = {
         "weak_jwt": {
-            "pattern": r'jwt\.encode.*HS256.*(?!SECRET_KEY)',
+            "pattern": r"jwt\.encode.*HS256.*(?!SECRET_KEY)",
             "severity": "CRITICAL",
             "cwe": "CWE-327",
         },
         "no_password_validation": {
-            "pattern": r'password\s*=\s*request\.',
+            "pattern": r"password\s*=\s*request\.",
             "severity": "HIGH",
             "cwe": "CWE-521",
         },
@@ -161,12 +160,12 @@ class OWASPValidator:
     # Patrones de SSRF
     SSRF_PATTERNS = {
         "unvalidated_redirect": {
-            "pattern": r'redirect\(.*request\.',
+            "pattern": r"redirect\(.*request\.",
             "severity": "HIGH",
             "cwe": "CWE-601",
         },
         "arbitrary_url_fetch": {
-            "pattern": r'(requests\.get|httpx\.get|urllib\.request)\s*\(.*request\.',
+            "pattern": r"(requests\.get|httpx\.get|urllib\.request)\s*\(.*request\.",
             "severity": "CRITICAL",
             "cwe": "CWE-918",
         },
@@ -253,7 +252,7 @@ class OWASPValidator:
 
                 for i, line in enumerate(lines, 1):
                     # Detect route without auth decorator
-                    if re.search(r'@router\.(get|post|put|delete|patch)', line, re.IGNORECASE):
+                    if re.search(r"@router\.(get|post|put|delete|patch)", line, re.IGNORECASE):
                         # Check if next 5 lines have auth decorator
                         context = "\n".join(lines[max(0, i - 5) : i])
                         if "Depends" not in context and "requires_auth" not in context:
@@ -279,7 +278,7 @@ class OWASPValidator:
         for file_path in self.project_root.rglob("*.py"):
             try:
                 content = file_path.read_text()
-                if re.search(r'open\(.*\+.*\)', content) or re.search(r'Path\(.*\+.*\)', content):
+                if re.search(r"open\(.*\+.*\)", content) or re.search(r"Path\(.*\+.*\)", content):
                     self.findings.append(
                         OWASPFinding(
                             category="A01",
@@ -307,7 +306,7 @@ class OWASPValidator:
                 content = file_path.read_text()
 
                 for algo in weak_algos:
-                    if re.search(rf'\b{algo}\b', content, re.IGNORECASE):
+                    if re.search(rf"\b{algo}\b", content, re.IGNORECASE):
                         self.findings.append(
                             OWASPFinding(
                                 category="A02",
@@ -341,7 +340,7 @@ class OWASPValidator:
                             file_path=str(file_path.relative_to(self.project_root)),
                             line_number=None,
                             description="Hardcoded encryption key detected",
-                            evidence="key = \"...\" pattern found",
+                            evidence='key = "..." pattern found',
                             recommendation="Use environment variables or secrets manager",
                             cwe_id="CWE-798",
                         )
@@ -409,7 +408,7 @@ class OWASPValidator:
         env_file = self.project_root / ".env"
         if env_file.exists():
             content = env_file.read_text()
-            if re.search(r'DEBUG\s*=\s*[Tt]rue', content):
+            if re.search(r"DEBUG\s*=\s*[Tt]rue", content):
                 self.findings.append(
                     OWASPFinding(
                         category="A05",
@@ -483,7 +482,7 @@ class OWASPValidator:
                 content = file_path.read_text()
 
                 # Check for JWT with HS256 and hardcoded secret
-                if re.search(r'jwt\.encode.*HS256', content, re.IGNORECASE):
+                if re.search(r"jwt\.encode.*HS256", content, re.IGNORECASE):
                     if "SECRET_KEY" not in content and "os.getenv" not in content:
                         self.findings.append(
                             OWASPFinding(

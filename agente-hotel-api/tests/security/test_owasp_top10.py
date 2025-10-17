@@ -19,13 +19,11 @@ Categorías:
 Total: 30 tests
 """
 
-import os
 import re
 from pathlib import Path
 from typing import List
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 class TestA01BrokenAccessControl:
@@ -59,7 +57,7 @@ class TestA01BrokenAccessControl:
 
                 for i, line in enumerate(lines):
                     # Detectar decoradores de ruta
-                    if re.search(r'@router\.(get|post|put|delete|patch)', line, re.IGNORECASE):
+                    if re.search(r"@router\.(get|post|put|delete|patch)", line, re.IGNORECASE):
                         # Verificar contexto (5 líneas antes y después)
                         context_start = max(0, i - 5)
                         context_end = min(len(lines), i + 10)
@@ -84,14 +82,14 @@ class TestA01BrokenAccessControl:
                             auth in context
                             for auth in ["Depends(", "requires_auth", "get_current_user", "verify_token"]
                         ):
-                            unprotected_endpoints.append(f"{router_file.name}:{i+1} - {line.strip()}")
+                            unprotected_endpoints.append(f"{router_file.name}:{i + 1} - {line.strip()}")
 
             except Exception:
                 continue
 
-        assert (
-            len(unprotected_endpoints) == 0
-        ), f"Found {len(unprotected_endpoints)} unprotected endpoints:\n" + "\n".join(unprotected_endpoints[:10])
+        assert len(unprotected_endpoints) == 0, (
+            f"Found {len(unprotected_endpoints)} unprotected endpoints:\n" + "\n".join(unprotected_endpoints[:10])
+        )
 
     @pytest.mark.security
     @pytest.mark.high
@@ -114,7 +112,7 @@ class TestA01BrokenAccessControl:
                 content = py_file.read_text()
 
                 # Detectar construcción dinámica de paths
-                if re.search(r'open\([^)]*\+[^)]*\)', content) or re.search(r'Path\([^)]*\+[^)]*\)', content):
+                if re.search(r"open\([^)]*\+[^)]*\)", content) or re.search(r"Path\([^)]*\+[^)]*\)", content):
                     # Verificar si hay validación
                     if ".resolve()" not in content and "normalize" not in content.lower():
                         vulnerable_files.append(str(py_file.relative_to(project_root)))
@@ -122,9 +120,9 @@ class TestA01BrokenAccessControl:
             except Exception:
                 continue
 
-        assert (
-            len(vulnerable_files) == 0
-        ), f"Found {len(vulnerable_files)} files with potential path traversal:\n" + "\n".join(vulnerable_files)
+        assert len(vulnerable_files) == 0, (
+            f"Found {len(vulnerable_files)} files with potential path traversal:\n" + "\n".join(vulnerable_files)
+        )
 
     @pytest.mark.security
     @pytest.mark.high
@@ -145,21 +143,20 @@ class TestA01BrokenAccessControl:
 
                 for i, line in enumerate(lines):
                     # Detectar queries SQL/ORM
-                    if re.search(r'\.(query|filter|select|find)', line, re.IGNORECASE):
+                    if re.search(r"\.(query|filter|select|find)", line, re.IGNORECASE):
                         # Verificar si hay filtro de tenant en contexto
                         context = "\n".join(lines[max(0, i - 3) : min(len(lines), i + 3)])
 
                         if "tenant" not in context.lower() and "organization" not in context.lower():
-                            queries_without_tenant.append(f"{service_file.name}:{i+1} - {line.strip()}")
+                            queries_without_tenant.append(f"{service_file.name}:{i + 1} - {line.strip()}")
 
             except Exception:
                 continue
 
         # Permitir algunos falsos positivos (queries de sistema, tests)
-        assert (
-            len(queries_without_tenant) < 10
-        ), f"Found {len(queries_without_tenant)} queries without tenant isolation:\n" + "\n".join(
-            queries_without_tenant[:5]
+        assert len(queries_without_tenant) < 10, (
+            f"Found {len(queries_without_tenant)} queries without tenant isolation:\n"
+            + "\n".join(queries_without_tenant[:5])
         )
 
     @pytest.mark.security
@@ -189,15 +186,15 @@ class TestA01BrokenAccessControl:
                         func_body = "\n".join(lines[func_start:func_end])
 
                         if "owner" not in func_body.lower() and "current_user" not in func_body.lower():
-                            potential_idor.append(f"{router_file.name}:{i+1} - {line.strip()}")
+                            potential_idor.append(f"{router_file.name}:{i + 1} - {line.strip()}")
 
             except Exception:
                 continue
 
         # Algunos endpoints públicos son esperados
-        assert (
-            len(potential_idor) < 5
-        ), f"Found {len(potential_idor)} potential IDOR vulnerabilities:\n" + "\n".join(potential_idor)
+        assert len(potential_idor) < 5, f"Found {len(potential_idor)} potential IDOR vulnerabilities:\n" + "\n".join(
+            potential_idor
+        )
 
 
 class TestA02CryptographicFailures:
@@ -235,7 +232,7 @@ class TestA02CryptographicFailures:
                 content = py_file.read_text()
 
                 for weak, recommended in weak_algos.items():
-                    if re.search(rf'\b{weak}\b', content, re.IGNORECASE):
+                    if re.search(rf"\b{weak}\b", content, re.IGNORECASE):
                         findings.append(f"{py_file.name}: {weak} (use {recommended})")
 
             except Exception:
@@ -261,7 +258,7 @@ class TestA02CryptographicFailures:
             try:
                 content = config_file.read_text()
 
-                if re.search(r'TLS.*1\.[01]', content, re.IGNORECASE):
+                if re.search(r"TLS.*1\.[01]", content, re.IGNORECASE):
                     weak_tls_configs.append(str(config_file.relative_to(project_root)))
 
             except Exception:
@@ -296,14 +293,14 @@ class TestA02CryptographicFailures:
                         if sensitive in line.lower() and "=" in line:
                             # Verificar si está usando EncryptedField
                             if "Encrypted" not in line and "encrypt" not in line.lower():
-                                unencrypted_fields.append(f"{model_file.name}:{i+1} - {line.strip()}")
+                                unencrypted_fields.append(f"{model_file.name}:{i + 1} - {line.strip()}")
 
             except Exception:
                 continue
 
-        assert (
-            len(unencrypted_fields) == 0
-        ), f"Found {len(unencrypted_fields)} unencrypted sensitive fields:\n" + "\n".join(unencrypted_fields)
+        assert len(unencrypted_fields) == 0, (
+            f"Found {len(unencrypted_fields)} unencrypted sensitive fields:\n" + "\n".join(unencrypted_fields)
+        )
 
 
 class TestA03Injection:
@@ -325,7 +322,7 @@ class TestA03Injection:
         - Recomienda parameterized queries
         """
         vulnerable_patterns = [
-            r'(SELECT|INSERT|UPDATE|DELETE).*\+.*WHERE',
+            r"(SELECT|INSERT|UPDATE|DELETE).*\+.*WHERE",
             r'f["\'].*SELECT.*\{',
             r'\.execute\(["\'][^"\']*\+',
         ]
@@ -362,10 +359,10 @@ class TestA03Injection:
         - subprocess con shell=True y concatenación
         """
         vulnerable_patterns = [
-            r'os\.system\(.*\+',
-            r'subprocess\.(call|run|Popen).*shell\s*=\s*True.*\+',
-            r'eval\(.*request',
-            r'exec\(.*request',
+            r"os\.system\(.*\+",
+            r"subprocess\.(call|run|Popen).*shell\s*=\s*True.*\+",
+            r"eval\(.*request",
+            r"exec\(.*request",
         ]
 
         findings = []
@@ -399,9 +396,9 @@ class TestA03Injection:
         - Respuestas HTML sin escape
         """
         xss_patterns = [
-            r'innerHTML\s*=.*request',
-            r'outerHTML\s*=.*request',
-            r'document\.write\(.*request',
+            r"innerHTML\s*=.*request",
+            r"outerHTML\s*=.*request",
+            r"document\.write\(.*request",
         ]
 
         findings = []
@@ -453,16 +450,15 @@ class TestA03Injection:
                         func_signature = "\n".join(lines[func_start:func_end])
 
                         if ":" not in func_signature or "BaseModel" not in content:
-                            unvalidated_endpoints.append(f"{router_file.name}:{i+1}")
+                            unvalidated_endpoints.append(f"{router_file.name}:{i + 1}")
 
             except Exception:
                 continue
 
         # Algunos endpoints pueden no tener body
-        assert (
-            len(unvalidated_endpoints) < 5
-        ), f"Found {len(unvalidated_endpoints)} endpoints without input validation:\n" + "\n".join(
-            unvalidated_endpoints
+        assert len(unvalidated_endpoints) < 5, (
+            f"Found {len(unvalidated_endpoints)} endpoints without input validation:\n"
+            + "\n".join(unvalidated_endpoints)
         )
 
     @pytest.mark.security
@@ -499,10 +495,9 @@ class TestA03Injection:
             except Exception:
                 continue
 
-        assert (
-            len(vulnerable_prompts) == 0
-        ), f"Found {len(vulnerable_prompts)} potential prompt injection vulnerabilities:\n" + "\n".join(
-            vulnerable_prompts
+        assert len(vulnerable_prompts) == 0, (
+            f"Found {len(vulnerable_prompts)} potential prompt injection vulnerabilities:\n"
+            + "\n".join(vulnerable_prompts)
         )
 
 
@@ -580,10 +575,10 @@ class TestA05SecurityMisconfiguration:
         content = env_file.read_text()
 
         # Si ENVIRONMENT=production, DEBUG debe ser false
-        is_production = re.search(r'ENVIRONMENT\s*=\s*production', content, re.IGNORECASE)
+        is_production = re.search(r"ENVIRONMENT\s*=\s*production", content, re.IGNORECASE)
 
         if is_production:
-            debug_enabled = re.search(r'DEBUG\s*=\s*[Tt]rue', content)
+            debug_enabled = re.search(r"DEBUG\s*=\s*[Tt]rue", content)
             assert debug_enabled is None, "DEBUG mode is enabled in production environment"
 
     @pytest.mark.security
@@ -754,15 +749,15 @@ class TestA07AuthenticationFailures:
                 content = auth_file.read_text()
 
                 # Detectar jwt.encode con secret hardcodeado
-                if re.search(r'jwt\.encode.*HS256', content, re.IGNORECASE):
+                if re.search(r"jwt\.encode.*HS256", content, re.IGNORECASE):
                     if "SECRET_KEY" not in content and "os.getenv" not in content and "settings" not in content:
                         weak_jwt_configs.append(auth_file.name)
 
             except Exception:
                 continue
 
-        assert len(weak_jwt_configs) == 0, f"Found {len(weak_jwt_configs)} JWT configs with weak secrets:\n" + "\n".join(
-            weak_jwt_configs
+        assert len(weak_jwt_configs) == 0, (
+            f"Found {len(weak_jwt_configs)} JWT configs with weak secrets:\n" + "\n".join(weak_jwt_configs)
         )
 
     @pytest.mark.security
@@ -796,9 +791,9 @@ class TestA07AuthenticationFailures:
             except Exception:
                 continue
 
-        assert (
-            len(password_validators) > 0
-        ), "No password complexity validation found. Implement in validators or Pydantic models."
+        assert len(password_validators) > 0, (
+            "No password complexity validation found. Implement in validators or Pydantic models."
+        )
 
     @pytest.mark.security
     def test_account_lockout_after_failed_attempts(self, project_root: Path):
@@ -910,9 +905,9 @@ class TestA08DataIntegrityFailures:
             except Exception:
                 continue
 
-        assert (
-            len(upload_handlers) == 0
-        ), f"Found {len(upload_handlers)} file upload handlers without validation:\n" + "\n".join(upload_handlers)
+        assert len(upload_handlers) == 0, (
+            f"Found {len(upload_handlers)} file upload handlers without validation:\n" + "\n".join(upload_handlers)
+        )
 
 
 class TestA09LoggingMonitoringFailures:
@@ -997,9 +992,9 @@ class TestA10SSRF:
         - urllib.request(user_input)
         """
         ssrf_patterns = [
-            r'requests\.get\([^)]*request\.',
-            r'httpx\.get\([^)]*request\.',
-            r'urllib\.request\.urlopen\([^)]*request\.',
+            r"requests\.get\([^)]*request\.",
+            r"httpx\.get\([^)]*request\.",
+            r"urllib\.request\.urlopen\([^)]*request\.",
         ]
 
         findings = []
@@ -1025,9 +1020,7 @@ class TestA10SSRF:
             except Exception:
                 continue
 
-        assert (
-            len(findings) == 0
-        ), f"Found {len(findings)} potential SSRF vulnerabilities:\n" + "\n".join(findings[:5])
+        assert len(findings) == 0, f"Found {len(findings)} potential SSRF vulnerabilities:\n" + "\n".join(findings[:5])
 
     @pytest.mark.security
     @pytest.mark.high
@@ -1053,7 +1046,7 @@ class TestA10SSRF:
         for service in internal_services:
             if service in content.lower():
                 # Buscar ports mapping hacia host
-                service_section_match = re.search(rf'{service}:.*?(?=\n  \w|\Z)', content, re.DOTALL | re.IGNORECASE)
+                service_section_match = re.search(rf"{service}:.*?(?=\n  \w|\Z)", content, re.DOTALL | re.IGNORECASE)
                 if service_section_match:
                     service_section = service_section_match.group()
 
@@ -1078,8 +1071,8 @@ class TestA10SSRF:
         - Location header con input dinámico
         """
         redirect_patterns = [
-            r'RedirectResponse\([^)]*request\.',
-            r'redirect\([^)]*request\.',
+            r"RedirectResponse\([^)]*request\.",
+            r"redirect\([^)]*request\.",
         ]
 
         findings = []
