@@ -67,9 +67,7 @@ security-fast: ## Escaneo rápido (solo HIGH/CRITICAL) con trivy fs (vuln + secr
 	@if ! command -v trivy >/dev/null 2>&1; then echo "trivy no instalado"; exit 1; fi
 	trivy fs --severity HIGH,CRITICAL --security-checks vuln,secret --quiet . || true
 
-security-scan: ## Escaneo completo (deps, config, secretos, imagen) -> scripts/security-scan.sh
-	@echo "Security full scan..."
-	@bash scripts/security-scan.sh
+# security-scan duplicado eliminado - ver línea 778 para versión actual
 
 security-deps: ## P011: Escaneo de vulnerabilidades en dependencias (CVE, licenses, outdated)
 	@echo "🔐 P011: Dependency Vulnerability Scan..."
@@ -115,18 +113,6 @@ secret-scan-strict: ## Escaneo estricto de secretos (falla en cualquier hallazgo
 		exit 1; \
 	}
 	@echo "✅ Escaneo estricto completado sin hallazgos críticos"
-
-fix-permissions: ## Corregir permisos de archivos sensibles (auto-remediación)
-	@echo "� Corrigiendo permisos de archivos sensibles..."
-	@if [ -f .env ]; then \
-		chmod 600 .env && echo "✅ .env permisos actualizados a 0600"; \
-	fi
-	@if [ -f .env.production ]; then \
-		chmod 600 .env.production && echo "✅ .env.production permisos actualizados a 0600"; \
-	fi
-	@find . -name "*.pem" -type f -exec chmod 600 {} + 2>/dev/null && echo "✅ Archivos .pem actualizados" || echo "No .pem files found"
-	@find . -name "*.key" -type f -exec chmod 600 {} + 2>/dev/null && echo "✅ Archivos .key actualizados" || echo "No .key files found"
-	@echo "✅ Permisos corregidos"
 
 # ------------------------------------------------------------------------------
 # P013: OWASP Top 10 2021 Validation
@@ -221,26 +207,9 @@ else
 	pytest -q
 endif
 
-test-unit: ## Ejecutar solo tests unitarios
-ifeq ($(HAS_POETRY),1)
-	poetry run pytest tests/unit/ -v
-else
-	pytest tests/unit/ -v
-endif
-
-test-integration: ## Ejecutar solo tests de integración
-ifeq ($(HAS_POETRY),1)
-	poetry run pytest tests/integration/ -v
-else
-	pytest tests/integration/ -v
-endif
-
-test-e2e: ## Ejecutar solo tests end-to-end
-ifeq ($(HAS_POETRY),1)
-	poetry run pytest tests/e2e/ -v
-else
-	pytest tests/e2e/ -v
-endif
+# test-unit duplicado eliminado - ver línea 694 para versión actual
+# test-integration duplicado eliminado - ver línea 703 para versión actual
+# test-e2e duplicado eliminado - ver línea 711 para versión actual
 
 test-business-metrics: ## Ejecutar tests de business metrics
 ifeq ($(HAS_POETRY),1)
@@ -558,22 +527,9 @@ pre-deploy-check: ## Validación completa pre-deployment
 # Deployment & Production Operations
 # ==============================================================================
 
-validate-deployment: ## Ejecuta validación completa pre-deployment
-	@echo "🔍 Running comprehensive pre-deployment validation..."
-	@chmod +x scripts/pre-deployment-validation.sh
-	@bash scripts/pre-deployment-validation.sh
-
-deploy-production: ## Despliegue a producción con validaciones
-	@echo "🚀 Starting production deployment..."
-	@make validate-deployment || { echo "❌ Pre-deployment validation failed"; exit 1; }
-	@echo "Pre-deployment validation passed. Proceeding with deployment..."
-	@chmod +x scripts/deploy.sh
-	@bash scripts/deploy.sh production
-
-deploy-staging: ## Despliegue a staging para pruebas
-	@echo "🧪 Starting staging deployment..."
-	@chmod +x scripts/deploy.sh
-	@bash scripts/deploy.sh staging
+# validate-deployment duplicado eliminado - ver línea 1103 para versión actual
+# deploy-production duplicado eliminado - ver línea 1077 para versión actual
+# deploy-staging duplicado eliminado - ver línea 1068 para versión actual
 
 build-production: ## Construye imagen de producción
 	@echo "🔨 Building production image..."
