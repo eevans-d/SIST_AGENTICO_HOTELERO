@@ -22,7 +22,7 @@ from dataclasses import dataclass
 # Ajustar imports según estructura del proyecto
 from app.services.nlp_engine import NLPEngine
 from app.services.session_manager import SessionManager
-from app.services.pms_adapter import PMSAdapter
+from app.services.pms_adapter import MockPMSAdapter
 
 
 # ===== CONFIGURACIÓN =====
@@ -79,9 +79,9 @@ async def session_manager():
 @pytest.fixture
 async def pms_adapter():
     """Fixture del PMS adapter"""
-    adapter = PMSAdapter()
+    adapter = MockPMSAdapter(redis_client=None)  # Mock no requiere redis real
     yield adapter
-    await adapter.close()
+    # MockPMSAdapter no tiene método close()
     del adapter
     gc.collect()
 
