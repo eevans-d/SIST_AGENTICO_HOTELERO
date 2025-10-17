@@ -10,8 +10,9 @@
 ### Para Empezar
 ```
 1. Lee: VERIFICACION-100-ESQUEMA-MAESTRO.md  ← ESQUEMA COMPLETO (este es el MAESTRO)
-2. Lee: agente-hotel-api/docs/START-HERE.md  ← Onboarding 5 minutos
-3. Lee: agente-hotel-api/docs/README.md      ← Navegación por rol
+2. Lee: PLAN-TRABAJO-LOCAL-PRE-DEPLOY.md     ← PLAN DESARROLLO PRE-DEPLOY (5 fases)
+3. Lee: agente-hotel-api/docs/START-HERE.md  ← Onboarding 5 minutos
+4. Lee: agente-hotel-api/docs/README.md      ← Navegación por rol
 ```
 
 ### Para Validación Pre-Lanzamiento
@@ -36,9 +37,10 @@
 |---------|-----------|--------|
 | **00-INDICE-NAVEGACION.md** | Índice rápido navegación | ~205 líneas |
 | **VERIFICACION-100-ESQUEMA-MAESTRO.md** | Esquema validación 100% completo | ~860 líneas |
+| **PLAN-TRABAJO-LOCAL-PRE-DEPLOY.md** | Plan trabajo desarrollo pre-deploy | ~624 líneas |
 | **README.md** | Info general proyecto | ~300 líneas |
 
-**Total**: 3 archivos esenciales (consolidado de 8 originales)
+**Total**: 4 archivos esenciales (3 maestros + README)
 
 ---
 
