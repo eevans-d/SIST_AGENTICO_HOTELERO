@@ -38,6 +38,10 @@ node_modules/
 *.secret
 secrets/*.json
 
+# Railway secrets (NUNCA commitear)
+.env.railway.local
+.env.railway.local.backup.*
+
 # Docker
 *.tar
 *.gz
