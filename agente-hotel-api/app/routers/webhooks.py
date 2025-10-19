@@ -143,7 +143,11 @@ async def handle_whatsapp_webhook(request: Request):
     gateway = MessageGateway()
 
     try:
-        unified = gateway.normalize_whatsapp_message(payload)
+        # BLOQUEANTE 3: Pass request_source to prevent channel spoofing
+        unified = gateway.normalize_whatsapp_message(
+            payload,
+            request_source="webhook_whatsapp"
+        )
     except (ValueError, Exception):
         # Payload sin mensajes o error de normalización; acuse de recibo sin procesar
         return {"status": "ok"}
@@ -429,7 +433,11 @@ async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
         for email_dict in messages:
             try:
                 # Normalizar a UnifiedMessage
-                unified = gateway.normalize_gmail_message(email_dict)
+                # BLOQUEANTE 3: Pass request_source to prevent channel spoofing
+                unified = gateway.normalize_gmail_message(
+                    email_dict,
+                    request_source="webhook_gmail"
+                )
 
                 # Procesar via orchestrator
                 result = await orchestrator.handle_unified_message(unified)
