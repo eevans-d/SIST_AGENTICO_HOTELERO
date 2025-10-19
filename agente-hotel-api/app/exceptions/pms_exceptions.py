@@ -35,3 +35,21 @@ class CircuitBreakerOpenError(Exception):
     """Raised when the circuit breaker is open."""
 
     pass
+
+
+class TenantIsolationError(Exception):
+    """Raised when a multi-tenant isolation violation is detected."""
+
+    pass
+
+
+class ChannelSpoofingError(Exception):
+    """Raised when a channel spoofing attempt is detected."""
+
+    pass
+
+
+class MetadataInjectionError(Exception):
+    """Raised when malicious metadata is detected."""
+
+    pass
