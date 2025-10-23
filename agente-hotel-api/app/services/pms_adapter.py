@@ -136,6 +136,10 @@ class QloAppsAdapter:
     ) -> List[dict]:
         """
         Check room availability using QloApps API.
+        
+        BLOQUEANTE 4: Stale Cache Marking
+        When PMS fails, we return stale cache with potentially_stale marker.
+        This prevents guests from booking unavailable rooms.
 
         Args:
             check_in: Check-in date
@@ -147,9 +151,14 @@ class QloAppsAdapter:
             List of available rooms with pricing
         """
         cache_key = f"availability:{check_in}:{check_out}:{guests}:{room_type or 'any'}"
+        stale_cache_key = f"{cache_key}:stale"
+        
         cached_data = await self._get_from_cache(cache_key)
         if isinstance(cached_data, list):
             logger.debug("Returning availability from cache")
+            cache_hits.inc()
+            # Mark as fresh (not stale)
+            await self.redis.delete(stale_cache_key)
             return cached_data
 
         async def fetch_availability():
@@ -181,18 +190,31 @@ class QloAppsAdapter:
             # Normalize response
             normalized = self._normalize_qloapps_availability(data, guests)
 
-            # Cache the result
+            # Cache the result (fresh)
             await self._set_cache(cache_key, normalized, ttl=300)
+            # Remove stale marker since we have fresh data
+            await self.redis.delete(stale_cache_key)
             circuit_breaker_state.set(0)
             pms_operations.labels(operation="check_availability", status="success").inc()
 
             return normalized
 
         except CircuitBreakerOpenError:
-            logger.error("Circuit breaker is open, returning fallback")
+            logger.error("Circuit breaker is open, attempting fallback with stale cache")
             circuit_breaker_state.set(1)
             pms_operations.labels(operation="check_availability", status="circuit_open").inc()
-            return []  # Fallback a respuesta vacía
+            
+            # BLOQUEANTE 4: Try stale cache with marker
+            stale_data = await self._get_from_cache(cache_key)
+            if isinstance(stale_data, list):
+                logger.warning("Using stale cache data due to circuit breaker")
+                # Mark as stale (only valid for 60 seconds)
+                await self.redis.setex(stale_cache_key, 60, "true")
+                # Return stale data with marker
+                return [{**room, "potentially_stale": True} for room in stale_data]
+            
+            return []  # No fallback available
+            
         except PMSAuthError:
             # Don't retry on auth errors
             pms_errors.labels(operation="check_availability", error_type="auth_error").inc()
@@ -201,6 +223,16 @@ class QloAppsAdapter:
             logger.error(f"Failed to fetch availability: {e}")
             pms_operations.labels(operation="check_availability", status="error").inc()
             pms_errors.labels(operation="check_availability", error_type=e.__class__.__name__).inc()
+            
+            # BLOQUEANTE 4: Try stale cache with marker on error
+            stale_data = await self._get_from_cache(cache_key)
+            if isinstance(stale_data, list):
+                logger.warning(f"Using stale cache data due to error: {e}")
+                # Mark as stale (only valid for 60 seconds)
+                await self.redis.setex(stale_cache_key, 60, "true")
+                # Return stale data with marker
+                return [{**room, "potentially_stale": True} for room in stale_data]
+            
             raise PMSError(f"Unable to check availability: {str(e)}")
 
     async def create_reservation(self, reservation_data: dict) -> dict:
