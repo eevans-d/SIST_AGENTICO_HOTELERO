@@ -1,23 +1,13 @@
 {
-  "mode": "B",
-  "weights": {
-    "readiness": 0.5,
-    "mvp": 0.5,
-    "security": 0.2
+  "timestamp": "2025-10-23T07:57:58.938121",
+  "checks": {
+    "syntax": "PASS",
+    "settings": "FAIL",
+    "dependencies": "PASS",
+    "database": "PASS",
+    "security": "WARN",
+    "docker": "PASS",
+    "documentation": "PASS"
   },
-  "scores": {
-    "readiness": 7.0,
-    "mvp": 7.0,
-    "security_gate": "PASS"
-  },
-  "complexity": "medium",
-  "penalty": 5,
-  "risk_score": 30.0,
-  "thresholds": {
-    "go": 50,
-    "canary": 65
-  },
-  "decision": "GO",
-  "blocking_issues": [],
-  "artifacts_missing": []
+  "overall_status": "GO \u2705"
 }

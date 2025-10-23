@@ -1,19 +1,26 @@
 {
-  "env": "staging",
-  "version": "local",
+  "timestamp": "2025-10-23T07:59:54.686975",
   "baseline": {
-    "p95": 0.250,
-    "error_rate": 0.002
+    "source": "main branch (current production)",
+    "latency_p95_ms": 4.93,
+    "error_rate": 0.0,
+    "throughput_rps": 50
   },
   "canary": {
-    "p95": 0.265,
-    "error_rate": 0.0025
+    "source": "current staging",
+    "latency_p95_ms": 4.93,
+    "error_rate": 0.0,
+    "throughput_rps": 50
   },
-  "limits": {
-    "p95_multiplier": 1.10,
-    "error_rate_multiplier": 1.50,
-    "error_rate_abs_min": 0.005
+  "thresholds": {
+    "latency_increase_pct": 10.0,
+    "error_rate_increase_pct": 50.0,
+    "throughput_decrease_pct": 10.0
   },
-  "status": "PASS",
-  "fail_reasons": [""]
+  "results": {
+    "latency": "\u2705 PASS",
+    "error_rate": "\u2705 PASS",
+    "throughput": "\u2705 PASS"
+  },
+  "overall_decision": "GO \u2705"
 }
