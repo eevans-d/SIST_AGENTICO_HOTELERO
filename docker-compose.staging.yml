@@ -1,0 +1,275 @@
+version: '3.9'
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Docker Compose for Staging Deployment
+# ════════════════════════════════════════════════════════════════════════════════
+# Services: agente-api, postgres, redis, prometheus, grafana, alertmanager, jaeger
+# Generated: 2025-10-23
+# Status: Production-Ready for Staging Environment
+# ════════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 1: agente-api (FastAPI Application)
+  # ════════════════════════════════════════════════════════════════════════════
+  agente-api:
+    build:
+      context: ./agente-hotel-api
+      dockerfile: Dockerfile.production
+    container_name: agente-api-staging
+    ports:
+      - "8002:8002"
+    environment:
+      - ENVIRONMENT=staging
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=agente_hotel_staging
+      - DATABASE_USER=agente_user
+      - DATABASE_PASSWORD=staging_secure_pass_12345
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PROMETHEUS_METRICS_PORT=8003
+      - JAEGER_HOST=jaeger
+      - JAEGER_PORT=6831
+      - PMS_TYPE=mock
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ./agente-hotel-api/app:/app/app:ro
+      - /var/log/agente-api:/var/log/agente-api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 2: PostgreSQL Database
+  # ════════════════════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres-staging
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=agente_user
+      - POSTGRES_PASSWORD=staging_secure_pass_12345
+      - POSTGRES_DB=agente_hotel_staging
+      - POSTGRES_INITDB_ARGS=-c max_connections=100 -c shared_buffers=256MB
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U agente_user -d agente_hotel_staging" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 3: Redis Cache & Rate Limiting
+  # ════════════════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: redis-staging
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 4: Prometheus (Metrics Collection)
+  # ════════════════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-staging
+    ports:
+      - "9090:9090"
+    environment:
+      - TZ=UTC
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - agente-api
+      - alertmanager
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 5: Grafana (Dashboards & Visualization)
+  # ════════════════════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-staging
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION=true
+      - TZ=UTC
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 6: AlertManager (Alert Routing & Management)
+  # ════════════════════════════════════════════════════════════════════════════
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager-staging
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - ./docker/alertmanager/config.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICE 7: Jaeger (Distributed Tracing)
+  # ════════════════════════════════════════════════════════════════════════════
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger-staging
+    ports:
+      - "6831:6831/udp"    # Jaeger agent compact thrift port
+      - "16686:16686"      # Jaeger UI
+      - "14268:14268"      # Jaeger collector HTTP port
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - MEMORY_MAX_TRACES=10000
+      - MEMORY_ALERT_NEW_TRACES_PER_MINUTE=1000
+    networks:
+      - staging-network
+    restart: unless-stopped
+    volumes:
+      - jaeger-data:/badger/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:14268/api/traces" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# ════════════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ════════════════════════════════════════════════════════════════════════════════
+networks:
+  staging-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ════════════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ════════════════════════════════════════════════════════════════════════════════
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+  jaeger-data:
+    driver: local
