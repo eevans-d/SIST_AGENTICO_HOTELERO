@@ -24,13 +24,15 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Install base tooling
-        run: |
-          python -m pip install --upgrade pip
-          pip install poetry
-          pip install ruff gitleaks
+    - name: Install base tooling
+      run: |
+        python -m pip install --upgrade pip
+        pip install poetry
+        pip install ruff
 
-      - name: Install Trivy
+    - name: Install Gitleaks
+      run: |
+        curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz | sudo tar -xz -C /usr/local/bin gitleaks      - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 
