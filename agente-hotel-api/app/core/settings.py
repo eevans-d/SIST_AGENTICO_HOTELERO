@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     postgres_password: Optional[SecretStr] = None
     postgres_pool_size: int = 10
     postgres_max_overflow: int = 10
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: Optional[str] = None  # Will be built from REDIS_HOST/PORT/DB or use env var
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
     redis_pool_size: int = 20
     redis_password: Optional[SecretStr] = None
 
@@ -205,6 +208,13 @@ class Settings(BaseSettings):
             return v
 
         return f"postgresql+asyncpg://{user}:{pwd_val}@{host}:{port}/{db}"
+
+    # Build redis_url dynamically after all fields are set
+    def __init__(self, **data):
+        super().__init__(**data)
+        # If redis_url not explicitly provided, build from redis_host/port/db
+        if not self.redis_url or self.redis_url == "redis://localhost:6379/0":
+            self.redis_url = f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 settings = Settings()

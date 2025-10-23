@@ -13,6 +13,8 @@ import json
 import logging
 from collections import defaultdict, deque
 
+from ..core.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,7 @@ class HealthStatus(str, Enum):
     """Health status levels"""
 
     HEALTHY = "healthy"
+    DEGRADED = "degraded"
     WARNING = "warning"
     UNHEALTHY = "unhealthy"
     CRITICAL = "critical"
@@ -159,12 +162,12 @@ class AdvancedHealthService:
         self.register_dependency(
             "postgres_db",
             DependencyType.DATABASE,
-            "postgresql://localhost:5432/agente_hotel",
+            settings.postgres_url,
             self._check_postgres_dependency,
         )
 
         self.register_dependency(
-            "redis_cache", DependencyType.CACHE, "redis://localhost:6379", self._check_redis_dependency
+            "redis_cache", DependencyType.CACHE, settings.redis_url, self._check_redis_dependency
         )
 
         self.register_dependency(
