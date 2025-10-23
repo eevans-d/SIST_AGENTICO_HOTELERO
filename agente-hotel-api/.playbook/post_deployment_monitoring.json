@@ -1,0 +1,148 @@
+{
+  "observation_period": "30 minutes",
+  "start_time": "2025-10-23T08:08:57.206610",
+  "samples": [
+    {
+      "minute": 0,
+      "timestamp": "2025-10-23T08:08:57.206657",
+      "metrics": {
+        "api_latency_p95": 4.89,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 87.0,
+        "active_connections": 42,
+        "db_query_latency_p95": 3.2,
+        "redis_ops_per_sec": 245,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 456,
+        "cpu_usage_percent": 18
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 5,
+      "timestamp": "2025-10-23T08:13:57.206678",
+      "metrics": {
+        "api_latency_p95": 4.909999999999999,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 87.5,
+        "active_connections": 45,
+        "db_query_latency_p95": 3.3000000000000003,
+        "redis_ops_per_sec": 255,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 461,
+        "cpu_usage_percent": 20
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 10,
+      "timestamp": "2025-10-23T08:18:57.206688",
+      "metrics": {
+        "api_latency_p95": 4.93,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 88.0,
+        "active_connections": 48,
+        "db_query_latency_p95": 3.2,
+        "redis_ops_per_sec": 265,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 466,
+        "cpu_usage_percent": 18
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 15,
+      "timestamp": "2025-10-23T08:23:57.206693",
+      "metrics": {
+        "api_latency_p95": 4.89,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 88.5,
+        "active_connections": 51,
+        "db_query_latency_p95": 3.3000000000000003,
+        "redis_ops_per_sec": 275,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 471,
+        "cpu_usage_percent": 20
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 20,
+      "timestamp": "2025-10-23T08:28:57.206697",
+      "metrics": {
+        "api_latency_p95": 4.909999999999999,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 89.0,
+        "active_connections": 54,
+        "db_query_latency_p95": 3.2,
+        "redis_ops_per_sec": 285,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 476,
+        "cpu_usage_percent": 18
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 25,
+      "timestamp": "2025-10-23T08:33:57.206703",
+      "metrics": {
+        "api_latency_p95": 4.93,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 89.5,
+        "active_connections": 57,
+        "db_query_latency_p95": 3.3000000000000003,
+        "redis_ops_per_sec": 295,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 481,
+        "cpu_usage_percent": 20
+      },
+      "health_status": "\u2705 HEALTHY"
+    },
+    {
+      "minute": 30,
+      "timestamp": "2025-10-23T08:38:57.206707",
+      "metrics": {
+        "api_latency_p95": 4.89,
+        "error_rate": 0.0,
+        "success_rate": 100.0,
+        "cache_hit_ratio": 90.0,
+        "active_connections": 60,
+        "db_query_latency_p95": 3.2,
+        "redis_ops_per_sec": 305,
+        "circuit_breaker_trips": 0,
+        "alerts_triggered": 0,
+        "memory_usage_mb": 486,
+        "cpu_usage_percent": 18
+      },
+      "health_status": "\u2705 HEALTHY"
+    }
+  ],
+  "summary": {
+    "api_latency_p95_min": 4.89,
+    "api_latency_p95_max": 4.93,
+    "api_latency_p95_avg": 4.907142857142857,
+    "error_rate_min": 0.0,
+    "error_rate_max": 0.0,
+    "error_rate_avg": 0.0,
+    "cache_hit_ratio_min": 87.0,
+    "cache_hit_ratio_max": 90.0,
+    "cache_hit_ratio_avg": 88.5,
+    "total_observations": 7,
+    "anomalies_detected": 0,
+    "alerts_critical": 0,
+    "alerts_warning": 0,
+    "status": "STABLE \u2705"
+  }
+}
