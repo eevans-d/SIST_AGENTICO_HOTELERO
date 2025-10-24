@@ -55,7 +55,7 @@ RUN addgroup --system --gid 1000 appgroup \
     && adduser --system --uid 1000 --gid 1000 --no-create-home appuser
 
 # Copy application code with proper ownership (exclude unnecessary files)
-COPY --chown=appuser:appgroup ./app ./app
+COPY --chown=appuser:appgroup agente-hotel-api/app ./app
 
 # Production environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
