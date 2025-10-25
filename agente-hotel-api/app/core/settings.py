@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, Field, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +60,12 @@ class Settings(BaseSettings):
 
     # Database & Cache
     # Si existen variables POSTGRES_* se usará para construir postgres_url automáticamente
-    postgres_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    # Acepta DATABASE_URL (común en plataformas) o POSTGRES_URL además de postgres_url
+    # Normalizaremos a URL asíncrona (postgresql+asyncpg://)
+    postgres_url: str = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/postgres",
+        validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URL", "postgres_url"),
+    )
     postgres_host: Optional[str] = None
     postgres_port: Optional[int] = None
     postgres_db: Optional[str] = None
@@ -68,7 +73,8 @@ class Settings(BaseSettings):
     postgres_password: Optional[SecretStr] = None
     postgres_pool_size: int = 10
     postgres_max_overflow: int = 10
-    redis_url: Optional[str] = None  # Will be built from REDIS_HOST/PORT/DB or use env var
+    # Acepta REDIS_URL además de redis_url
+    redis_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("REDIS_URL", "redis_url"))
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
@@ -203,10 +209,19 @@ class Settings(BaseSettings):
         pwd = data.get("postgres_password")
         pwd_val = pwd.get_secret_value() if isinstance(pwd, SecretStr) else (pwd or None)
 
-        # Si no hay suficientes datos, mantener el valor existente (por defecto o proporcionado)
+        # Si viene como string, normalizamos a async driver si es necesario
+        if isinstance(v, str) and v:
+            # Reemplazar esquemas sin async por asyncpg
+            if v.startswith("postgres://"):
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif v.startswith("postgresql://") and "+asyncpg" not in v:
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # Si no hay suficientes datos por campos separados, devolvemos v (que puede venir del entorno)
         if not (host and port and db and user and pwd_val):
             return v
 
+        # Construir desde componentes si están todos presentes
         return f"postgresql+asyncpg://{user}:{pwd_val}@{host}:{port}/{db}"
 
     # Build redis_url dynamically after all fields are set
