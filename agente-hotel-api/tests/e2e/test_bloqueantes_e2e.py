@@ -15,11 +15,7 @@ import pytest
 from httpx import AsyncClient
 from app.main import app
 from app.services.message_gateway import MessageGateway, ALLOWED_METADATA_KEYS
-from app.exceptions.pms_exceptions import (
-    ChannelSpoofingError,
-    MetadataInjectionError,
-    TenantIsolationError,
-)
+from app.exceptions.pms_exceptions import ChannelSpoofingError
 
 
 class TestBloqueantesE2E:
