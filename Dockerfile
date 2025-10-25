@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates ffmpeg espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements-prod.txt .
+# Copy requirements from service folder and install Python dependencies
+COPY agente-hotel-api/requirements-prod.txt ./requirements-prod.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-prod.txt
 

@@ -10,7 +10,7 @@
 
 ### 🔴 URGENTE - SI NECESITAS ENTENDER QUÉ PASÓ
 
-👉 **Lee primero**: [`DIA_6_DEPLOYMENT_FLY_IO_COMPLETADO.md`](DIA_6_DEPLOYMENT_FLY_IO_COMPLETADO.md)
+👉 **Lee primero**: [`ESTADO_Y_PLAN.md`](ESTADO_Y_PLAN.md)
 
 Este documento contiene:
 - Estado actual de la aplicación ✅
@@ -32,7 +32,7 @@ Este documento contiene:
 ### ☁️ Deployment & Fly.io
 | Archivo | Descripción | Estado |
 |---------|-------------|--------|
-| `DIA_6_DEPLOYMENT_FLY_IO_COMPLETADO.md` | **DOCUMENTO MAESTRO** | ✅ ACTIVO |
+| `ESTADO_Y_PLAN.md` | **DOCUMENTO MAESTRO** | ✅ ACTIVO |
 | `fly.toml` | Configuración de Fly.io | ✅ En uso |
 | `Dockerfile` | Imagen Docker para producción | ✅ En uso |
 
@@ -41,8 +41,8 @@ Este documento contiene:
 |---------|-------------|
 | `deploy-fly.sh` | Script automatizado de deployment |
 | `setup-fly-secrets.sh` | Script para configurar secrets |
-| `requirements-prod.txt` | Dependencias de producción |
-| `pyproject.toml` | Configuración Poetry |
+| `agente-hotel-api/requirements-prod.txt` | Dependencias de producción |
+| `agente-hotel-api/pyproject.toml` | Configuración Poetry |
 
 ---
 
@@ -114,5 +114,5 @@ flyctl logs -n | grep ERROR
 
 ---
 
-**Documento Maestro**: [`DIA_6_DEPLOYMENT_FLY_IO_COMPLETADO.md`](DIA_6_DEPLOYMENT_FLY_IO_COMPLETADO.md)  
+**Documento Maestro**: [`ESTADO_Y_PLAN.md`](ESTADO_Y_PLAN.md)  
 **Última revisión**: October 24, 2025
