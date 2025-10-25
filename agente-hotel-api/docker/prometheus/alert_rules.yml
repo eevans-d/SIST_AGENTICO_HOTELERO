@@ -1,0 +1,180 @@
+# Prometheus Alert Rules for Agente Hotelero
+# Save as: docker/prometheus/alert_rules.yml
+# Reference in prometheus.yml under rule_files
+
+groups:
+  - name: agente_hotelero_critical
+    interval: 30s
+    rules:
+      
+      # Circuit Breaker Trips
+      - alert: PMSCircuitBreakerOpen
+        expr: pms_circuit_breaker_state == 1
+        for: 2m
+        labels:
+          severity: critical
+          service: pms_adapter
+        annotations:
+          summary: "PMS Circuit Breaker OPEN"
+          description: "PMS integration circuit breaker is OPEN. PMS service may be unavailable. Check PMS base URL and connectivity."
+      
+      # Application Not Ready
+      - alert: AppNotReady
+        expr: readiness_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: health
+        annotations:
+          summary: "Application Not Ready (Health Check Failed)"
+          description: "App /health/ready returned false. Check Postgres, Redis, and PMS availability."
+      
+      # Database Down
+      - alert: DatabaseDown
+        expr: dependency_up{name="database"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL Database Unreachable"
+          description: "Health check for database failed. Cannot connect to Postgres."
+      
+      # Redis Down
+      - alert: RedisDown
+        expr: dependency_up{name="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis Cache Unreachable"
+          description: "Health check for Redis failed. Cannot connect to Redis cluster."
+
+  - name: agente_hotelero_warnings
+    interval: 60s
+    rules:
+      
+      # High Orchestration Latency
+      - alert: HighOrchestrationLatency
+        expr: histogram_quantile(0.95, rate(orchestrator_latency_seconds_bucket[5m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: orchestrator
+        annotations:
+          summary: "High P95 Orchestration Latency"
+          description: "P95 latency: {{ $value | humanizeDuration }} (threshold: 3s). Check NLP engine and PMS adapter performance."
+      
+      # High NLP Fallback Rate
+      - alert: HighNLPFallbackRate
+        expr: rate(nlp_fallbacks_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: nlp_engine
+        annotations:
+          summary: "High NLP Fallback Rate (>10%)"
+          description: "NLP fallback rate: {{ $value | humanizePercentage }}. Check NLP model confidence and training data."
+      
+      # PMS API Latency High
+      - alert: HighPMSAPILatency
+        expr: histogram_quantile(0.95, rate(pms_api_latency_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: pms_adapter
+        annotations:
+          summary: "High PMS API Latency"
+          description: "PMS API P95 latency: {{ $value | humanizeDuration }} (threshold: 5s). PMS may be slow or overloaded."
+      
+      # PMS Cache Hit Rate Low
+      - alert: LowPMSCacheHitRate
+        expr: rate(pms_cache_hits_total[5m]) / (rate(pms_cache_hits_total[5m]) + rate(pms_cache_misses_total[5m])) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: pms_adapter
+        annotations:
+          summary: "Low PMS Cache Hit Rate (<50%)"
+          description: "Cache efficiency: {{ $value | humanizePercentage }}. Consider increasing TTL or cache size."
+      
+      # Rate Limit Spike
+      - alert: RateLimitSpike
+        expr: rate(slowapi_limiter_hits_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: api_gateway
+        annotations:
+          summary: "Rate Limit Spike Detected"
+          description: "Rate limit hits: {{ $value | humanizePercentage }}/s (threshold: 10/s). Traffic may be elevated or bot activity detected."
+      
+      # Tenant Resolution Issues
+      - alert: TenantResolutionFailures
+        expr: (rate(tenant_resolution_total{result="miss_strict"}[5m]) / rate(tenant_resolution_total[5m])) * 100 > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: multi_tenancy
+        annotations:
+          summary: "High Tenant Resolution Failure Rate (>20%)"
+          description: "Tenant miss rate: {{ $value }}%. Check tenant configuration and WhatsApp sender ID mapping."
+      
+      # Session Latency High
+      - alert: HighSessionLatency
+        expr: histogram_quantile(0.95, rate(session_manager_latency_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: session_manager
+        annotations:
+          summary: "High Session Manager Latency"
+          description: "Session P95 latency: {{ $value | humanizeDuration }} (threshold: 1s). Check Postgres query performance."
+      
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High Server Error Rate (>1%)"
+          description: "Error rate: {{ $value | humanizePercentage }}. Check application logs for root cause."
+
+  - name: agente_hotelero_info
+    interval: 5m
+    rules:
+      
+      # Circuit Breaker Half-Open (transitional state, usually OK but monitor)
+      - alert: PMSCircuitBreakerHalfOpen
+        expr: pms_circuit_breaker_state == 2
+        for: 30s
+        labels:
+          severity: info
+          service: pms_adapter
+        annotations:
+          summary: "PMS Circuit Breaker in Half-Open State"
+          description: "Testing PMS recovery. Will transition to OPEN or CLOSED based on next request."
+      
+      # Active Sessions High
+      - alert: HighActiveSessions
+        expr: sessions_active > 1000
+        for: 10m
+        labels:
+          severity: info
+          service: session_manager
+        annotations:
+          summary: "High Number of Active Sessions"
+          description: "Active sessions: {{ $value }}. Monitor for sustained growth."
+
+# Recording Rules (for dashboard performance optimization)
+#  - name: agente_hotelero_recording
+#    interval: 30s
+#    rules:
+#      - record: job:orchestrator_latency:p95_5m
+#        expr: histogram_quantile(0.95, rate(orchestrator_latency_seconds_bucket[5m]))
+#      
+#      - record: job:pms_cache_hitrate:5m
+#        expr: rate(pms_cache_hits_total[5m]) / (rate(pms_cache_hits_total[5m]) + rate(pms_cache_misses_total[5m]))
