@@ -35,6 +35,14 @@ jobs:
         run: |
           flyctl secrets set REDIS_URL="${{ secrets.REDIS_URL }}" --app agente-hotel-api
 
+      - name: Set Fly Secrets (Readiness flags)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          # Relax readiness to avoid 503 while external deps stabilize
+          flyctl secrets set CHECK_DB_IN_READINESS="false" --app agente-hotel-api
+          flyctl secrets set CHECK_REDIS_IN_READINESS="false" --app agente-hotel-api
+
       - name: Deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

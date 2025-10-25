@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     secret_key: SecretStr = SecretStr("generate_secure_key_here")
     # Health/Readiness toggles
     check_pms_in_readiness: bool = False
+    # New: allow relaxing readiness in environments where DB/Redis may take longer to be available
+    # Accept env names in UPPERCASE too (e.g., CHECK_DB_IN_READINESS) for compatibility with platform secrets
+    check_db_in_readiness: bool = Field(default=True, validation_alias=AliasChoices("CHECK_DB_IN_READINESS", "check_db_in_readiness"))
+    check_redis_in_readiness: bool = Field(default=True, validation_alias=AliasChoices("CHECK_REDIS_IN_READINESS", "check_redis_in_readiness"))
 
     # Seguridad / CSP
     csp_extra_sources: Optional[str] = None  # Ej: "https://cdn.example.com https://fonts.gstatic.com"

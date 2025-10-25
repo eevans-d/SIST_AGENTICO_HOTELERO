@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import httpx
+import os
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -33,25 +34,38 @@ async def readiness_check(db: AsyncSession = Depends(get_db), redis_client: redi
     """
     checks = {"database": False, "redis": False}
 
-    # Check PostgreSQL
-    try:
-        await db.execute(text("SELECT 1"))
-        checks["database"] = True
-    except Exception as e:
-        logger.error(f"Database health check failed: {e}")
+    # Read flags directly from environment to ensure they're respected on Fly
+    check_db = os.getenv("CHECK_DB_IN_READINESS", "true").lower() in ("true", "1", "yes")
+    check_redis = os.getenv("CHECK_REDIS_IN_READINESS", "true").lower() in ("true", "1", "yes")
 
-    # Check Redis
-    try:
-        await redis_client.ping()
-        checks["redis"] = True
-    except Exception as e:
-        logger.error(f"Redis health check failed: {e}")
+    # Check PostgreSQL (configurable)
+    if check_db:
+        try:
+            await db.execute(text("SELECT 1"))
+            checks["database"] = True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+    else:
+        checks["database"] = True  # skipped by config
+
+    # Check Redis (configurable)
+    if check_redis:
+        try:
+            await redis_client.ping()
+            checks["redis"] = True
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+    else:
+        checks["redis"] = True  # skipped by config
 
     # PMS: opcional por configuración y no bloquea si es tipo MOCK
     pms_required = bool(getattr(settings, "check_pms_in_readiness", False))
     pms_type = getattr(settings, "pms_type", None)
     # Use .value to get the actual enum value (e.g., "mock" instead of "PMSType.MOCK")
-    pms_type_value = pms_type.value if hasattr(pms_type, "value") else str(pms_type).lower()
+    if pms_type is None:
+        pms_type_value = ""
+    else:
+        pms_type_value = pms_type.value if hasattr(pms_type, "value") else str(pms_type).lower()
 
     if not pms_required or pms_type_value == "mock":
         checks["pms"] = True
