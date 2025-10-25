@@ -1,4 +1,10 @@
-# 🤖 Sistema Agente Hotelero IA# Sistema Agente Hotelero IA 🏨🤖
+# Sistema Agente Hotelero IA 🏨🤖
+
+[![Fly.io](https://img.shields.io/badge/Fly.io-gru%20(S%C3%A3o%20Paulo)-8a2be2)](https://fly.io/apps/agente-hotel-api)
+[![Live status](https://img.shields.io/website?url=https%3A%2F%2Fagente-hotel-api.fly.dev%2Fhealth%2Flive&label=app%20health&up_message=alive&down_message=down)](https://agente-hotel-api.fly.dev/health/live)
+[![Open app](https://img.shields.io/badge/URL-agente--hotel--api.fly.dev-0aa)](https://agente-hotel-api.fly.dev)
+
+[![Deploy](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml/badge.svg)](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml)
 
 
 
@@ -95,6 +101,37 @@ SIST_AGENTICO_HOTELERO/---
 ---### 🎛️ Feature Flags
 
 - Redis-backed configuration service
+
+## 🚀 Despliegue rápido en Fly.io
+
+```bash
+# 1) Autenticación (una vez)
+flyctl auth login
+
+# 2) Desplegar (usa fly.toml del repo y Dockerfile de la raíz)
+flyctl deploy --detach
+
+# 3) Ver estado y logs
+flyctl status
+flyctl logs -f
+```
+
+Notas:
+- Región actual: gru (São Paulo, BR)
+- URL: https://agente-hotel-api.fly.dev
+- Health: https://agente-hotel-api.fly.dev/health/live
+
+CI/CD (opcional): añade el secreto FLY_API_TOKEN en GitHub → Settings → Secrets and variables → Actions para habilitar el auto-deploy en push a main.
+
+## 🩺 Monitoreo
+
+- Live: https://agente-hotel-api.fly.dev/health/live
+- Ready: https://agente-hotel-api.fly.dev/health/ready
+- Métricas Prometheus: https://agente-hotel-api.fly.dev/metrics (si está habilitado)
+- Local (Docker Compose):
+   - Grafana: http://localhost:3000
+   - Jaeger: http://localhost:16686
+- Tracing: usa X-Request-ID para correlación y W3C Trace Context.
 
 ## 🚀 Quick Start---
 

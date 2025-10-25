@@ -1,0 +1,32 @@
+# VCS
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+
+# Tests and local-only assets
+tests/
+agente-hotel-api/tests/
+agente-hotel-api/.playbook/
+archive/
+.playbook/
+
+# Node
+node_modules/
+
+# IDE/editor
+.vscode/
+*.swp
+
+# Misc
+.DS_Store
