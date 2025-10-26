@@ -18,6 +18,10 @@ __pycache__/
 .eggs/
 .venv*
 .venv/
+.security/
+gitleaks-report.json
+docker/nginx/ssl/*.key
+docker/nginx/ssl/*.crt
 env/
 ENV/
 .env
