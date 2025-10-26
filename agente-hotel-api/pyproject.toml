@@ -7,7 +7,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.111.0"
+fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.30.1"}
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.31"}
 asyncpg = "^0.29.0"
@@ -21,9 +21,8 @@ httpx = "^0.27.2"
 prometheus-client = "^0.20.0"
 slowapi = "^0.1.9"
 bleach = "^6.2.0"
-python-multipart = "^0.0.9"
+python-multipart = "^0.0.18"
 # Audio processing dependencies
-openai-whisper = "^20231117"
 aiohttp = "^3.10.5"
 aiofiles = "^23.2.1"
 # Performance optimization dependencies
@@ -31,6 +30,7 @@ psutil = "^5.9.8"
 # QR Code generation
 qrcode = {extras = ["pil"], version = "^7.4.2"}
 croniter = "^2.0.1"
+starlette = "^0.40.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.2"
