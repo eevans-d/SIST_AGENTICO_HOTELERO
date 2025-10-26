@@ -22,7 +22,7 @@ Deprecated==1.2.18
 distlib==0.4.0
 dnspython==2.8.0
 docopt==0.6.2
-ecdsa==0.19.1
+ecdsa==0.19.2
 email-validator==2.3.0
 fastapi==0.111.1
 fastapi-cli==0.0.13
@@ -90,7 +90,7 @@ pytest-watch==4.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-jose==3.5.0
-python-multipart==0.0.9
+python-multipart==0.0.18
 pytz==2025.2
 PyYAML==6.0.2
 qrcode==7.4.2
@@ -106,11 +106,11 @@ six==1.17.0
 slowapi==0.1.9
 sniffio==1.3.1
 SQLAlchemy==2.0.43
-starlette==0.37.2
+starlette==0.40.0
 structlog==24.4.0
 sympy==1.14.0
 tiktoken==0.12.0
-torch==2.3.1
+torch==2.6.0
 tqdm==4.67.1
 triton==2.3.1
 typer==0.19.1
