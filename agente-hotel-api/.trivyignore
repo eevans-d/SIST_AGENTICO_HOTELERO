@@ -1,0 +1,3 @@
+# Waived CVEs (documented)
+# See docs/security/CVE-2024-23342-ecdsa-waiver.md for justification and review date
+CVE-2024-23342

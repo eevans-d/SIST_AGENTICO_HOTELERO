@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - 'agente-hotel-api/**'
+  pull_request:
+    paths:
+      - 'agente-hotel-api/**'
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agente-hotel-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip pipx
+          pipx install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: agente-hotel-api/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('agente-hotel-api/poetry.lock') }}
+      - name: Install deps (dev)
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --with dev --no-interaction --no-ansi
+      - name: Run ruff
+        run: poetry run ruff check .
+
+  typecheck:
+    name: Mypy (warn-only)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agente-hotel-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip pipx
+          pipx install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: agente-hotel-api/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('agente-hotel-api/poetry.lock') }}
+      - name: Install deps (dev)
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --with dev --no-interaction --no-ansi
+      - name: Run mypy
+        run: poetry run mypy app || true
+
+  tests-quick:
+    name: Tests (quick smoke)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agente-hotel-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip pipx
+          pipx install poetry
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: agente-hotel-api/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('agente-hotel-api/poetry.lock') }}
+      - name: Install deps (dev)
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --with dev --no-interaction --no-ansi
+      - name: Run quick tests
+        run: poetry run pytest -q tests/test_health.py tests/unit/test_pms_adapter.py
+
+  security:
+    name: Trivy (CRITICAL/HIGH)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agente-hotel-api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'agente-hotel-api'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          format: 'table'
+          exit-code: '1'
+          trivyignores: 'true'
+        env:
+          TRIVY_IGNOREFILE: agente-hotel-api/.trivyignore
