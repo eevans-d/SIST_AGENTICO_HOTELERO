@@ -87,7 +87,13 @@ else
 fi
 
 # 1.2 Type checking
-if command -v mypy &> /dev/null; then
+if command -v poetry &> /dev/null && cd "$PROJECT_ROOT" && poetry run mypy --version >/dev/null 2>&1; then
+    if poetry run mypy app --quiet 2>/dev/null; then
+        log_check "Type checking (mypy via poetry)" PASS
+    else
+        log_check "Type checking (mypy via poetry)" WARN "Some type hints missing (non-critical)"
+    fi
+elif command -v mypy &> /dev/null; then
     if cd "$PROJECT_ROOT" && mypy app --quiet 2>/dev/null; then
         log_check "Type checking (mypy)" PASS
     else
