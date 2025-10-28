@@ -146,7 +146,7 @@ class Orchestrator:
         # Generate response based on reason
         if reason == "urgent_after_hours":
             # Usar overrides por tenant si existen
-            start = end = tz = None
+            start = end = None
             try:
                 tid = getattr(message, "tenant_id", None)
                 if tid:
@@ -154,10 +154,8 @@ class Orchestrator:
                     if meta:
                         start = meta.get("business_hours_start")
                         end = meta.get("business_hours_end")
-                        tz = meta.get("business_hours_timezone")
             except Exception:
                 pass
-            next_open = get_next_business_open_time(start_hour=start, timezone=tz)
             hours_str = format_business_hours(start_hour=start, end_hour=end)
             response_text = self.template_service.get_response(
                 "escalated_to_staff", next_business_time=hours_str
