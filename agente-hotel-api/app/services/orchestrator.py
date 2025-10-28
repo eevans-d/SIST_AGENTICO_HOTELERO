@@ -72,7 +72,7 @@ class Orchestrator:
         }
 
     async def _escalate_to_staff(
-        self, message: UnifiedMessage, reason: str, intent: str = "unknown", session_data: dict = None
+        self, message: UnifiedMessage, reason: str, intent: str = "unknown", session_data: dict | None = None
     ) -> dict:
         """
         Escalate conversation to human staff with comprehensive tracking.
@@ -139,7 +139,9 @@ class Orchestrator:
 
             # Save updated session
             try:
-                await self.session_manager.save_session(user_id=message.user_id, data=session_data)
+                # Persist session changes (multi-tenant aware if available)
+                tenant_id = getattr(message, "tenant_id", None)
+                await self.session_manager.update_session(message.user_id, session_data, tenant_id)
             except Exception as session_error:
                 logger.error("orchestrator.session_save_failed", error=str(session_error), user_id=message.user_id)
 
@@ -493,7 +495,7 @@ class Orchestrator:
 
         return {"response_type": "text", "content": response_text}
 
-    async def _handle_review_request(self, nlp_result: dict, session_data: dict, message: UnifiedMessage) -> dict:
+    async def _handle_review_request(self, nlp_result: dict, session_data: dict, message: UnifiedMessage) -> dict | None:
         """
         Maneja solicitudes de review y programación de recordatorios post-checkout.
 
@@ -524,7 +526,7 @@ class Orchestrator:
             try:
                 review_service = get_review_service()
                 result = await review_service.process_review_response(
-                    guest_id=message.user_id, response_text=message.texto
+                    guest_id=message.user_id, response_text=message.texto or ""
                 )
 
                 if result["success"]:
@@ -976,6 +978,11 @@ class Orchestrator:
 
                 # Store language info in session for continuity
                 message.metadata["detected_language"] = detected_language
+                # Establecer idioma por defecto en TemplateService
+                try:
+                    self.template_service.set_language(detected_language)
+                except Exception:
+                    pass
 
             except Exception as nlp_error:
                 logger.warning(f"NLP failed, using rule-based fallback: {nlp_error}")
@@ -985,6 +992,11 @@ class Orchestrator:
                 # Language detection fallback for rule-based matching
                 detected_language = await self.nlp_engine.detect_language(text)
                 message.metadata["detected_language"] = detected_language
+                # Establecer idioma por defecto en TemplateService (fallback)
+                try:
+                    self.template_service.set_language(detected_language)
+                except Exception:
+                    pass
 
                 # Reglas básicas de fallback (multilingual)
                 text_lower = text.lower()
@@ -1306,7 +1318,8 @@ class Orchestrator:
             return await self._handle_payment_confirmation(nlp_result, session, message)
 
         # Dispatch to appropriate handler using the intent map
-        handler = self._intent_handlers.get(intent)
+        intent_key = intent if isinstance(intent, str) and intent else "unknown"
+        handler = self._intent_handlers.get(intent_key)
         if handler:
             # Check if handler needs audio response flag
             handler_params = {
@@ -1462,6 +1475,8 @@ class Orchestrator:
         intent = nlp_result.get("intent")
         if isinstance(intent, dict):
             intent = intent.get("name")
+        if not isinstance(intent, str) or not intent:
+            intent = "help_message"
 
         # Get response template based on intent
         response_text = self.template_service.get_response(intent)

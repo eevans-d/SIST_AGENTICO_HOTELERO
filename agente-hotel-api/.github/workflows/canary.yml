@@ -1,0 +1,42 @@
+name: Canary Diff
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  canary-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure jq installed
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run Canary Diff (dry-run)
+        working-directory: agente-hotel-api
+        env:
+          OUT_JSON: .playbook/canary_diff_report.json
+        run: |
+          chmod +x scripts/canary-deploy.sh
+          bash scripts/canary-deploy.sh --dry-run || true
+          test -f .playbook/canary_diff_report.json || { echo "❌ No se generó canary_diff_report.json"; exit 1; }
+
+      - name: Upload canary diff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-diff-report
+          path: agente-hotel-api/.playbook/canary_diff_report.json
+
+      - name: Gate on status
+        working-directory: agente-hotel-api
+        run: |
+          STATUS=$(jq -r .status .playbook/canary_diff_report.json 2>/dev/null || echo "SKIPPED")
+          echo "Canary status: ${STATUS}"
+          if [ "$STATUS" = "FAIL" ]; then
+            echo "❌ Canary gating FAILED"; exit 2;
+          fi
+          echo "✅ Canary gating PASSED (status=${STATUS})"

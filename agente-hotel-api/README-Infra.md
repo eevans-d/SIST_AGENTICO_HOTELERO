@@ -1405,6 +1405,158 @@ Los paneles en los dashboards están configurados para mostrar thresholds visual
 
 **Ver alertas activas:** http://localhost:9093 (AlertManager UI)
 
+## i18n (Internacionalización)
+
+### Arquitectura
+
+El sistema maneja múltiples idiomas (ES, EN) en dos capas:
+
+1. **Text Templates** (`app/services/template_service.py`)
+   - Diccionarios: `TEXT_TEMPLATES_ES`, `TEXT_TEMPLATES_EN`
+   - Fallback automático a ES si una clave falta en el idioma seleccionado
+   - Uso: `svc.get_response(template_name, **kwargs)`
+
+2. **Interactive Templates** (botones, listas)
+   - Diccionarios: `INTERACTIVE_BUTTON_TEMPLATES_ES/EN`, `INTERACTIVE_LIST_TEMPLATES_ES/EN`
+   - Respetan el idioma via `TemplateService.set_language(language)`
+   - Uso: `svc.get_interactive_buttons(name, **kwargs)` o `get_interactive_list(name, **kwargs)`
+
+3. **Locale Formatting Helpers** (`app/utils/i18n_helpers.py`)
+   - Formateo de moneda, fechas, horas, teléfono por idioma
+   - Funciones: `format_currency()`, `format_date()`, `format_datetime()`, `format_phone()`, etc.
+
+### Flujo de Detección de Idioma
+
+1. **NLP Engine** detecta idioma del mensaje incoming (confidence score)
+2. **Orchestrator** llama `template_service.set_language(detected_lang)` tras NLP
+3. **Template Service** retorna respuestas en el idioma seleccionado
+4. Fallback a ES si idioma no es soportado o confianza es baja
+
+### Cómo Añadir una Nueva Cadena (Template)
+
+**Pasos:**
+1. Abrir `app/services/template_service.py`
+2. Añadir clave en ambos diccionarios (`TEXT_TEMPLATES_ES` y `TEXT_TEMPLATES_EN`):
+   ```python
+   TEXT_TEMPLATES_ES = {
+       ...
+       "new_feature": "Tu texto en español con {placeholder}",
+   }
+   TEXT_TEMPLATES_EN = {
+       ...
+       "new_feature": "Your text in English with {placeholder}",
+   }
+   ```
+3. Usar en servicios:
+   ```python
+   response = template_svc.get_response("new_feature", placeholder="value")
+   ```
+4. Añadir test unitario en `tests/unit/test_i18n_templates.py`
+
+### Cómo Forzar Un Idioma (Testing/Debug)
+
+**En servicios:**
+```python
+from app.services.template_service import get_template_service
+
+svc = get_template_service()
+svc.set_language("en")  # Fuerza inglés
+response = svc.get_response("availability_found", ...)
+svc.set_language("es")  # Vuelve a español
+```
+
+**En tests:**
+```python
+@pytest.mark.asyncio
+async def test_spanish_response():
+    svc = TemplateService()
+    text = svc.get_response("key", ...)
+    assert "¿Querés" in text or "¿Quieres" in text
+```
+
+### Helpers de Formato por Locale
+
+**Ejemplos:**
+
+```python
+from app.utils.i18n_helpers import format_currency, format_date, format_phone
+
+# Moneda
+format_currency(100.50, language="es", currency_code="ARS")  # "$100,50"
+format_currency(100.50, language="en", currency_code="USD")  # "U$D100.50"
+
+# Fechas
+from datetime import date
+dt = date(2025, 10, 20)
+format_date(dt, language="es")    # "20/10/2025"
+format_date(dt, language="en")    # "10/20/2025"
+
+# Teléfono
+format_phone("1123456789", language="es", country_code="54")  # "+54 11 2345-6789"
+
+# Mes/día
+get_month_name(10, language="es")      # "octubre"
+get_weekday_name(4, language="en")     # "Friday"
+```
+
+**Función reference completa:** Ver `app/utils/i18n_helpers.py`
+
+### Soportar Nuevo Idioma
+
+**Pasos (ej: portugués BR):**
+
+1. Añadir configuración en `i18n_helpers.py`:
+   ```python
+   _LOCALE_CONFIGS = {
+       ...
+       "pt": {
+           "currency_symbol": "R$",
+           "date_format": "%d/%m/%Y",
+           ...
+       }
+   }
+   ```
+
+2. Añadir templates:
+   ```python
+   # template_service.py
+   TEXT_TEMPLATES_PT = { "availability_found": "Para {checkin}-...", ... }
+   _TEXT_TEMPLATES_BY_LANG["pt"] = TEXT_TEMPLATES_PT
+   
+   INTERACTIVE_BUTTON_TEMPLATES_PT = { ... }
+   # Actualizar get_interactive_buttons(): lang_map = {"es": ..., "en": ..., "pt": ...}
+   ```
+
+3. Entrenar NLP para detectar portugués (en `nlp_engine.py`)
+
+4. Tests: cubrir nuevas cadenas en `test_i18n_*.py`
+
+### Testing i18n
+
+**Unit tests:**
+```bash
+pytest tests/unit/test_i18n_templates.py -v
+pytest tests/unit/test_i18n_helpers.py -v
+```
+
+**Integration tests:**
+```bash
+pytest tests/integration/test_orchestrator.py -k "language" -v
+```
+
+**Coverage:**
+```bash
+pytest tests/unit/test_i18n_*.py --cov=app.services.template_service --cov=app.utils.i18n_helpers
+```
+
+### Best Practices
+
+1. **Siempre añadir ambos idiomas:** No dejar templates vacías; fallback a ES evita quebrantos pero causa jarring UX.
+2. **Probar en ambas locales:** Dateadores y moneda cambian formato; probar que se vea bien.
+3. **Usar placeholders:** `{placeholder}` en templates, no concatenación de strings en código.
+4. **Documentar nuevas cadenas:** Comentar qué significa cada template si es no obvio.
+5. **Versionar cambios de i18n:** Bumear versión si cambios de mensajes afectan integraciones externas.
+
 ### Best Practices
 
 1. **No editar dashboards en UI:** Los cambios no persisten. Editar JSON y reiniciar Grafana.

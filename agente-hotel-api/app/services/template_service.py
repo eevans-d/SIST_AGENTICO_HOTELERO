@@ -2,8 +2,17 @@
 
 from typing import Dict, Any
 
-# Plantillas de texto simple
-TEXT_TEMPLATES = {
+"""
+Servicio de plantillas con soporte básico de i18n.
+
+- Idioma por defecto: 'es'
+- Fallback: si una clave no existe en el idioma actual, usa 'es'
+- Compatibilidad retro: si no se configura idioma, retorna en español
+"""
+
+
+# Plantillas de texto simple (ES)
+TEXT_TEMPLATES_ES = {
     "availability_found": "Para {checkin}-{checkout}, {room_type} para {guests}: ${price}/noche. Total ${total}. ¿Querés reservar? 🏨",
     "reservation_instructions": "Perfecto! Reservé temporalmente la habitación.\n\nPara confirmar, enviá seña del 30%: ${deposit}\n\nDatos bancarios:\n🏦 {bank_info}\n\nEnviame el comprobante por acá 📄",
     "no_availability": "Lo siento, no hay disponibilidad para esas fechas. ¿Te sirven estas alternativas?\n\n{alternatives}",
@@ -45,8 +54,43 @@ TEXT_TEMPLATES = {
     "review_negative_feedback": "Hola {guest_name},\n\nLamentamos que su experiencia en {hotel_name} no haya sido completamente satisfactoria.\n\nSu feedback es muy valioso para nosotros. ¿Podría contarnos más detalles sobre lo que podríamos haber hecho mejor?\n\nNos tomamos muy en serio todos los comentarios y trabajamos constantemente para mejorar.\n\nSi hay algo específico que podamos resolver, estaremos encantados de ayudarle.\n\nSaludos cordiales,\nGerencia {hotel_name}",
 }
 
-# Plantillas para botones interactivos
-INTERACTIVE_BUTTON_TEMPLATES = {
+# Plantillas de texto simple (EN)
+TEXT_TEMPLATES_EN = {
+    "availability_found": "For {checkin}-{checkout}, {room_type} for {guests}: ${price}/night. Total ${total}. Would you like to book? 🏨",
+    "reservation_instructions": "Great! I've held the room temporarily.\n\nTo confirm, please send a 30% deposit: ${deposit}\n\nBank details:\n🏦 {bank_info}\n\nSend me the receipt here 📄",
+    "no_availability": "Sorry, there's no availability for those dates. Do these alternatives work?\n\n{alternatives}",
+    "confirmation_received": "Excellent! We've received your confirmation. Your reservation is complete.",
+    "help_message": "I can help you with the following:",
+    "guest_services": "Our guest services include: Free WiFi, continental breakfast from 7:00 to 10:00, daily housekeeping, 24-hour reception, and laundry service. Do you need details about any service?",
+    "hotel_amenities": "Our amenities include: outdoor pool, gym with modern equipment, restaurant with international cuisine, bar, business center, free parking, and a spa with relaxing treatments. Interested in more details about any of them?",
+    "check_in_info": "Check-in starts at 15:00. You'll need your ID and the reservation confirmation. If you arrive earlier, we can store your luggage at no extra cost. Any specific questions?",
+    "check_out_info": "Check-out is until 12:00. You can request an extension until 14:00 for an additional 50% of the daily rate. We also offer luggage storage if your flight is later.",
+    "cancellation_policy": "Our cancellation policy allows free cancellation up to 24 hours before check-in. Later cancellations have a 50% charge of the first night. Non-refundable reservations cannot be canceled.",
+    "after_hours_standard": "Thanks for contacting us. 🌙\n\nWe're currently outside business hours.\nOur hours are: {business_hours}\n\nWe'll reply tomorrow at {next_open_time}.\n\nIs it urgent? Reply 'URGENT' and we'll escalate to on-call staff.",
+    "after_hours_weekend": "Thanks for your message. 😊\n\nIt's the weekend and our hours are reduced.\nWe'll get back to you on Monday first thing.\n\nFor emergencies, reply 'URGENT'.",
+    "escalated_to_staff": "Understood, escalating your request to on-call staff. ⚡ Someone will contact you shortly.",
+    "location_info": "📍 Here is our location:",
+    "room_photo_caption": "✨ {room_type}\n💰 ${price}/night\n👥 Capacity: {guests} guest(s)\n\nDo you like it? Book now!",
+    "late_checkout_available": "Perfect! Late checkout available until {checkout_time} ✅\n\n💰 Extra fee: ${fee} (50% of daily rate)\n\nDo you confirm the late checkout?",
+    "late_checkout_not_available": "Sorry, late checkout is not available. 😔\n\nThe room is reserved for another guest.\n\nStandard checkout time: {standard_time}\n\nNeed luggage storage? We offer it for free.",
+    "late_checkout_confirmed": "Done! ✅ Late checkout confirmed until {checkout_time}.\n\n💰 Fee: ${fee}\n\nIt will be added to your account. Enjoy your extended stay!",
+    "late_checkout_no_booking": "To request a late checkout, I need your reservation number.\n\nCould you share it?",
+    "late_checkout_already_day": "Checkout time has already passed. 😅\n\nFor last-minute extensions, please contact reception directly at [PHONE].",
+    "late_checkout_free": "Good news! 🎉\n\nLate checkout until {checkout_time} at no extra cost.\n\nDo you confirm?",
+    "booking_confirmed_with_qr": "🎉 RESERVATION CONFIRMED! 🎉\n\n📋 Your reservation details:\n• Reservation: {booking_id}\n• Guest: {guest_name}\n• Check-in: {check_in}\n• Check-out: {check_out}\n• Room: {room_number}\n\n🎫 We sent you your confirmation QR code.\nPlease keep it for faster check-in!",
+    "booking_confirmed_no_qr": "🎉 RESERVATION CONFIRMED! 🎉\n\n📋 Your reservation details:\n• Reservation: {booking_id}\n• Check-in: {check_in}\n• Check-out: {check_out}\n\n✅ Your reservation is confirmed.\nYou'll receive more details by email.",
+    "review_platform_links": "Perfect {guest_name}! 🌟\n\nHere are the links where you can leave your review:\n\n{platform_links}\n\nIt only takes a few minutes and helps us a lot. Thank you so much! 🙏\n\nIf you need help with any link, just let us know.",
+    "review_negative_feedback": "Hello {guest_name},\n\nWe're sorry your experience at {hotel_name} wasn't fully satisfactory.\n\nYour feedback is very valuable. Could you tell us more details about what we could have done better?\n\nWe take all comments seriously and constantly work to improve.\n\nIf there's anything specific we can resolve, we'll be happy to help.\n\nKind regards,\nManagement {hotel_name}",
+}
+
+# Mapa de idiomas soportados
+_TEXT_TEMPLATES_BY_LANG: Dict[str, Dict[str, str]] = {
+    "es": TEXT_TEMPLATES_ES,
+    "en": TEXT_TEMPLATES_EN,
+}
+
+# Plantillas para botones interactivos (i18n)
+INTERACTIVE_BUTTON_TEMPLATES_ES = {
     "availability_confirmation": {
         "header_text": "Disponibilidad encontrada",
         "body_text": "Para {checkin}-{checkout}, {room_type} para {guests}: ${price}/noche. Total ${total}.",
@@ -67,8 +111,29 @@ INTERACTIVE_BUTTON_TEMPLATES = {
     },
 }
 
-# Plantillas para listas interactivas
-INTERACTIVE_LIST_TEMPLATES = {
+INTERACTIVE_BUTTON_TEMPLATES_EN = {
+    "availability_confirmation": {
+        "header_text": "Availability found",
+        "body_text": "For {checkin}-{checkout}, {room_type} for {guests}: ${price}/night. Total ${total}.",
+        "footer_text": "Sample Hotel - Book with us",
+        "action_buttons": [
+            {"id": "confirm_reservation", "title": "✅ Book now"},
+            {"id": "more_options", "title": "🔍 See more options"},
+        ],
+    },
+    "arrival_options": {
+        "header_text": "Your reservation is confirmed!",
+        "body_text": "To coordinate your arrival, do you need any of these services?",
+        "footer_text": "Sample Hotel - At your service",
+        "action_buttons": [
+            {"id": "transfer_request", "title": "🚗 Airport transfer"},
+            {"id": "late_checkin", "title": "🌙 Late check-in"},
+        ],
+    },
+}
+
+# Plantillas para listas interactivas (i18n)
+INTERACTIVE_LIST_TEMPLATES_ES = {
     "room_options": {
         "header_text": "Habitaciones disponibles",
         "body_text": "Estas son las opciones disponibles para tu estadía del {checkin} al {checkout}:",
@@ -85,16 +150,33 @@ INTERACTIVE_LIST_TEMPLATES = {
             {
                 "title": "Habitaciones premium",
                 "rows": [
-                    {
-                        "id": "prem_single",
-                        "title": "Premium individual",
-                        "description": "${price_prem_single}/noche - 1 persona",
-                    },
-                    {
-                        "id": "prem_double",
-                        "title": "Premium doble",
-                        "description": "${price_prem_double}/noche - 2 personas",
-                    },
+                    {"id": "prem_single", "title": "Premium individual", "description": "${price_prem_single}/noche - 1 persona"},
+                    {"id": "prem_double", "title": "Premium doble", "description": "${price_prem_double}/noche - 2 personas"},
+                ],
+            },
+        ],
+    }
+}
+
+INTERACTIVE_LIST_TEMPLATES_EN = {
+    "room_options": {
+        "header_text": "Available rooms",
+        "body_text": "These are the available options for your stay from {checkin} to {checkout}:",
+        "footer_text": "Sample Hotel - Choose your preferred option",
+        "list_button_text": "See rooms",
+        "list_sections": [
+            {
+                "title": "Standard rooms",
+                "rows": [
+                    {"id": "std_single", "title": "Single", "description": "${price_single}/night - 1 guest"},
+                    {"id": "std_double", "title": "Double", "description": "${price_double}/night - 2 guests"},
+                ],
+            },
+            {
+                "title": "Premium rooms",
+                "rows": [
+                    {"id": "prem_single", "title": "Premium single", "description": "${price_prem_single}/night - 1 guest"},
+                    {"id": "prem_double", "title": "Premium double", "description": "${price_prem_double}/night - 2 guests"},
                 ],
             },
         ],
@@ -116,43 +198,67 @@ REACTION_TEMPLATES = {"payment_received": "👍", "reservation_confirmed": "✅"
 
 
 class TemplateService:
+    def __init__(self, default_language: str = "es"):
+        self._language = default_language if default_language in _TEXT_TEMPLATES_BY_LANG else "es"
+
+    def set_language(self, language: str) -> None:
+        """Define el idioma por defecto para las respuestas."""
+        self._language = language if language in _TEXT_TEMPLATES_BY_LANG else "es"
+
     def get_response(self, template_name: str, **kwargs) -> str:
-        """Método original para obtener respuestas de texto simple."""
-        return TEXT_TEMPLATES.get(template_name, "").format(**kwargs)
+        """Obtiene respuestas de texto simple con i18n y fallback a 'es'."""
+        lang = self._language
+        # 1) Intentar idioma actual
+        template = _TEXT_TEMPLATES_BY_LANG.get(lang, {}).get(template_name)
+        # 2) Fallback a español
+        if template is None:
+            template = _TEXT_TEMPLATES_BY_LANG.get("es", {}).get(template_name, "")
+        return template.format(**kwargs)
 
     def get_interactive_buttons(self, template_name: str, **kwargs) -> Dict[str, Any]:
-        """Obtiene una plantilla para mensaje interactivo con botones."""
-        template = INTERACTIVE_BUTTON_TEMPLATES.get(template_name, {})
+        """Obtiene una plantilla para mensaje interactivo con botones (i18n con fallback)."""
+        lang = self._language
+        lang_map = {"es": INTERACTIVE_BUTTON_TEMPLATES_ES, "en": INTERACTIVE_BUTTON_TEMPLATES_EN}
+        template = lang_map.get(lang, {}).get(template_name) or INTERACTIVE_BUTTON_TEMPLATES_ES.get(template_name)
         if not template:
             return {}
 
-        result = template.copy()
+        result = {k: (v.copy() if isinstance(v, list) else v) for k, v in template.items()}
 
         # Formatear textos con los parámetros
-        if "body_text" in result:
-            result["body_text"] = result["body_text"].format(**kwargs)
-        if "header_text" in result:
-            result["header_text"] = result["header_text"].format(**kwargs)
-        if "footer_text" in result:
-            result["footer_text"] = result["footer_text"].format(**kwargs)
+        body = result.get("body_text")
+        if isinstance(body, str):
+            result["body_text"] = body.format(**kwargs)
+        header = result.get("header_text")
+        if isinstance(header, str):
+            result["header_text"] = header.format(**kwargs)
+        footer = result.get("footer_text")
+        if isinstance(footer, str):
+            result["footer_text"] = footer.format(**kwargs)
 
         return result
 
     def get_interactive_list(self, template_name: str, **kwargs) -> Dict[str, Any]:
-        """Obtiene una plantilla para mensaje interactivo con lista."""
-        template = INTERACTIVE_LIST_TEMPLATES.get(template_name, {})
+        """Obtiene una plantilla para mensaje interactivo con lista (i18n con fallback)."""
+        lang = self._language
+        lang_map = {"es": INTERACTIVE_LIST_TEMPLATES_ES, "en": INTERACTIVE_LIST_TEMPLATES_EN}
+        template = lang_map.get(lang, {}).get(template_name) or INTERACTIVE_LIST_TEMPLATES_ES.get(template_name)
         if not template:
             return {}
 
-        result = template.copy()
+        # Copia superficial con manejo de listas/estructuras
+        result = {k: (v.copy() if isinstance(v, list) else v) for k, v in template.items()}
 
         # Formatear textos con los parámetros
-        if "body_text" in result:
-            result["body_text"] = result["body_text"].format(**kwargs)
-        if "header_text" in result:
-            result["header_text"] = result["header_text"].format(**kwargs)
-        if "footer_text" in result:
-            result["footer_text"] = result["footer_text"].format(**kwargs)
+        body = result.get("body_text")
+        if isinstance(body, str):
+            result["body_text"] = body.format(**kwargs)
+        header = result.get("header_text")
+        if isinstance(header, str):
+            result["header_text"] = header.format(**kwargs)
+        footer = result.get("footer_text")
+        if isinstance(footer, str):
+            result["footer_text"] = footer.format(**kwargs)
 
         return result
 
@@ -193,3 +299,13 @@ class TemplateService:
 
         # Construir respuesta combinada
         return {"text": text, "audio_data": audio_data, "location": location_data}
+
+
+# Singleton y factory para compatibilidad con dependencias existentes
+_TEMPLATE_SERVICE_SINGLETON: TemplateService | None = None
+
+def get_template_service() -> TemplateService:
+    global _TEMPLATE_SERVICE_SINGLETON
+    if _TEMPLATE_SERVICE_SINGLETON is None:
+        _TEMPLATE_SERVICE_SINGLETON = TemplateService()
+    return _TEMPLATE_SERVICE_SINGLETON
