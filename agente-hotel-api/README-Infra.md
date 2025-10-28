@@ -69,7 +69,213 @@ Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
   - Métricas: se registran en Prometheus junto con el resto del flujo del orquestador.
 
 ### Gestión y observabilidad de Feature Flags
-- Lectura (admin, auth requerida): `GET /admin/feature-flags` → `{ "flags": { ... } }`
+
+#### Visión General
+
+Feature flags permiten activar/desactivar funcionalidades en tiempo real sin desplegar. Sistema basado en Redis con fallback a defaults en `app/services/feature_flag_service.py`.
+
+**Arquitectura:**
+- Source of truth: Redis hash `feature_flags` (overrides)
+- Fallback: Dict `DEFAULT_FLAGS` en código (defaults)
+- Precedencia: Redis > Defaults
+- Sincronización: Inmediata (cada request consulta Redis)
+
+#### Endpoints Admin
+
+**GET /admin/feature-flags** (60 req/min)
+
+Retorna estado efectivo de todos los flags con información de origen:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8002/admin/feature-flags
+```
+
+Respuesta:
+```json
+{
+  "flags": [
+    {
+      "flag": "audio.processor.optimized",
+      "enabled": true,
+      "source": "default"
+    },
+    {
+      "flag": "nlp.fallback.enhanced",
+      "enabled": false,
+      "source": "redis"
+    },
+    {
+      "flag": "tenancy.dynamic.enabled",
+      "enabled": true,
+      "source": "default"
+    }
+  ]
+}
+```
+
+**Campos:**
+- `flag`: Nombre único del flag
+- `enabled`: Estado actual (true/false)
+- `source`: Origen (`"default"` = código, `"redis"` = override de admin)
+
+#### Naming Conventions
+
+Los flags siguen patrón jerárquico: `<component>.<feature>.<variant>`
+
+**Ejemplos:**
+- `audio.processor.optimized` - Sistema de audio, procesador, variante optimizada
+- `nlp.fallback.enhanced` - NLP, fallback, versión mejorada
+- `tenancy.dynamic.enabled` - Multi-tenancy, resolución dinámica, activación
+- `pms.circuit_breaker.enabled` - PMS adapter, circuit breaker, activación
+- `orchestrator.escalation.urgent_after_hours` - Orchestrator, escalación, escaladas urgentes nocturnas
+
+**Naming rules:**
+1. Usar minúsculas + puntos
+2. 3 niveles: componente.característica.variante
+3. Nombres descriptivos, no código críptico
+4. Documentar DEFAULT_FLAGS en archivo
+5. Prefijo `experimental.` para features en beta
+
+#### Rollout Strategy (5 Fases)
+
+**Fase 1: Defaultear a OFF en código**
+```python
+# app/services/feature_flag_service.py
+DEFAULT_FLAGS = {
+    "new.feature.beta": False,  # Off por defecto
+    ...
+}
+```
+
+**Fase 2: Enable en staging via Redis**
+```bash
+# Admin conecta a staging Redis
+redis-cli -h staging-redis.example.com
+> HSET feature_flags "new.feature.beta" "1"
+```
+
+**Fase 3: Test en staging (2-3 días)**
+- Monitorear métricas en Grafana
+- Verificar logs en Jaeger por trazas de new.feature
+- Comprobar SLOs no se degraden
+- Query PromQL: `rate(feature_flag_enabled{flag="new.feature.beta"}[5m])`
+
+**Fase 4: Enable en producción (canary 10%)**
+```bash
+# Prod Redis (restringido a ops/devops)
+redis-cli -h prod-redis.example.com
+> HSET feature_flags "new.feature.beta" "1"
+```
+- Monitorear P95, error rate, escalaciones
+- Si algo malo, revertir inmediatamente: `HDEL feature_flags "new.feature.beta"`
+- Esperar 30min antes de expandir si todo OK
+
+**Fase 5: Expand 50% → 100% (opcional canary por tenant)**
+```bash
+# Opcional: Enable solo para tenant específico
+# (requiere refactoring de código para soportar por-tenant flags)
+```
+
+**Rollback (en cualquier fase):**
+```bash
+# Deshabilitar inmediatamente
+redis-cli -h <redis-host>
+> HDEL feature_flags "new.feature.beta"
+```
+
+#### Dashboard & Monitoreo
+
+**Métrica:** `feature_flag_enabled{flag}` (Gauge)
+- Actualizado cada vez que se consulta un flag
+- Valores: 0 (disabled), 1 (enabled)
+
+**Queries PromQL:**
+```promql
+# Flags activos en último scrape
+count(feature_flag_enabled{flag=~".*"} == 1)
+
+# Cambios recientes en un flag específico
+changes(feature_flag_enabled{flag="new.feature.beta"}[1h])
+
+# Correlacionar feature flag con tasa de errores
+(rate(http_requests_total{status=~"5.."}[5m]) 
+ and feature_flag_enabled{flag="new.feature.beta"} == 1)
+```
+
+**Grafana dashboard panel sugerido:**
+- Time series: línea roja en 1 cuando flag ON, gris cuando OFF
+- Correlacionar visualmente con picos de error
+
+#### Testing de Feature Flags
+
+**Unit test:**
+```python
+import pytest
+from app.services.feature_flag_service import DEFAULT_FLAGS, FeatureFlagService
+
+@pytest.mark.asyncio
+async def test_new_feature_disabled_by_default():
+    ff = FeatureFlagService(redis_client)
+    enabled = await ff.is_enabled("new.feature.beta", default=False)
+    assert enabled == False  # Off by default
+```
+
+**Integration test:**
+```python
+@pytest.mark.asyncio
+async def test_new_feature_workflow(test_client, monkeypatch):
+    # 1. Verify disabled
+    resp = await test_client.get("/admin/feature-flags")
+    assert resp.json()["flags"]["new.feature.beta"] == False
+    
+    # 2. Enable via mock Redis
+    redis_mock.hset("feature_flags", "new.feature.beta", "1")
+    
+    # 3. Verify enabled
+    resp = await test_client.get("/admin/feature-flags")
+    assert resp.json()["flags"]["new.feature.beta"] == True
+```
+
+**Tests en `tests/integration/test_admin_flags.py`** cubren:
+- Listing con defaults
+- Overrides desde Redis
+- Parsing de valores booleanos (true/1/on/yes)
+- Fallback cuando Redis no disponible
+- Rate limit (60 req/min)
+
+Ejecutar:
+```bash
+pytest tests/integration/test_admin_flags.py -v
+```
+
+#### Mejores Prácticas
+
+1. **Documentar el propósito:** Comentar en DEFAULT_FLAGS por qué existe el flag
+2. **No mezclar lógica de negocio:** Flag no es sustituto de configuración; usar para toggles temporales
+3. **Monitorear rollouts:** Abrir dashboards antes de cambiar en prod
+4. **Rollback automático (futuro):** Programar alertas que revertan si error rate > umbral
+5. **Deprecación:** Después de 2+ semanas enabled=100%, remover flag del código
+
+#### Troubleshooting
+
+**"Redis is unavailable, falling back to defaults"**
+- Verificar Redis: `redis-cli ping`
+- Logs en estructurados contienen error details
+- Feature flags siempre funcionan (incluso sin Redis)
+
+**"Flag no se actualiza después de cambiar en Redis"**
+- Verificar clave en Redis: `redis-cli HGETALL feature_flags`
+- Esperar ~10s (cache es per-request, no persistente)
+- Reintentar GET
+
+**Verificar valor en Redis:**
+```bash
+redis-cli
+> HGET feature_flags "nlp.fallback.enhanced"
+"1"  # o "0" o ninguno
+```
+
+- Lectura (admin, auth requerida): `GET /admin/feature-flags` → `{ "flags": [ ... ] }`
 - Métrica: `feature_flag_enabled{flag}` sirve como gauge (1/0) y se actualiza al leer/usar flags.
 
 
