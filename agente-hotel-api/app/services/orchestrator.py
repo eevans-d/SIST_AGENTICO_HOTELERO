@@ -174,7 +174,7 @@ class Orchestrator:
             "escalation_id": f"ESC-{datetime.utcnow().timestamp()}",
         }
 
-    async def _handle_business_hours(self, nlp_result: dict, session_data: dict, message: UnifiedMessage) -> dict:
+    async def _handle_business_hours(self, nlp_result: dict, session_data: dict, message: UnifiedMessage) -> dict | None:
         """
         Maneja la verificación de horarios comerciales y escalación urgente
 
