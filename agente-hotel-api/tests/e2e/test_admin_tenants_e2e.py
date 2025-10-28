@@ -160,23 +160,23 @@ async def test_admin_tenants_e2e_and_metrics(monkeypatch):
         hit_count = _parse_metric_value(r.text, "tenant_resolution_total", {"result": "hit"})
         assert hit_count is not None and hit_count >= 1
 
-    # 6) Remove identifier first (avoid lazy-load in refresh), then deactivate tenant
-    r = await ac.delete(f"/admin/tenants/hotel_e2e/identifiers/{identifier}", headers=headers)
-    assert r.status_code in (200, 404)
+        # 6) Remove identifier first (avoid lazy-load in refresh), then deactivate tenant
+        r = await ac.delete(f"/admin/tenants/hotel_e2e/identifiers/{identifier}", headers=headers)
+        assert r.status_code in (200, 404)
 
-    # After removing identifier, identifiers_cached should be 0 while tenant still active
-    r = await ac.get("/metrics")
-    tenants_active = _parse_metric_value(r.text, "tenants_active_total")
-    identifiers_cached = _parse_metric_value(r.text, "tenant_identifiers_cached_total")
-    assert tenants_active == 1
-    assert identifiers_cached == 0
+        # After removing identifier, identifiers_cached should be 0 while tenant still active
+        r = await ac.get("/metrics")
+        tenants_active = _parse_metric_value(r.text, "tenants_active_total")
+        identifiers_cached = _parse_metric_value(r.text, "tenant_identifiers_cached_total")
+        assert tenants_active == 1
+        assert identifiers_cached == 0
 
-    # Now deactivate tenant and verify active tenants drop to 0
-    r = await ac.patch("/admin/tenants/hotel_e2e", headers=headers, json={"status": "inactive"})
-    assert r.status_code == 200
+        # Now deactivate tenant and verify active tenants drop to 0
+        r = await ac.patch("/admin/tenants/hotel_e2e", headers=headers, json={"status": "inactive"})
+        assert r.status_code == 200
 
-    r = await ac.get("/metrics")
-    tenants_active = _parse_metric_value(r.text, "tenants_active_total")
-    identifiers_cached = _parse_metric_value(r.text, "tenant_identifiers_cached_total")
-    assert tenants_active == 0
-    assert identifiers_cached == 0
+        r = await ac.get("/metrics")
+        tenants_active = _parse_metric_value(r.text, "tenants_active_total")
+        identifiers_cached = _parse_metric_value(r.text, "tenant_identifiers_cached_total")
+        assert tenants_active == 0
+        assert identifiers_cached == 0
