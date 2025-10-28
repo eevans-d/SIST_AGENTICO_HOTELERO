@@ -141,16 +141,116 @@ Se aplica limitación por ruta usando SlowAPI:
   - GET verificación: `60/minute`
   - POST eventos: `120/minute`
 - `/admin/dashboard`: `30/minute`
+- `/admin/tenants/refresh`: `30/minute`
+- `/admin/tenants`: `60/minute`
 
 Implementación:
 
 - Decorador dinámico `app/core/ratelimit.py` que usa `request.app.state.limiter`.
 - En `debug=True` el limit se omite para no requerir Redis en desarrollo/pruebas.
 - En producción, `app/main.py` configura `app.state.limiter` con Redis (`settings.redis_url`).
+- Response HTTP 429 cuando se excede el límite (incluye headers `Retry-After`).
 
 Pruebas:
 
-- `tests/test_rate_limit.py` valida 429 al exceder GET `/webhooks/whatsapp` con `storage_uri="memory://"`.
+- `tests/integration/test_rate_limit_and_signatures.py` valida firmas, content-type y límites en múltiples endpoints.
+
+## Validación de Firmas (Webhook Security)
+
+### WhatsApp Webhook Signature
+
+El endpoint `/webhooks/whatsapp` valida firmas HMAC-SHA256:
+
+**Header requerido**: `X-Hub-Signature-256`
+
+**Formato**: `sha256=<hexdigest>`
+
+**Ejemplo de validación (Python)**:
+```python
+import hmac
+import hashlib
+
+# Payload bytes recibido
+body = request.body
+
+# Secret desde settings (configurado en .env como WHATSAPP_APP_SECRET)
+app_secret = settings.whatsapp_app_secret.get_secret_value()
+
+# Generar firma esperada
+expected_sig = hmac.new(
+    app_secret.encode(), 
+    body, 
+    hashlib.sha256
+).hexdigest()
+
+# Comparar con firma enviada (sin prefijo "sha256=")
+received_sig = request.headers.get("X-Hub-Signature-256", "").replace("sha256=", "")
+
+# Validación segura contra timing attacks
+if not hmac.compare_digest(received_sig, expected_sig):
+    return 401 Unauthorized
+```
+
+**Flujo de validación**:
+1. Extraer header `X-Hub-Signature-256`.
+2. Remover prefijo `sha256=` para obtener valor hex.
+3. Calcular HMAC-SHA256 del body con app secret.
+4. Comparar usando `hmac.compare_digest()` (protege contra timing attacks).
+5. Si no coincide, retornar 401 antes de procesar.
+
+**Validaciones adicionales** (después de signature):
+- Content-Type: Debe ser `application/json` (415 si no).
+- Tamaño de payload: Máximo 1 MB (413 si excede).
+- JSON válido: Parseable como JSON (400 si inválido).
+
+**Cadena de validación** (orden es crítico por seguridad):
+```
+[1] Firma HMAC-SHA256 (401) 
+    ↓
+[2] Content-Type (415)
+    ↓
+[3] Tamaño payload (413)
+    ↓
+[4] JSON parsing (400)
+    ↓
+[5] Rate limit (429)
+    ↓
+[6] Procesamiento de negocio
+```
+
+**Cómo testear localmente**:
+```bash
+#!/bin/bash
+ENDPOINT="http://localhost:8002/webhooks/whatsapp"
+SECRET="your-whatsapp-app-secret"
+PAYLOAD='{"object":"whatsapp_business_account","entry":[]}'
+
+# Generar firma
+SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hex | cut -d' ' -f2)"
+
+# Enviar con firma válida
+curl -X POST "$ENDPOINT" \
+  -H "X-Hub-Signature-256: $SIG" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD"
+
+# Enviar con firma inválida (esperar 401)
+curl -X POST "$ENDPOINT" \
+  -H "X-Hub-Signature-256: sha256=0000000000000000000000000000000000000000000000000000000000000000" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD"
+```
+
+### Endpoints Protegidos
+
+**Admin endpoints** (`/admin/*`):
+- Requieren autenticación vía `Authorization: Bearer <token>` (JWT).
+- No usan validación de firma (tokens son los mecanismos de seguridad).
+- Rate limiting aplicado después de auth.
+
+**Public webhooks** (`/webhooks/whatsapp`):
+- Validación de firma (no requieren Bearer token).
+- Rate limiting aplicado después de validación.
 
 ## Variables de Entorno Clave
 
