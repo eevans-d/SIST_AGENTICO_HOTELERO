@@ -155,18 +155,68 @@ async def remove_identifier(tenant_id: str, identifier: str):
 
 
 @router.patch("/tenants/{tenant_id}")
-async def update_tenant_status(tenant_id: str, body: dict):
-    status = body.get("status")
-    if status not in ("active", "inactive"):
-        raise HTTPException(status_code=400, detail="status inválido")
+async def update_tenant(tenant_id: str, body: dict):
+    """
+    Actualiza estado y/o horario comercial del tenant.
+
+    Body opcional:
+      - status: "active" | "inactive"
+      - business_hours_start: int (0-23)
+      - business_hours_end: int (1-24)
+      - business_hours_timezone: str (IANA TZ)
+    """
     async with AsyncSessionFactory() as session:  # type: ignore
         tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
-        tenant.status = status  # type: ignore[assignment]
+
+        if "status" in body:
+            status = body.get("status")
+            if status not in ("active", "inactive"):
+                raise HTTPException(status_code=400, detail="status inválido")
+            tenant.status = status  # type: ignore[assignment]
+
+        if "business_hours_start" in body:
+            try:
+                raw = body.get("business_hours_start")
+                if raw is None:
+                    raise ValueError
+                bh_start = int(raw)
+                if not (0 <= bh_start <= 23):
+                    raise ValueError
+                tenant.business_hours_start = bh_start  # type: ignore[attr-defined]
+            except Exception:
+                raise HTTPException(status_code=400, detail="business_hours_start inválido")
+
+        if "business_hours_end" in body:
+            try:
+                raw = body.get("business_hours_end")
+                if raw is None:
+                    raise ValueError
+                bh_end = int(raw)
+                if not (1 <= bh_end <= 24):
+                    raise ValueError
+                tenant.business_hours_end = bh_end  # type: ignore[attr-defined]
+            except Exception:
+                raise HTTPException(status_code=400, detail="business_hours_end inválido")
+
+        if "business_hours_timezone" in body:
+            bh_tz = body.get("business_hours_timezone")
+            if not isinstance(bh_tz, str) or not bh_tz:
+                raise HTTPException(status_code=400, detail="business_hours_timezone inválido")
+            tenant.business_hours_timezone = bh_tz  # type: ignore[attr-defined]
+
         await session.commit()
+
     await dynamic_tenant_service.refresh()
-    return {"status": "updated", "tenant_id": tenant_id, "new_status": status}
+    return {
+        "status": "updated",
+        "tenant_id": tenant_id,
+        "new_status": getattr(tenant, "status", None),
+        "business_hours_start": getattr(tenant, "business_hours_start", None),
+        "business_hours_end": getattr(tenant, "business_hours_end", None),
+        "business_hours_timezone": getattr(tenant, "business_hours_timezone", None),
+    }
 
 
 # Endpoints para gestión de caché de audio

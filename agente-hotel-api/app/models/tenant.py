@@ -13,6 +13,10 @@ class Tenant(Base):
     tenant_id = Column(String, unique=True, index=True, nullable=False)  # logical id (slug)
     name = Column(String, nullable=False)
     status = Column(String, default="active", index=True)  # active|inactive
+    # Optional per-tenant business hours
+    business_hours_start = Column(Integer, nullable=True)
+    business_hours_end = Column(Integer, nullable=True)
+    business_hours_timezone = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 

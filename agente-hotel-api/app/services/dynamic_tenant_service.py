@@ -62,7 +62,14 @@ class DynamicTenantService:
                 tenants_meta: Dict[str, dict] = {}
                 tenants = (await session.execute(select(Tenant).where(Tenant.status == "active"))).scalars().all()
                 for t in tenants:
-                    tenants_meta[t.tenant_id] = {"name": t.name, "status": t.status}
+                    tenants_meta[t.tenant_id] = {
+                        "name": t.name,
+                        "status": t.status,
+                        # Optional business hours overrides
+                        "business_hours_start": getattr(t, "business_hours_start", None),
+                        "business_hours_end": getattr(t, "business_hours_end", None),
+                        "business_hours_timezone": getattr(t, "business_hours_timezone", None),
+                    }
                 ids = (await session.execute(select(TenantUserIdentifier))).scalars().all()
                 for i in ids:
                     if i.tenant and i.tenant.status == "active":
@@ -116,6 +123,13 @@ class DynamicTenantService:
 
     def list_tenants(self) -> List[dict]:
         return [{"tenant_id": tid, **meta} for tid, meta in sorted(self._tenants_meta.items(), key=lambda x: x[0])]
+
+    def get_tenant_meta(self, tenant_id: str) -> Optional[dict]:
+        """Obtiene el metadata del tenant activo desde caché.
+
+        Devuelve None si no existe o si no está en caché (no activo).
+        """
+        return self._tenants_meta.get(tenant_id)
 
     def _normalize_identifier(self, identifier: str) -> str:
         """Normaliza identificadores de usuario (teléfono/email) para matching estable.
