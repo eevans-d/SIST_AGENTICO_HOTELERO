@@ -1,6 +1,10 @@
 # [PROMPT 2.10] tests/conftest.py
 
+import warnings
 import pytest_asyncio
+# Silenciar DeprecationWarning específico de passlib (crypt será removido en Python 3.13)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="passlib.utils")
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from typing import Any
