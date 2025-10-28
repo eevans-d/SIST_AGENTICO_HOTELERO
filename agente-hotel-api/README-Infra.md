@@ -740,7 +740,105 @@ pytest -q tests/unit/test_message_gateway_normalization.py
 3. **Capacity planning:** Analizar tendencias semanales de overflow y utilization
 4. **Debugging:** Correlacionar long queries con spikes de latencia API
 
-#### 2. Otros Dashboards Existentes
+#### 2. Tenancy & Orchestrator (`tenancy_orchestrator.json`)
+
+**Propósito:** Monitoreo de resolución dinámica de tenants y escalamientos del orchestrator.
+
+**Ubicación:** `docker/grafana/dashboards/tenancy_orchestrator.json`
+
+**Paneles Principales:**
+
+1. **Tenant Resolution Rate (5m avg)** (Time Series)
+   - **Query:** `sum(rate(tenant_resolution_total[5m])) by (result)`
+   - **Labels:** 
+     - `hit` = Tenant encontrado en caché
+     - `default` = Fallback a tenant default (posible filtro no configurado)
+     - `miss_strict` = Strict mode, no encontrado, fallback inhibido
+     - `provided` = Tenant explícitamente proporcionado en request
+   - **Interpretación:** 
+     - Alto hit rate (>95%) = Caché efectivo
+     - Spike en `default` = Posible cambio en configuración de usuarios
+     - Spike en `miss_strict` = Usuarios sin mapeo, en modo estricto
+
+2. **Active Tenants in Cache** (Gauge)
+   - **Query:** `tenants_active_total`
+   - **Rango:** Número absoluto de tenants cargados en caché
+   - **Acción si bajó inesperadamente:** Revisar logs para `refresh()` failures
+
+3. **Tenant Refresh Latency (P95/P99)** (Time Series)
+   - **Queries:**
+     - P95: `histogram_quantile(0.95, rate(tenant_refresh_latency_seconds_bucket[5m])) * 1000`
+     - P99: `histogram_quantile(0.99, rate(tenant_refresh_latency_seconds_bucket[5m])) * 1000`
+   - **Threshold de alerta:** P95 > 500ms (indica DB lento o muchos tenants)
+   - **Acción:** Revisar índices PostgreSQL, aumentar refresh interval
+
+4. **User Identifiers in Cache** (Gauge)
+   - **Query:** `tenant_identifiers_cached_total`
+   - **Rango:** Número total de identificadores (user IDs) mapeados
+   - **Correlación:** Debe ser mayor que `tenants_active_total` si hay múltiples users por tenant
+
+5. **Escalations Rate by Reason (5m avg)** (Time Series)
+   - **Query:** `sum(rate(orchestrator_escalations_total[5m])) by (reason)`
+   - **Razones comunes:**
+     - `urgent_after_hours` - Solicitud urgente fuera de horario
+     - `nlp_failure` - NLP no pudo detectar intención
+     - `resource_exhaustion` - Límite de sesiones/locks
+     - `manual_request` - Usuario solicitó hablar con humano
+   - **Interpretación:** 
+     - Alto spike en `urgent_after_hours` = Muchas solicitudes urgentes
+     - Alto spike en `nlp_failure` = NLP necesita retraining
+     - Trending up = Indicador de degradación de experiencia
+
+6. **Escalation Response Time (P95/P99)** (Time Series)
+   - **Queries:**
+     - P95: `histogram_quantile(0.95, rate(orchestrator_escalation_response_seconds_bucket[5m])) * 1000`
+     - P99: `histogram_quantile(0.99, rate(orchestrator_escalation_response_seconds_bucket[5m])) * 1000`
+   - **SLO target:** P95 < 2s (escalación rápida a staff)
+   - **Acción si > 5s:** Revisar latencia de `alert_manager.send_alert()`, capacidad de staff
+
+7. **Tenant Resolution Breakdown (1h)** (Pie Chart)
+   - **Query:** `sum(increase(tenant_resolution_total[1h])) by (result)`
+   - **Análisis:** Proporciones de hit/default/miss_strict
+   - **Meta ideal:** >90% hit, <5% default, ~5% miss_strict
+
+8. **Escalations by Reason (1h)** (Pie Chart)
+   - **Query:** `sum(increase(orchestrator_escalations_total[1h])) by (reason)`
+   - **Uso:** Identificar tipos de escalaciones dominantes
+
+**Configuración del Dashboard:**
+
+- **Refresh:** 30 segundos
+- **Time Range:** Última 6 horas
+- **Tags:** `tenancy`, `orchestrator`, `observability`
+- **Auto-refresh:** Activado para monitoreo en vivo
+
+**Queries PromQL para Testing Manual:**
+
+```promql
+# Hit ratio en porcentaje (últimas 5 min)
+(sum(rate(tenant_resolution_total{result="hit"}[5m])) 
+ / sum(rate(tenant_resolution_total[5m]))) * 100
+
+# Escalaciones por canal
+sum(rate(orchestrator_escalations_total[5m])) by (channel, reason)
+
+# Latencia promedio de refresh
+rate(tenant_refresh_latency_seconds_sum[5m]) / rate(tenant_refresh_latency_seconds_count[5m])
+
+# Cambio de identifiers en caché (última hora)
+increase(tenant_identifiers_cached_total[1h])
+```
+
+**Acciones Recomendadas en Alertas:**
+
+| Alerta | Query de Verificación | Acción |
+|--------|----------------------|--------|
+| `TenantCacheMissSpike` | Spike en `miss_strict` en 5min | Revisar nuevos usuarios sin mapeo |
+| `TenantRefreshSlow` | P95 > 500ms | Optimizar query de refresh en DB |
+| `EscalationSpike` | Spike en `urgent_after_hours` | Verificar horario de negocio, staff disponible |
+| `EscalationResponseSlow` | P95 > 5s | Revisar latencia de `alert_manager` |
+
+#### 3. Otros Dashboards Existentes
 
 - **agente-overview.json** - Métricas generales de la API
 - **alerts-overview.json** - Estado de todas las alertas
