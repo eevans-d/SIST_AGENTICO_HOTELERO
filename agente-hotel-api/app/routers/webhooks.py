@@ -357,7 +357,26 @@ async def handle_whatsapp_webhook(request: Request):
         await whatsapp_client.close()
 
     # Siempre devolver OK al webhook para confirmar recepción
-    return {"status": "ok"}
+    # Además, si el orquestador devolvió una respuesta textual, incluirla para facilitar validación en tests/integraciones
+    response_payload: dict[str, Any] = {"status": "ok"}
+    try:
+        if isinstance(result, dict):
+            # Eco de respuesta textual (compat tests)
+            if "response" in result and isinstance(result.get("response"), str):
+                response_payload["response"] = result["response"]
+            # Eco de respuestas interactivas/ubicación/audio para validación en tests/integraciones
+            if "response_type" in result:
+                response_payload["response_type"] = result.get("response_type")
+                # Incluir contenido estructurado si existe
+                if "content" in result:
+                    response_payload["content"] = result.get("content")
+                # Campos opcionales de imagen/audio
+                for extra_key in ("image_url", "image_caption", "audio_data"):
+                    if extra_key in result:
+                        response_payload[extra_key] = result.get(extra_key)
+    except Exception:
+        pass
+    return response_payload
 
 
 @router.post("/gmail")

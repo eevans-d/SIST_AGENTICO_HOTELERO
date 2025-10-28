@@ -24,6 +24,10 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     "canary.enabled": False,
     "multi_tenant.experimental": False,
     "tenancy.dynamic.enabled": True,
+    # Normalización avanzada de teléfonos (phonenumbers). Fallback simple si False o lib no instalada
+    "tenancy.phone_normalization.advanced": False,
+    # Preferir respuestas de texto simples por defecto (tests e integraciones básicas)
+    "features.interactive_messages": False,
 }
 
 

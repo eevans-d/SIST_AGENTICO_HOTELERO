@@ -1,7 +1,7 @@
 # [PROMPT 2.3] app/models/lock_audit.py
 
 from sqlalchemy import Column, Integer, String, DateTime, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from datetime import datetime, timezone
 
 Base = declarative_base()

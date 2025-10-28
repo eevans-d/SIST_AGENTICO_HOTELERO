@@ -19,6 +19,35 @@
 .PHONY: deploy-status deploy-logs deploy-test
 .PHONY: incident-detect incident-simulate incident-report on-call-schedule post-mortem incident-test
 
+# ==============================================================================
+# Alembic (Migraciones)
+# ==============================================================================
+
+.PHONY: db-upgrade db-downgrade db-revision
+
+db-upgrade: ## Ejecuta alembic upgrade head (usa Poetry si está disponible)
+ifeq ($(HAS_POETRY),1)
+	ALEMBIC_DB_URL?=sqlite:///./agente_hotel.db
+	poetry run alembic upgrade head
+else
+	ALEMBIC_DB_URL?=sqlite:///./agente_hotel.db alembic upgrade head
+endif
+
+db-downgrade: ## Ejecuta alembic downgrade -1
+ifeq ($(HAS_POETRY),1)
+	ALEMBIC_DB_URL?=sqlite:///./agente_hotel.db
+	poetry run alembic downgrade -1
+else
+	ALEMBIC_DB_URL?=sqlite:///./agente_hotel.db alembic downgrade -1
+endif
+
+db-revision: ## Crea una nueva revisión con mensaje (uso: make db-revision MSG="add table")
+ifeq ($(HAS_POETRY),1)
+	poetry run alembic revision -m "$(MSG)"
+else
+	alembic revision -m "$(MSG)"
+endif
+
 HAS_UV := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)
 HAS_UV_PROJECT := $(shell command -v uv >/dev/null 2>&1 && test -f pyproject.toml && grep -q '^\[project\]' pyproject.toml && echo 1 || echo 0)
 HAS_POETRY := $(shell command -v poetry >/dev/null 2>&1 && test -f pyproject.toml && echo 1 || echo 0)

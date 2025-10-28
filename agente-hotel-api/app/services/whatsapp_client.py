@@ -18,6 +18,7 @@ from ..exceptions.whatsapp_exceptions import (
     WhatsAppNetworkError,
 )
 from ..services.audio_processor import AudioProcessor
+from ..core.correlation import correlation_headers
 
 logger = structlog.get_logger(__name__)
 
@@ -68,6 +69,12 @@ class WhatsAppMetaClient:
 
         logger.info("whatsapp.client.initialized", phone_number_id=self.phone_number_id)
 
+    def _auth_headers(self) -> Dict[str, str]:
+        """Build auth + correlation headers for WhatsApp requests."""
+        base = {"Authorization": f"Bearer {self.access_token}"}
+        base.update(correlation_headers())
+        return base
+
     async def send_message(self, to: str, text: str) -> Dict[str, Any]:
         """
         Send text message to WhatsApp number.
@@ -92,7 +99,7 @@ class WhatsAppMetaClient:
             "type": "text",
             "text": {"body": text},
         }
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_message.start", to=to, text_length=len(text))
 
@@ -169,7 +176,7 @@ class WhatsAppMetaClient:
             "type": "location",
             "location": {"latitude": latitude, "longitude": longitude, "name": name, "address": address},
         }
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_location.start", to=to, latitude=latitude, longitude=longitude, name=name)
 
@@ -252,7 +259,7 @@ class WhatsAppMetaClient:
             "type": "image",
             "image": image_payload,
         }
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_image.start", to=to, image_url=image_url, has_caption=caption is not None)
 
@@ -343,7 +350,7 @@ class WhatsAppMetaClient:
             "type": "template",
             "template": {"name": template_name, "language": {"code": language_code}, "components": template_components},
         }
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_template.start", to=to, template=template_name, language=language_code)
 
@@ -409,7 +416,7 @@ class WhatsAppMetaClient:
         """
         # Step 1: Get media URL
         media_url_endpoint = f"{self.base_url}/{media_id}"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.download_media.start", media_id=media_id)
 
@@ -763,7 +770,8 @@ class WhatsAppMetaClient:
         """
         # Paso 1: Subir el archivo a la API de WhatsApp
         endpoint = f"{self.base_url}/{self.phone_number_id}/media"
-        headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "audio/ogg"}
+        headers = self._auth_headers()
+        headers["Content-Type"] = "audio/ogg"
 
         logger.info("whatsapp.send_audio_message.start", to=to, filename=filename, size_bytes=len(audio_data))
 
@@ -798,7 +806,7 @@ class WhatsAppMetaClient:
 
             with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
                 message_response = await self.client.post(
-                    message_endpoint, json=message_payload, headers={"Authorization": f"Bearer {self.access_token}"}
+                    message_endpoint, json=message_payload, headers=self._auth_headers()
                 )
 
             if message_response.status_code == 200:
@@ -868,8 +876,7 @@ class WhatsAppMetaClient:
             "type": "location",
             "location": location,
         }
-
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_location_message.start", to=to, latitude=latitude, longitude=longitude)
 
@@ -932,8 +939,7 @@ class WhatsAppMetaClient:
             "type": "reaction",
             "reaction": {"message_id": message_id, "emoji": emoji},
         }
-
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = self._auth_headers()
 
         logger.info("whatsapp.send_reaction.start", to=to, message_id=message_id, emoji=emoji)
 

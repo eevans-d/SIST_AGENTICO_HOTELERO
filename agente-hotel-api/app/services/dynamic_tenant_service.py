@@ -66,7 +66,8 @@ class DynamicTenantService:
                 ids = (await session.execute(select(TenantUserIdentifier))).scalars().all()
                 for i in ids:
                     if i.tenant and i.tenant.status == "active":
-                        mapping[i.identifier] = i.tenant.tenant_id
+                        norm = self._normalize_identifier(str(i.identifier))
+                        mapping[norm] = i.tenant.tenant_id
                 self._mapping = mapping
                 self._tenants_meta = tenants_meta
                 # Métricas gauges
@@ -94,12 +95,13 @@ class DynamicTenantService:
             except Exception:  # pragma: no cover
                 pass
             return provided_tenant
-        if user_id in self._mapping:
+        key = self._normalize_identifier(user_id)
+        if key in self._mapping:
             try:
                 self.resolution_total.labels(result="hit").inc()
             except Exception:  # pragma: no cover
                 pass
-            return self._mapping[user_id]
+            return self._mapping[key]
         if self.strict_mode:
             try:
                 self.resolution_total.labels(result="miss_strict").inc()
@@ -114,6 +116,47 @@ class DynamicTenantService:
 
     def list_tenants(self) -> List[dict]:
         return [{"tenant_id": tid, **meta} for tid, meta in sorted(self._tenants_meta.items(), key=lambda x: x[0])]
+
+    def _normalize_identifier(self, identifier: str) -> str:
+        """Normaliza identificadores de usuario (teléfono/email) para matching estable.
+
+        Reglas simples sin dependencias externas:
+        - Emails: lower-case + strip espacios.
+        - Teléfonos: eliminar espacios, guiones y paréntesis. Convertir prefijo 00→+.
+          Conservar '+' si viene. Si solo dígitos y sin prefijo, se dejan tal cual.
+        """
+        if not identifier:
+            return identifier
+        s = identifier.strip()
+        if "@" in s:
+            return s.lower()
+        # Teléfono básico
+        s = s.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+        if s.startswith("00"):
+            s = "+" + s[2:]
+        # Opción avanzada con phonenumbers si flag está activo y la librería está disponible
+        try:
+            from .feature_flag_service import DEFAULT_FLAGS  # evitar await en método sync
+
+            advanced = DEFAULT_FLAGS.get("tenancy.phone_normalization.advanced", False)
+        except Exception:
+            advanced = False
+
+        if advanced:
+            try:
+                import phonenumbers
+
+                # Solo intentamos parsear si parece internacional (+...)
+                if s.startswith("+"):
+                    num = phonenumbers.parse(s, None)
+                    if phonenumbers.is_possible_number(num) and phonenumbers.is_valid_number(num):
+                        return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164)
+            except Exception:
+                # Fallback silencioso
+                pass
+
+        # Dejar '+' si está, si no, devolver dígitos tal cual
+        return s
 
 
 dynamic_tenant_service = DynamicTenantService(strict_mode=False)

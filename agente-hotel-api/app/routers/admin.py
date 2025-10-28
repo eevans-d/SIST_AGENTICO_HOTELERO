@@ -9,6 +9,9 @@ from ..core.database import AsyncSessionFactory
 from sqlalchemy import select
 from ..core.security import get_current_user
 from ..core.ratelimit import limit
+from ..services.feature_flag_service import DEFAULT_FLAGS
+from ..core.redis_client import get_redis
+from ..services.feature_flag_service import get_feature_flag_service, DEFAULT_FLAGS
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_current_user)])
 
@@ -24,6 +27,61 @@ async def get_dashboard(request: Request):
 @limit("60/minute")
 async def list_tenants(request: Request):
     return {"tenants": dynamic_tenant_service.list_tenants()}
+
+
+@router.get("/feature-flags")
+@limit("60/minute")
+async def get_feature_flags(request: Request):
+    """Devuelve el estado efectivo de los feature flags.
+
+    Origen: Redis hash `feature_flags` (1/true/on/yes → enabled), con fallback a DEFAULT_FLAGS.
+    Respuesta: { "flags": { "flag_name": true|false, ... } }
+    """
+    try:
+        r = await get_redis()
+        raw = await r.hgetall("feature_flags")
+    except Exception:
+        raw = {}
+    flags: dict[str, bool] = {}
+    # Cargar defaults primero
+    for k, v in DEFAULT_FLAGS.items():
+        flags[k] = bool(v)
+    # Sobrescribir con Redis cuando exista
+    for k, v in raw.items():
+        key = k.decode() if isinstance(k, (bytes, bytearray)) else str(k)
+        val = v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
+        flags[key] = val.lower() in ("1", "true", "on", "yes")
+    # Ordenar de forma estable por nombre
+    ordered = {k: flags[k] for k in sorted(flags.keys())}
+    return {"flags": ordered}
+
+
+@router.get("/feature-flags")
+@limit("60/minute")
+async def list_feature_flags(request: Request):
+    """Lista los feature flags conocidos con su estado actual.
+
+    Origen de verdad: Redis hash `feature_flags` (override). Si no existe en Redis, se toma de DEFAULT_FLAGS.
+    """
+    ff = await get_feature_flag_service()
+    # Leer overrides crudos de Redis para indicar fuente
+    try:
+        redis_overrides = await ff.redis.hgetall("feature_flags")
+    except Exception:
+        redis_overrides = {}
+
+    flags = []
+    all_keys = set(DEFAULT_FLAGS.keys()) | set(
+        k.decode() if isinstance(k, (bytes, bytearray)) else str(k) for k in (redis_overrides or {}).keys()
+    )
+    for key in sorted(all_keys):
+        enabled = await ff.is_enabled(key, default=DEFAULT_FLAGS.get(key, False))
+        source = "redis" if redis_overrides and (
+            (key.encode() in redis_overrides) or (key in redis_overrides)
+        ) else "default"
+        flags.append({"flag": key, "enabled": enabled, "source": source})
+
+    return {"flags": flags}
 
 
 @router.post("/tenants/refresh")

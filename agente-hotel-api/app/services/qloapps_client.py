@@ -10,6 +10,7 @@ import httpx
 from ..core.logging import logger
 from ..core.settings import settings
 from ..exceptions.pms_exceptions import PMSError, PMSAuthError, PMSRateLimitError
+from ..core.correlation import correlation_headers
 
 
 class QloAppsClient:
@@ -87,7 +88,11 @@ class QloAppsClient:
                 params = {}
             params["output_format"] = "JSON"
 
-            response = await self.client.request(method=method, url=endpoint, params=params, json=json_data)
+            # Propagate correlation headers per request
+            headers = correlation_headers()
+            response = await self.client.request(
+                method=method, url=endpoint, params=params, json=json_data, headers=headers or None
+            )
 
             # Handle specific HTTP errors
             if response.status_code == 401:

@@ -57,6 +57,21 @@ Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
   - `PATCH /admin/tenants/{tenant_id}` (body: status=active|inactive)
   - `POST /admin/tenants/refresh`
 
+### Mensajes Interactivos (WhatsApp)
+- Flag de función: `features.interactive_messages`
+  - Default: `false` en entornos de prueba (permite aserciones deterministas en texto plano).
+  - Recomendado: `true` en staging/producción para habilitar botones/listas interactivas.
+- Activación vía Redis (hash `feature_flags`):
+  - `HSET feature_flags features.interactive_messages 1`
+- Comportamiento:
+  - La respuesta puede ser `interactive_buttons` o `interactive_buttons_with_image` si hay imagen disponible.
+  - El webhook de WhatsApp (en modo test) devuelve eco de `response_type` y `content` para validación.
+  - Métricas: se registran en Prometheus junto con el resto del flujo del orquestador.
+
+### Gestión y observabilidad de Feature Flags
+- Lectura (admin, auth requerida): `GET /admin/feature-flags` → `{ "flags": { ... } }`
+- Métrica: `feature_flag_enabled{flag}` sirve como gauge (1/0) y se actualiza al leer/usar flags.
+
 
 ## Stack Tecnológico
 

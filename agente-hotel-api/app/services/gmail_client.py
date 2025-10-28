@@ -13,6 +13,7 @@ import structlog
 
 from ..core.settings import settings
 from ..exceptions.pms_exceptions import PMSError
+from ..core.correlation import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
@@ -227,6 +228,12 @@ class GmailIMAPClient:
             msg["Subject"] = subject
             if reply_to:
                 msg["Reply-To"] = reply_to
+
+            # Add correlation headers for traceability across systems
+            cid = get_correlation_id()
+            if cid:
+                msg["X-Request-ID"] = cid
+                msg["X-Correlation-ID"] = cid
 
             if html:
                 # Agregar partes texto y HTML

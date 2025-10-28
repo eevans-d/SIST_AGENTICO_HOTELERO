@@ -581,7 +581,7 @@ class Orchestrator:
         return None
 
     async def _handle_availability(
-        self, nlp_result: dict, session_data: dict, message: UnifiedMessage, respond_with_audio: bool = False
+        self, nlp_result: dict, session: dict, message: UnifiedMessage, respond_with_audio: bool = False
     ) -> dict:
         """
         Maneja consultas de disponibilidad de habitaciones.
@@ -594,7 +594,7 @@ class Orchestrator:
 
         Args:
             nlp_result: Resultado del análisis NLP con intent y entidades
-            session_data: Datos de sesión del huésped
+            session: Datos de sesión del huésped
             message: Mensaje unificado del huésped
             respond_with_audio: Si se debe responder con audio
 
@@ -1144,6 +1144,25 @@ class Orchestrator:
                             "audio_data": content.get("audio_data"),
                             "location": content.get("location", {}),
                         },
+                        "original_message": message,
+                    }
+
+                elif response_type == "text_with_image":
+                    # Respuesta de texto con imagen opcional: preservar texto para compatibilidad
+                    return {
+                        "response": response_data.get("content", ""),
+                        "response_type": "text_with_image",
+                        "image_url": response_data.get("image_url"),
+                        "image_caption": response_data.get("image_caption"),
+                    }
+
+                elif response_type == "interactive_buttons_with_image":
+                    # Respuesta interactiva con imagen: exponer estructura completa para el router
+                    return {
+                        "response_type": "interactive_buttons_with_image",
+                        "content": response_data.get("content", {}),
+                        "image_url": response_data.get("image_url"),
+                        "image_caption": response_data.get("image_caption"),
                         "original_message": message,
                     }
 

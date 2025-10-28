@@ -331,8 +331,25 @@ class NLPEngine:
             if not language:
                 language = await self.detect_language(text)
 
-            # Process with appropriate model
-            result = await self.circuit_breaker.call(self._process_with_retry, text, language)
+            # Regla rápida basada en palabras clave (fallback simple sin modelos)
+            text_l = (text or "").lower()
+            rule_intent: Optional[str] = None
+            # Español/Portugués/Inglés: disponibilidad/availability
+            if re.search(r"\b(disponibilidad|disponible|availability)\b", text_l):
+                rule_intent = "check_availability"
+            elif re.search(r"\b(reserva(r)?|reservation|book(ing)?)\b", text_l):
+                rule_intent = "make_reservation"
+
+            if rule_intent is not None:
+                result = {
+                    "intent": {"name": rule_intent, "confidence": 0.8},
+                    "entities": [],
+                    "text": text,
+                    "model_version": "rules-heuristics",
+                }
+            else:
+                # Process with appropriate model (o fallback si no hay modelo)
+                result = await self.circuit_breaker.call(self._process_with_retry, text, language)
 
             nlp_operations.labels(operation="process_message", status="success").inc()
 

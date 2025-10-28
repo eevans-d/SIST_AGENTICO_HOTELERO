@@ -1,6 +1,6 @@
 ---
 title: Manual de Operaciones - Agente Hotelero API
-last_updated: 2025-10-26
+last_updated: 2025-10-27
 owner: Backend AI Team
 ---
 
@@ -40,6 +40,34 @@ Servicio FastAPI que orquesta WhatsApp/Gmail con PMS (QloApps o mock). Desplegad
 - Lint: `ruff` (formateo/estilo)
 - Tests: `pytest` (unit/integration/e2e)
 - Cobertura meta: 70% global, ≥85% en servicios críticos.
+
+### Flags de funciones (Feature Flags)
+
+- Backend usa Redis para resolver flags con caché en memoria. Defaults en `app/services/feature_flag_service.py`.
+- Flag relevante para WhatsApp:
+	- `features.interactive_messages`
+		- Default: `false` (pruebas usan texto plano para aserciones deterministas).
+		- Staging/Producción: activar para enviar botones/listas interactivas.
+		- Cómo activar (Redis hash `feature_flags`):
+			- `HSET feature_flags features.interactive_messages 1`
+		- Observabilidad: métrica gauge por flag en Prometheus.
+		- Variantes: cuando hay imagen disponible se usará `interactive_buttons_with_image` en lugar de `interactive_buttons`.
+		- Verificación: el webhook de WhatsApp devuelve eco de `response_type` y `content` en respuestas de test para facilitar aserciones.
+
+#### Administración y lectura de flags
+- Endpoint de solo lectura (auth requerida): `GET /admin/feature-flags`
+  - Devuelve `{ "flags": { "flag_name": true|false } }`
+  - Origen: Redis `feature_flags` con fallback a defaults (`DEFAULT_FLAGS`).
+  - Rate limit: 60/min.
+
+#### Métricas y administración de flags
+- Métrica Prometheus: `feature_flag_enabled{flag}` (Gauge 1/0)
+- Endpoint admin (requiere auth): `GET /admin/feature-flags`
+  - Retorna lista con `flag`, `enabled`, `source` (`redis`|`default`).
+- Flag de normalización telefónica avanzada: `tenancy.phone_normalization.advanced`
+  - Default: `false`. Al habilitar, si está disponible la librería `phonenumbers`, se normaliza a E.164.
+
+Nota: En entorno de pruebas, el sistema fuerza “horario hábil” para evitar respuestas de fuera de horario y mantener estabilidad de los tests de integración.
 
 ## 9. Referencias
 - Arquitectura y patrones: `.github/copilot-instructions.md` y `DEVIATIONS.md`

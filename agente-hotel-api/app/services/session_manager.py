@@ -2,7 +2,7 @@
 
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 import redis.asyncio as redis
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
@@ -283,8 +283,8 @@ class SessionManager:
             "state": "initial",
             "context": {},
             "tts_enabled": False,
-            "created_at": datetime.utcnow().isoformat(),
-            "last_activity": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "last_activity": datetime.now(UTC).isoformat(),
         }
 
         if tenant_id:
@@ -328,7 +328,7 @@ class SessionManager:
         session_key = self._get_session_key(user_id, tenant_id)
 
         # Actualizar timestamp de última actividad
-        session_data["last_activity"] = datetime.utcnow().isoformat()
+        session_data["last_activity"] = datetime.now(UTC).isoformat()
 
         # Guardar con retry automático
         await self._save_session_with_retry(session_key, session_data, operation="update")

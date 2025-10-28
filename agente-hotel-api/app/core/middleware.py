@@ -52,10 +52,24 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 async def correlation_id_middleware(request: Request, call_next):
-    correlation_id = request.headers.get("X-Correlation-ID", str(uuid4()))
+    # Prefer X-Request-ID if provided by upstream, fallback to X-Correlation-ID
+    incoming = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
+    correlation_id = incoming or str(uuid4())
     request.state.correlation_id = correlation_id
+
+    # Set contextvar for downstream services
+    try:
+        from .correlation import set_correlation_id
+
+        set_correlation_id(correlation_id)
+    except Exception:
+        # Non-fatal if context var cannot be set
+        pass
+
     response = await call_next(request)
+    # Expose both headers for compatibility
     response.headers["X-Correlation-ID"] = correlation_id
+    response.headers["X-Request-ID"] = correlation_id
     return response
 
 
