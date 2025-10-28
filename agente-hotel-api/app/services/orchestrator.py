@@ -31,6 +31,7 @@ from ..core.constants import (
     MOCK_ROOM_NUMBER,
 )
 from ..utils.business_hours import is_business_hours, get_next_business_open_time, format_business_hours
+from .dynamic_tenant_service import dynamic_tenant_service
 from .review_service import get_review_service
 from .alert_service import alert_manager
 
@@ -144,8 +145,22 @@ class Orchestrator:
 
         # Generate response based on reason
         if reason == "urgent_after_hours":
+            # Usar overrides por tenant si existen
+            start = end = tz = None
+            try:
+                tid = getattr(message, "tenant_id", None)
+                if tid:
+                    meta = dynamic_tenant_service.get_tenant_meta(tid)
+                    if meta:
+                        start = meta.get("business_hours_start")
+                        end = meta.get("business_hours_end")
+                        tz = meta.get("business_hours_timezone")
+            except Exception:
+                pass
+            next_open = get_next_business_open_time(start_hour=start, timezone=tz)
+            hours_str = format_business_hours(start_hour=start, end_hour=end)
             response_text = self.template_service.get_response(
-                "escalated_to_staff", next_business_time=format_business_hours(get_next_business_open_time())
+                "escalated_to_staff", next_business_time=hours_str
             )
         elif reason == "nlp_failure":
             response_text = self.template_service.get_response("fallback_human_needed")
@@ -188,8 +203,20 @@ class Orchestrator:
         text_lower = (message.texto or "").lower()
         is_urgent = "urgente" in text_lower or "urgent" in text_lower or "emergency" in text_lower
 
-        # Check if we're within business hours
-        in_business_hours = is_business_hours()
+        # Check if we're within business hours (tenant overrides if available)
+        start = end = tz = None
+        try:
+            tid = getattr(message, "tenant_id", None)
+            if tid:
+                meta = dynamic_tenant_service.get_tenant_meta(tid)
+                if meta:
+                    start = meta.get("business_hours_start")
+                    end = meta.get("business_hours_end")
+                    tz = meta.get("business_hours_timezone")
+        except Exception:
+            pass
+
+        in_business_hours = is_business_hours(start_hour=start, end_hour=end, timezone=tz)
 
         logger.info(
             "orchestrator.business_hours_check",
@@ -202,8 +229,8 @@ class Orchestrator:
         # If outside business hours and not an urgent request
         if not in_business_hours and not is_urgent:
             # Get next opening time for the message
-            next_open = get_next_business_open_time()
-            business_hours_str = format_business_hours()
+            next_open = get_next_business_open_time(start_hour=start, timezone=tz)
+            business_hours_str = format_business_hours(start_hour=start, end_hour=end)
 
             # Check if it's weekend
             current_time = datetime.now()
@@ -212,14 +239,20 @@ class Orchestrator:
             # Choose appropriate template
             template_key = "after_hours_weekend" if is_weekend else "after_hours_standard"
 
+            # next_open puede ser datetime o un valor simple (tests pueden stubearlo a int)
+            try:
+                next_open_str = next_open.strftime("%H:%M")  # type: ignore[attr-defined]
+            except Exception:
+                next_open_str = str(next_open)
+
             response_text = self.template_service.get_response(
-                template_key, business_hours=business_hours_str, next_open_time=next_open.strftime("%H:%M")
+                template_key, business_hours=business_hours_str, next_open_time=next_open_str
             )
 
             logger.info(
                 "orchestrator.after_hours_response",
                 template=template_key,
-                next_open_time=next_open.isoformat(),
+                next_open_time=next_open_str,
                 user_id=message.user_id,
             )
 
