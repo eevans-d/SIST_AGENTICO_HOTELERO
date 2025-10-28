@@ -102,6 +102,10 @@ audit_logs/
 *.dump
 backups/
 
+# SQLite/DB files (should not be committed)
+*.db
+agente_hotel.db
+
 # Secrets y configuración sensible
 .env.production
 *.pem
