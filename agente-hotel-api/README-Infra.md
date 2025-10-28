@@ -303,6 +303,257 @@ redis-cli
 - `make health`: Verifica la salud de los servicios.
 - `make backup`: Crea un backup de las bases de datos.
 
+## Docker Compose Profiles (Local vs PMS)
+
+El proyecto soporta múltiples perfiles para diferentes escenarios de despliegue:
+
+### Perfil Default (Local Development - Sin PMS)
+
+**Comando:**
+```bash
+make docker-up
+# o manual
+docker compose up -d
+```
+
+**Servicios incluidos:**
+- `agente-api` (FastAPI)
+- `postgres` (PostgreSQL 14)
+- `redis` (Redis 7)
+- `prometheus` (Prometheus)
+- `grafana` (Grafana)
+- `alertmanager` (AlertManager)
+- `jaeger` (Jaeger)
+
+**Configuración:**
+```bash
+# .env (auto-generado desde .env.example)
+PMS_TYPE=mock              # Usar MockPMSAdapter, no llamar a QloApps real
+DEBUG=true                 # Desactivar rate limits, auth
+TENANCY_DYNAMIC_ENABLED=true
+CHECK_PMS_IN_READINESS=false  # No fallar health check si PMS no disponible
+```
+
+**Ventajas:**
+- Rápido de iniciar (~30s)
+- No requiere credentials de QloApps
+- Testing/desarrollo sin PMS real
+- Tests unit/integration corren sin Docker
+
+**Desventajas:**
+- Datos de habitaciones/reservas ficticios (hardcoded)
+- Sin integración real con QloApps
+
+### Perfil PMS (Staging/Production - Con QloApps)
+
+**Comando:**
+```bash
+docker compose --profile pms up -d
+```
+
+**Servicios adicionales (además del perfil default):**
+- `qloapps` (WebKul QloApps PMS)
+- `mysql` (MySQL 8.0 para QloApps)
+
+**Configuración:**
+```bash
+# .env
+PMS_TYPE=qloapps                       # Llamar a QloApps REST API
+QLOAPPS_BASE_URL=http://qloapps:80     # Nombre del servicio Docker
+QLOAPPS_API_KEY=<secret>               # Bearer token para QloApps
+DEBUG=false                            # Activar auth, rate limits, validaciones
+TENANCY_DYNAMIC_ENABLED=true           # Multi-tenancy activo
+CHECK_PMS_IN_READINESS=true            # Fallar health check si PMS no disponible
+```
+
+**Ventajas:**
+- Integración real con QloApps
+- Datos persistentes en MySQL
+- Simula ambiente de producción
+
+**Desventajas:**
+- Más lento de iniciar (~2-3 min para QloApps)
+- Requiere credentials de QloApps API
+- Mayor consumo de recursos
+
+### Cambiar Entre Perfiles en Vivo
+
+**Pasar de default a PMS:**
+```bash
+# 1. Detener stack actual
+docker compose down
+
+# 2. Modificar .env
+sed -i 's/PMS_TYPE=mock/PMS_TYPE=qloapps/' .env
+sed -i 's/DEBUG=true/DEBUG=false/' .env
+sed -i 's/CHECK_PMS_IN_READINESS=false/CHECK_PMS_IN_READINESS=true/' .env
+
+# 3. Iniciar con profile pms
+docker compose --profile pms up -d
+
+# 4. Esperar a que QloApps se inicie (~90s)
+sleep 90
+make health
+```
+
+**Volver a default (mock):**
+```bash
+docker compose --profile pms down
+sed -i 's/PMS_TYPE=qloapps/PMS_TYPE=mock/' .env
+sed -i 's/DEBUG=false/DEBUG=true/' .env
+docker compose up -d
+```
+
+### Verificar Perfil Activo
+
+```bash
+# Ver servicios que serían iniciados con perfil default
+docker compose config --services
+
+# Ver con profile pms
+docker compose --profile pms config --services
+```
+
+### Troubleshooting por Perfil
+
+#### Perfil Default (mock)
+
+**Problema:** "MockPMSAdapter not found"
+- **Causa:** `PMS_TYPE=mock` no coincide con código
+- **Solución:** Revisar `PMS_TYPE` en `.env`, debería ser exactamente `"mock"` (case-sensitive)
+
+**Problema:** "Rate limit 429 en desarrollo"
+- **Causa:** `DEBUG=false` activa rate limiting real
+- **Solución:** Cambiar a `DEBUG=true` en `.env`
+
+#### Perfil PMS
+
+**Problema:** "Connection refused to qloapps:80"
+- **Causa:** Servicio QloApps no está healthy aún
+- **Solución:** 
+  ```bash
+  docker compose --profile pms logs qloapps | tail -20
+  # Esperar 60-90s y reintentar
+  curl http://localhost/api/v1  # Prueba acceso directo
+  ```
+
+**Problema:** "401 Unauthorized from QloApps API"
+- **Causa:** `QLOAPPS_API_KEY` incorrecto
+- **Solución:** 
+  ```bash
+  # Verificar credentials en QloApps admin
+  # docker compose exec qloapps curl -H "Authorization: Bearer <KEY>" http://localhost/api/v1/hotels
+  ```
+
+**Problema:** "MySQL connection timeout"
+- **Causa:** MySQL no está listo
+- **Solución:**
+  ```bash
+  docker compose logs mysql | grep -i error
+  docker compose restart mysql
+  sleep 30
+  docker compose logs qloapps  # Debería reconectar
+  ```
+
+### Environment Variables por Perfil
+
+| Variable | Default | PMS | Descripción |
+|----------|---------|-----|-------------|
+| `PMS_TYPE` | `mock` | `qloapps` | Adapter a usar |
+| `QLOAPPS_BASE_URL` | N/A | `http://qloapps:80` | URL base QloApps |
+| `QLOAPPS_API_KEY` | N/A | *(requerido)* | Bearer token API |
+| `DEBUG` | `true` | `false` | Modo debug |
+| `CHECK_PMS_IN_READINESS` | `false` | `true` | PMS crítico en health |
+| `TENANCY_DYNAMIC_ENABLED` | `true` | `true` | Multi-tenancy |
+
+### Health Check por Perfil
+
+**Default:**
+```bash
+curl http://localhost:8002/health/ready
+# {
+#   "status": "ready",
+#   "dependencies": {
+#     "database": "ok",
+#     "redis": "ok",
+#     "pms": "skipped"
+#   }
+# }
+```
+
+**PMS:**
+```bash
+curl http://localhost:8002/health/ready
+# {
+#   "status": "ready",
+#   "dependencies": {
+#     "database": "ok",
+#     "redis": "ok",
+#     "pms": "ok"  # ← Ahora requerido
+#   }
+# }
+```
+
+### Smoke Test por Perfil
+
+**Default:**
+```bash
+# Test endpoints sin PMS
+bash scripts/synthetic-health-check.sh \
+  HEALTH_CHECK_URL=http://localhost:8002
+
+# Verificar métricas
+curl http://localhost:9090/api/v1/query?query=up  # Prometheus
+```
+
+**PMS:**
+```bash
+# Test con PMS incluido
+bash scripts/synthetic-health-check.sh \
+  HEALTH_CHECK_URL=http://localhost:8002 \
+  EXPECT_PMS=1  # ← Esperar que PMS esté disponible
+
+# Prueba de disponibilidad PMS
+curl -H "Authorization: Bearer $QLOAPPS_API_KEY" \
+  http://qloapps:80/api/v1/hotels
+```
+
+### Flujo Recomendado para Nuevos Desarrolladores
+
+1. **Clonar repo**
+   ```bash
+   git clone <repo>
+   cd agente-hotel-api
+   ```
+
+2. **Generar .env desde template**
+   ```bash
+   make dev-setup  # Copia .env.example → .env
+   ```
+
+3. **Iniciar con profile default (rápido)**
+   ```bash
+   docker compose up -d
+   sleep 10
+   make health
+   ```
+
+4. **Verificar endpoints**
+   ```bash
+   curl http://localhost:8002/health/live   # 200 OK
+   curl http://localhost:8002/metrics | head  # Prometheus metrics
+   curl http://localhost:3000                # Grafana UI
+   ```
+
+5. **(Opcional) Cambiar a profile PMS si necesitas QloApps**
+   ```bash
+   docker compose down
+   # Actualizar .env manualmente para PMS_TYPE=qloapps
+   docker compose --profile pms up -d
+   sleep 120  # Esperar a QloApps
+   make health
+   ```
+
 ## Métricas y Observabilidad
 
 La API expone métricas Prometheus en `/metrics` (router `metrics.py`). Métricas relevantes:
