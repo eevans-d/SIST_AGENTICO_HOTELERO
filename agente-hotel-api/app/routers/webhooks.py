@@ -3,6 +3,7 @@
 import hmac
 import hashlib
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
+from prometheus_client import Counter
 from fastapi.responses import PlainTextResponse
 from typing import Any, cast
 import json
@@ -20,6 +21,12 @@ from ..services.message_gateway import MessageGateway
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 logger = structlog.get_logger(__name__)
+
+# Métrica: consolidación de texto+imagen en un solo mensaje (imagen con caption)
+whatsapp_text_image_consolidated_total = Counter(
+    "whatsapp_text_image_consolidated_total",
+    "Total de envíos text_with_image consolidados en un solo mensaje (imagen con caption)"
+)
 
 
 async def get_body(request: Request):
@@ -271,6 +278,11 @@ async def handle_whatsapp_webhook(request: Request):
                     await whatsapp_client.send_image(
                         to=original_message.user_id, image_url=image_url, caption=combo_caption
                     )
+                    try:
+                        whatsapp_text_image_consolidated_total.inc()
+                    except Exception:
+                        # No romper el flujo si Prometheus no está disponible
+                        pass
                 else:
                     # Comportamiento por defecto
                     if text:
