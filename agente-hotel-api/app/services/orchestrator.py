@@ -63,6 +63,7 @@ class Orchestrator:
             "hotel_location": self._handle_hotel_location,
             "ask_location": self._handle_hotel_location,
             "show_room_options": self._handle_room_options,
+            "pricing_info": self._handle_info_intent,
             "guest_services": self._handle_info_intent,
             "hotel_amenities": self._handle_info_intent,
             "check_in_info": self._handle_info_intent,

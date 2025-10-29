@@ -52,6 +52,10 @@ TEXT_TEMPLATES_ES = {
     "review_request_business_reminder": "Estimado/a {guest_name},\n\nRecordatorio amable sobre su estadía en {hotel_name} (Ref: {booking_id}).\n\nSabemos que su agenda es muy ajustada, pero agradeceríamos enormemente su feedback profesional sobre nuestros servicios.\n\nUna breve reseña nos ayudaría mucho a seguir mejorando para ejecutivos como usted.\n\nCordiales saludos,\nEquipo {hotel_name}",
     "review_platform_links": "¡Perfecto {guest_name}! 🌟\n\nAquí están los enlaces donde puede dejarnos su reseña:\n\n{platform_links}\n\nSolo toma unos minutos y nos ayuda enormemente. ¡Mil gracias por tomarse el tiempo! 🙏\n\nSi necesita ayuda con algún enlace, no dude en escribirnos.",
     "review_negative_feedback": "Hola {guest_name},\n\nLamentamos que su experiencia en {hotel_name} no haya sido completamente satisfactoria.\n\nSu feedback es muy valioso para nosotros. ¿Podría contarnos más detalles sobre lo que podríamos haber hecho mejor?\n\nNos tomamos muy en serio todos los comentarios y trabajamos constantemente para mejorar.\n\nSi hay algo específico que podamos resolver, estaremos encantados de ayudarle.\n\nSaludos cordiales,\nGerencia {hotel_name}",
+    # Fallback cuando NLP falla gravemente
+    "fallback_human_needed": "Estoy teniendo dificultades para entender tu solicitud ahora mismo. Derivaré tu consulta a un agente humano para ayudarte mejor.",
+    # Información de tarifas
+    "pricing_info": "Nuestras tarifas varían según temporada y tipo de habitación. ¿Te interesan opciones estándar o premium? También puedo verificar disponibilidad para tus fechas.",
 }
 
 # Plantillas de texto simple (EN)
@@ -81,6 +85,10 @@ TEXT_TEMPLATES_EN = {
     "booking_confirmed_no_qr": "🎉 RESERVATION CONFIRMED! 🎉\n\n📋 Your reservation details:\n• Reservation: {booking_id}\n• Check-in: {check_in}\n• Check-out: {check_out}\n\n✅ Your reservation is confirmed.\nYou'll receive more details by email.",
     "review_platform_links": "Perfect {guest_name}! 🌟\n\nHere are the links where you can leave your review:\n\n{platform_links}\n\nIt only takes a few minutes and helps us a lot. Thank you so much! 🙏\n\nIf you need help with any link, just let us know.",
     "review_negative_feedback": "Hello {guest_name},\n\nWe're sorry your experience at {hotel_name} wasn't fully satisfactory.\n\nYour feedback is very valuable. Could you tell us more details about what we could have done better?\n\nWe take all comments seriously and constantly work to improve.\n\nIf there's anything specific we can resolve, we'll be happy to help.\n\nKind regards,\nManagement {hotel_name}",
+    # Fallback when NLP fails badly
+    "fallback_human_needed": "I'm having trouble understanding your request right now. I'll escalate your conversation to a human agent to assist you.",
+    # Pricing information
+    "pricing_info": "Our rates vary by season and room type. Are you interested in standard or premium options? I can also check availability for your dates.",
 }
 
 # Mapa de idiomas soportados
