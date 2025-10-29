@@ -195,6 +195,7 @@ Los flags siguen patrón jerárquico: `<component>.<feature>.<variant>`
 - `tenancy.dynamic.enabled` - Multi-tenancy, resolución dinámica, activación
 - `pms.circuit_breaker.enabled` - PMS adapter, circuit breaker, activación
 - `orchestrator.escalation.urgent_after_hours` - Orchestrator, escalación, escaladas urgentes nocturnas
+- `humanize.consolidate_text.enabled` - WhatsApp, consolidar "texto + imagen" en una sola imagen con caption
 
 **Naming rules:**
 1. Usar minúsculas + puntos
@@ -255,6 +256,10 @@ redis-cli -h <redis-host>
 **Métrica:** `feature_flag_enabled{flag}` (Gauge)
 - Actualizado cada vez que se consulta un flag
 - Valores: 0 (disabled), 1 (enabled)
+
+**Métrica específica de consolidación (WhatsApp):** `whatsapp_text_image_consolidated_total` (Counter)
+- Se incrementa cuando el webhook envía un único mensaje de imagen con caption combinado (texto + caption) bajo el flag `humanize.consolidate_text.enabled`.
+- Útil para medir adopción e impacto en volumen de mensajes por conversación.
 
 **Queries PromQL:**
 ```promql
