@@ -117,6 +117,18 @@ INTERACTIVE_BUTTON_TEMPLATES_ES = {
             {"id": "late_checkin", "title": "🌙 Check-in tardío"},
         ],
     },
+    "info_menu": {
+        "header_text": "Información del hotel",
+        "body_text": "¿Sobre qué te gustaría saber más?",
+        "footer_text": "Elige una opción para continuar",
+        "action_buttons": [
+            {"id": "hotel_amenities", "title": "🏨 Amenidades"},
+            {"id": "guest_services", "title": "🛎️ Servicios"},
+            {"id": "check_in_info", "title": "🕒 Check-in"},
+            {"id": "check_out_info", "title": "🕛 Check-out"},
+            {"id": "cancellation_policy", "title": "❗ Cancelación"},
+        ],
+    },
 }
 
 INTERACTIVE_BUTTON_TEMPLATES_EN = {
@@ -136,6 +148,18 @@ INTERACTIVE_BUTTON_TEMPLATES_EN = {
         "action_buttons": [
             {"id": "transfer_request", "title": "🚗 Airport transfer"},
             {"id": "late_checkin", "title": "🌙 Late check-in"},
+        ],
+    },
+    "info_menu": {
+        "header_text": "Hotel information",
+        "body_text": "What would you like to know more about?",
+        "footer_text": "Choose an option to continue",
+        "action_buttons": [
+            {"id": "hotel_amenities", "title": "🏨 Amenities"},
+            {"id": "guest_services", "title": "🛎️ Services"},
+            {"id": "check_in_info", "title": "🕒 Check-in"},
+            {"id": "check_out_info", "title": "🕛 Check-out"},
+            {"id": "cancellation_policy", "title": "❗ Cancellation"},
         ],
     },
 }

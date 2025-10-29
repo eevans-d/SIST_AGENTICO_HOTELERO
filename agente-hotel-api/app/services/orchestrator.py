@@ -1494,6 +1494,39 @@ class Orchestrator:
         if not isinstance(intent, str) or not intent:
             intent = "help_message"
 
+        # Ensure TemplateService language aligns with detected language (for direct handler calls in tests)
+        try:
+            lang = None
+            if isinstance(nlp_result, dict):
+                lang = nlp_result.get("language")
+            if not lang and isinstance(message.metadata, dict):
+                lang = message.metadata.get("detected_language")
+            if isinstance(lang, str) and lang:
+                self.template_service.set_language(lang)
+        except Exception:
+            pass
+
+        # Feature-flagged interactive menu for informational intents
+        try:
+            ff = await get_feature_flag_service()
+            if await ff.is_enabled("features.interactive_messages", default=False):
+                info_intents = {
+                    "guest_services",
+                    "hotel_amenities",
+                    "check_in_info",
+                    "check_out_info",
+                    "cancellation_policy",
+                    "pricing_info",
+                }
+                if intent in info_intents and message.tipo != "audio":
+                    # Return interactive buttons menu guiding the user
+                    buttons = self.template_service.get_interactive_buttons("info_menu")
+                    if buttons:
+                        return {"response_type": "interactive_buttons", "content": buttons}
+        except Exception:
+            # On any failure, fall back to text below
+            pass
+
         # Get response template based on intent
         response_text = self.template_service.get_response(intent)
 
