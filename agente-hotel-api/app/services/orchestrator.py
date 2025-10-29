@@ -34,6 +34,7 @@ from ..utils.business_hours import is_business_hours, get_next_business_open_tim
 from .dynamic_tenant_service import dynamic_tenant_service
 from .review_service import get_review_service
 from .alert_service import alert_manager
+from ..utils.locale_utils import format_currency
 
 # Métricas para escalamiento
 escalations_total = Counter(
@@ -297,14 +298,15 @@ class Orchestrator:
                 "content": dict con room_options o audio_data
             }
         """
-        # Preparar datos para opciones de habitaciones
+        # Preparar datos para opciones de habitaciones (formateo por idioma sin símbolo)
+        lang = message.metadata.get("detected_language", "es") if isinstance(message.metadata, dict) else "es"
         room_data = {
             "checkin": "01/01/2023",
             "checkout": "05/01/2023",
-            "price_single": PRICE_ROOM_SINGLE,
-            "price_double": PRICE_ROOM_DOUBLE,
-            "price_prem_single": PRICE_ROOM_PREMIUM_SINGLE,
-            "price_prem_double": PRICE_ROOM_PREMIUM_DOUBLE,
+            "price_single": format_currency(PRICE_ROOM_SINGLE, lang, with_symbol=False),
+            "price_double": format_currency(PRICE_ROOM_DOUBLE, lang, with_symbol=False),
+            "price_prem_single": format_currency(PRICE_ROOM_PREMIUM_SINGLE, lang, with_symbol=False),
+            "price_prem_double": format_currency(PRICE_ROOM_PREMIUM_DOUBLE, lang, with_symbol=False),
         }
 
         # Si el mensaje original era de audio, primero responder con audio
@@ -647,13 +649,15 @@ class Orchestrator:
         use_interactive = await ff_service.is_enabled("features.interactive_messages", default=True)
 
         # Datos de disponibilidad (simulados - en producción vendrían del PMS)
+        # Formatear importes según idioma detectado (sin símbolo, plantillas lo incluyen)
+        lang = message.metadata.get("detected_language", "es") if isinstance(message.metadata, dict) else "es"
         availability_data = {
             "checkin": "hoy",
             "checkout": "mañana",
             "room_type": "Doble",
             "guests": 2,
-            "price": PRICE_ROOM_DOUBLE,
-            "total": PRICE_ROOM_DOUBLE * 2,
+            "price": format_currency(PRICE_ROOM_DOUBLE, lang, with_symbol=False),
+            "total": format_currency(PRICE_ROOM_DOUBLE * 2, lang, with_symbol=False),
         }
 
         # Preparar mensaje de respuesta de texto
