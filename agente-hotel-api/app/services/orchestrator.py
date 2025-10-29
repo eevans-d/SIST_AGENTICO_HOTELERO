@@ -1,7 +1,7 @@
 # [PROMPT 2.7] app/services/orchestrator.py
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
@@ -93,7 +93,7 @@ class Orchestrator:
 
         # Prepare escalation context
         escalation_context = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
             "user_id": message.user_id,
             "channel": message.canal,
@@ -175,7 +175,7 @@ class Orchestrator:
             "response_type": "text",
             "content": response_text,
             "escalated": True,
-            "escalation_id": f"ESC-{datetime.utcnow().timestamp()}",
+            "escalation_id": f"ESC-{datetime.now(timezone.utc).timestamp()}",
         }
 
     async def _handle_business_hours(self, nlp_result: dict, session_data: dict, message: UnifiedMessage) -> dict | None:
@@ -578,7 +578,7 @@ class Orchestrator:
                 # Schedule review request for 24 hours later
                 from datetime import datetime
 
-                checkout_date = datetime.utcnow()  # In real implementation, get from PMS
+                checkout_date = datetime.now(timezone.utc)  # In real implementation, get from PMS
 
                 review_service = get_review_service()
                 from app.services.review_service import GuestSegment
