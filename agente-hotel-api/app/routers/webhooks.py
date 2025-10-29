@@ -258,16 +258,27 @@ async def handle_whatsapp_webhook(request: Request):
 
             # Feature 3: Manejo de response types con imágenes
             elif response_type == "text_with_image" and original_message:
-                # Enviar texto y luego imagen
-                text = result.get("content", "")
-                if text:
-                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
-
-                # Enviar imagen si existe
+                # Consolidación opcional: enviar solo una imagen con caption que incluya el texto
+                from ..services.feature_flag_service import DEFAULT_FLAGS
                 image_url = result.get("image_url")
-                if image_url:
-                    caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
+                text = result.get("content", "")
+                caption = result.get("image_caption", "")
+
+                if image_url and DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
+                    combo_caption = text.strip()
+                    if caption:
+                        combo_caption = f"{combo_caption}\n\n{caption}" if combo_caption else caption
+                    await whatsapp_client.send_image(
+                        to=original_message.user_id, image_url=image_url, caption=combo_caption
+                    )
+                else:
+                    # Comportamiento por defecto
+                    if text:
+                        await whatsapp_client.send_message(to=original_message.user_id, text=text)
+                    if image_url:
+                        await whatsapp_client.send_image(
+                            to=original_message.user_id, image_url=image_url, caption=caption
+                        )
 
             elif response_type == "audio_with_image" and original_message:
                 # Enviar audio primero
