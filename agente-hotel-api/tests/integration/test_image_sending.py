@@ -303,9 +303,9 @@ class TestRoomImageWebhookIntegration:
             "image_caption": "Double Room - $100/night",
         }
 
-        original_message = UnifiedMessage(
-            user_id="+1234567890", texto="Check availability", canal="whatsapp", tipo="text", timestamp=1234567890
-        )
+        # Usar un stub mínimo para evitar dependencias de esquema completo
+        from types import SimpleNamespace
+        original_message = SimpleNamespace(user_id="+1234567890")
 
         # Simulate webhook handling
         if result["response_type"] == "text_with_image":
@@ -321,6 +321,63 @@ class TestRoomImageWebhookIntegration:
         # Verify calls
         whatsapp_client.send_message.assert_called_once()
         whatsapp_client.send_image.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_text_with_image_consolidated_when_flag_enabled(self):
+        """When consolidate flag is enabled, should send a single image with combined caption."""
+        from app.services.whatsapp_client import WhatsAppMetaClient
+        from app.services.feature_flag_service import DEFAULT_FLAGS
+
+        # Enable consolidate flag
+        DEFAULT_FLAGS["humanize.consolidate_text.enabled"] = True
+
+        # Mock WhatsApp client
+        whatsapp_client = Mock(spec=WhatsAppMetaClient)
+        whatsapp_client.send_message = AsyncMock()
+        whatsapp_client.send_image = AsyncMock()
+
+        # Simulate orchestrator response
+        result = {
+            "response_type": "text_with_image",
+            "content": "We have availability for double rooms!",
+            "image_url": "https://example.com/images/rooms/double-room.jpg",
+            "image_caption": "Double Room - $100/night",
+        }
+
+        original_message = UnifiedMessage(
+            user_id="+1234567890", texto="Check availability", canal="whatsapp", tipo="text", timestamp=1234567890
+        )
+
+        # Simulate webhook handling with consolidation
+        if result["response_type"] == "text_with_image":
+            image_url = result.get("image_url")
+            text = result.get("content", "")
+            caption = result.get("image_caption", "")
+
+            if image_url and DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
+                combo_caption = text.strip()
+                if caption:
+                    combo_caption = f"{combo_caption}\n\n{caption}" if combo_caption else caption
+                await whatsapp_client.send_image(
+                    to=original_message.user_id, image_url=image_url, caption=combo_caption
+                )
+            else:
+                if text:
+                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
+                if image_url:
+                    await whatsapp_client.send_image(
+                        to=original_message.user_id, image_url=image_url, caption=caption
+                    )
+
+        # Verify only image was sent and text was not
+        whatsapp_client.send_message.assert_not_called()
+        whatsapp_client.send_image.assert_called_once()
+        # Check that caption contains both text and original caption
+        args, kwargs = whatsapp_client.send_image.call_args
+        sent_caption = kwargs.get("caption")
+        assert "We have availability for double rooms!" in sent_caption
+        assert "Double Room - $100/night" in sent_caption
+        assert "\n\n" in sent_caption
 
     @pytest.mark.asyncio
     async def test_interactive_buttons_with_image_response_type(self):
