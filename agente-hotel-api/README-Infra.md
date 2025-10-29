@@ -68,6 +68,73 @@ Estado PASS/FAIL se refleja en `status` y razones en `fail_reasons`.
   - El webhook de WhatsApp (en modo test) devuelve eco de `response_type` y `content` para validación.
   - Métricas: se registran en Prometheus junto con el resto del flujo del orquestador.
 
+### i18n de plantillas (Textos + Interactivos)
+
+El servicio `TemplateService` soporta internacionalización en ES/EN con fallback automático a ES.
+
+Uso básico:
+
+```python
+from app.services.template_service import get_template_service
+
+tpl = get_template_service()
+
+# Idioma por defecto: 'es'
+txt = tpl.get_response(
+  "availability_found",
+  checkin="2025-10-20",
+  checkout="2025-10-22",
+  room_type="Doble",
+  guests=2,
+  price=100,
+  total=200,
+)
+
+# Cambiar a inglés
+tpl.set_language("en")
+txt_en = tpl.get_response(
+  "availability_found",
+  checkin="2025-10-20",
+  checkout="2025-10-22",
+  room_type="Double",
+  guests=2,
+  price=100,
+  total=200,
+)
+
+# Plantillas interactivas por idioma
+buttons = tpl.get_interactive_buttons(
+  "availability_confirmation",
+  checkin="2025-10-20",
+  checkout="2025-10-22",
+  room_type="Double",
+  guests=2,
+  price=100,
+  total=200,
+)
+
+room_list = tpl.get_interactive_list(
+  "room_options",
+  checkin="2025-10-20",
+  checkout="2025-10-22",
+  price_single=50,
+  price_double=80,
+  price_prem_single=90,
+  price_prem_double=120,
+)
+```
+
+Detalles:
+- Textos: `TEXT_TEMPLATES_ES/EN` con fallback a ES si falta una clave.
+- Botones: `INTERACTIVE_BUTTON_TEMPLATES_ES/EN` con selección por idioma y fallback a ES.
+- Listas: `INTERACTIVE_LIST_TEMPLATES_ES/EN` con selección por idioma y fallback a ES.
+- El `Orchestrator` invoca `set_language()` tras la detección de idioma del NLP para unificar el idioma de salida.
+
+Buenas prácticas:
+- Al agregar un nuevo texto interactivo, definir versiones ES y EN; si sólo hay ES, el sistema seguirá funcionando.
+- Evitar interpolar valores sin saneo; utilizar `format(**kwargs)` como se implementa en `TemplateService`.
+- Mantener consistencia de claves entre locales para facilitar pruebas de contenido.
+
 ### Gestión y observabilidad de Feature Flags
 
 #### Visión General
