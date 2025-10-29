@@ -792,3 +792,11 @@ class AudioProcessor(OptimizedAudioProcessor):
 
         # Método _download_audio para compatibilidad
         self._download_audio = self._download_audio_optimized
+
+    # Backward-compatibility shim expected by some tests
+    async def transcribe_audio(self, audio_url: str) -> dict:
+        """
+        Compat wrapper delegating to transcribe_whatsapp_audio.
+        Some tests patch this method directly.
+        """
+        return await self.transcribe_whatsapp_audio(audio_url)

@@ -381,6 +381,20 @@ class NLPEngine:
             nlp_errors.labels(operation="process_message", error_type=type(e).__name__).inc()
             return self._fallback_response(language or self.default_language)
 
+    # Backward-compatibility shim for tests that patch `process_text` instead of `process_message`
+    async def process_text(self, text: str, language: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Compat wrapper: delegates to process_message. Some tests patch this method directly.
+
+        Args:
+            text: User message
+            language: Optional ISO language code
+
+        Returns:
+            Parsed NLP result dict (same contract as process_message)
+        """
+        return await self.process_message(text=text, language=language)
+
     async def _process_with_retry(self, text: str, language: str) -> Dict[str, Any]:
         """
         Internal processing method with Rasa Agent.

@@ -263,6 +263,14 @@ async def handle_whatsapp_webhook(request: Request):
                             list_button_text=follow_up_content.get("list_button_text"),
                         )
 
+            elif response_type == "text" and original_message:
+                # Enviar texto simple
+                if isinstance(content, dict):
+                    text = content.get("text", "")
+                else:
+                    text = content or ""
+                await whatsapp_client.send_message(to=original_message.user_id, text=text)
+
             # Feature 3: Manejo de response types con imágenes
             elif response_type == "text_with_image" and original_message:
                 # Consolidación opcional: enviar solo una imagen con caption que incluya el texto
