@@ -21,6 +21,10 @@ from ..exceptions.whatsapp_exceptions import (
 from ..services.audio_processor import AudioProcessor
 from ..exceptions.audio_exceptions import AudioDownloadError
 from ..core.correlation import correlation_headers
+from .feature_flag_service import get_feature_flag_service
+import asyncio
+import os
+import random
 
 logger = structlog.get_logger(__name__)
 
@@ -131,6 +135,15 @@ class WhatsAppMetaClient:
         logger.info("whatsapp.send_message.start", to=to, text_length=len(text))
 
         try:
+            # Delay humano opcional (no aplicar en tests)
+            try:
+                if "PYTEST_CURRENT_TEST" not in os.environ:
+                    ff = await get_feature_flag_service()
+                    if await ff.is_enabled("humanize.delay.enabled", default=False):
+                        await asyncio.sleep(random.uniform(1.0, 2.5))
+            except Exception:
+                pass
+
             with whatsapp_api_latency.labels(endpoint="messages", method="POST").time():
                 response = await self.client.post(endpoint, json=payload, headers=headers)
 

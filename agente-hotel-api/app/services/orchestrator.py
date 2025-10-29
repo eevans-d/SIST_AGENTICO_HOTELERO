@@ -1579,6 +1579,27 @@ class Orchestrator:
                 logger.error(f"Failed to generate audio response for {intent}: {e}")
 
         # Text response fallback
+        try:
+            # Humanización opcional (tono es-AR, consolidación)
+            from app.services.feature_flag_service import DEFAULT_FLAGS
+            from ..utils.humanizer import apply_es_ar_tone, consolidate_text
+
+            if DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
+                response_text = consolidate_text([response_text])
+
+            # Detectar idioma/locale
+            lang = (nlp_result or {}).get("language") if isinstance(nlp_result, dict) else None
+            if not lang and isinstance(message.metadata, dict):
+                lang = message.metadata.get("detected_language")
+            locale = None
+            if isinstance(message.metadata, dict):
+                locale = message.metadata.get("locale")
+
+            if DEFAULT_FLAGS.get("humanize.es_ar.enabled", False) and (lang == "es" or (locale and "es-AR" in str(locale))):
+                response_text = apply_es_ar_tone(response_text)
+        except Exception:
+            pass
+
         return {"response_type": "text", "content": response_text}
 
     async def _handle_fallback_response(self, message: UnifiedMessage, respond_with_audio: bool = False) -> dict:
@@ -1609,7 +1630,23 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Failed to generate audio for fallback response: {e}")
 
-        # Text response fallback
+        # Text response fallback con humanización opcional
+        try:
+            from app.services.feature_flag_service import DEFAULT_FLAGS
+            from ..utils.humanizer import apply_es_ar_tone, consolidate_text
+
+            if DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
+                default_text = consolidate_text([default_text])
+
+            locale = None
+            if isinstance(message.metadata, dict):
+                locale = message.metadata.get("locale")
+
+            if DEFAULT_FLAGS.get("humanize.es_ar.enabled", False) and (language == "es" or (locale and "es-AR" in str(locale))):
+                default_text = apply_es_ar_tone(default_text)
+        except Exception:
+            pass
+
         return {"response_type": "text", "content": default_text}
 
 

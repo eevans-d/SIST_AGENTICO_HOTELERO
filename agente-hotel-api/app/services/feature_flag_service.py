@@ -28,6 +28,10 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     "tenancy.phone_normalization.advanced": False,
     # Preferir respuestas de texto simples por defecto (tests e integraciones básicas)
     "features.interactive_messages": False,
+    # Humanización de respuestas (opt-in, seguro por defecto)
+    "humanize.es_ar.enabled": False,
+    "humanize.consolidate_text.enabled": False,
+    "humanize.delay.enabled": False,
 }
 
 
