@@ -968,7 +968,20 @@ class Orchestrator:
                     "image_caption": "🎫 Tu código QR de confirmación - Guárdalo para el check-in!",
                 }
             else:
-                # Fallback: confirmation sin QR
+                # Fallback: confirmation sin QR — si interactivos están habilitados, ofrecer opciones de llegada
+                try:
+                    ff = await get_feature_flag_service()
+                    if await ff.is_enabled("features.interactive_messages", default=False) and message.tipo != "audio":
+                        try:
+                            self.template_service.set_language(lang)
+                        except Exception:
+                            pass
+                        buttons = self.template_service.get_interactive_buttons("arrival_options")
+                        if buttons:
+                            return {"response_type": "interactive_buttons", "content": buttons}
+                except Exception:
+                    pass
+
                 return {
                     "response_type": "text",
                     "content": self.template_service.get_response(
