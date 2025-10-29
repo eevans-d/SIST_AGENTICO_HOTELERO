@@ -1,7 +1,7 @@
 # [PROMPT 2.7] app/services/orchestrator.py
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
 from .nlp_engine import NLPEngine
@@ -34,7 +34,7 @@ from ..utils.business_hours import is_business_hours, get_next_business_open_tim
 from .dynamic_tenant_service import dynamic_tenant_service
 from .review_service import get_review_service
 from .alert_service import alert_manager
-from ..utils.locale_utils import format_currency
+from ..utils.locale_utils import format_currency, format_date_locale
 
 # Métricas para escalamiento
 escalations_total = Counter(
@@ -299,11 +299,17 @@ class Orchestrator:
                 "content": dict con room_options o audio_data
             }
         """
-        # Preparar datos para opciones de habitaciones (formateo por idioma sin símbolo)
+        # Preparar datos para opciones de habitaciones (formateo por idioma y sin símbolo)
         lang = message.metadata.get("detected_language", "es") if isinstance(message.metadata, dict) else "es"
+        try:
+            self.template_service.set_language(lang)
+        except Exception:
+            pass
+        d_checkin = date(2023, 1, 1)
+        d_checkout = date(2023, 1, 5)
         room_data = {
-            "checkin": "01/01/2023",
-            "checkout": "05/01/2023",
+            "checkin": format_date_locale(d_checkin, lang),
+            "checkout": format_date_locale(d_checkout, lang),
             "price_single": format_currency(PRICE_ROOM_SINGLE, lang, with_symbol=False),
             "price_double": format_currency(PRICE_ROOM_DOUBLE, lang, with_symbol=False),
             "price_prem_single": format_currency(PRICE_ROOM_PREMIUM_SINGLE, lang, with_symbol=False),
@@ -652,6 +658,11 @@ class Orchestrator:
         # Datos de disponibilidad (simulados - en producción vendrían del PMS)
         # Formatear importes según idioma detectado (sin símbolo, plantillas lo incluyen)
         lang = message.metadata.get("detected_language", "es") if isinstance(message.metadata, dict) else "es"
+        try:
+            # Asegurar que TemplateService use el mismo idioma (handlers directos en tests)
+            self.template_service.set_language(lang)
+        except Exception:
+            pass
         availability_data = {
             "checkin": "hoy",
             "checkout": "mañana",
@@ -1511,7 +1522,11 @@ class Orchestrator:
         Returns:
             Response dict with fallback message
         """
-        default_text = "No entendí tu consulta. ¿Podrías reformularla?"
+        # Localized fallback
+        language = "es"
+        if isinstance(message.metadata, dict):
+            language = message.metadata.get("detected_language", "es")
+        default_text = self._get_low_confidence_message(language)
 
         # If original message was audio, respond with audio
         if respond_with_audio or message.tipo == "audio":
