@@ -344,9 +344,8 @@ class TestRoomImageWebhookIntegration:
             "image_caption": "Double Room - $100/night",
         }
 
-        original_message = UnifiedMessage(
-            user_id="+1234567890", texto="Check availability", canal="whatsapp", tipo="text", timestamp=1234567890
-        )
+        from types import SimpleNamespace
+        original_message = SimpleNamespace(user_id="+1234567890")
 
         # Simulate webhook handling with consolidation
         if result["response_type"] == "text_with_image":
