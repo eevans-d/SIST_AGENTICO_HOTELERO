@@ -925,6 +925,30 @@ class Orchestrator:
             check_out_date = session_data.get("check_out_date", MOCK_CHECKOUT_DATE)
             room_number = session_data.get("room_number", MOCK_ROOM_NUMBER)
 
+            # Locale-aware date formatting for confirmation message
+            lang = None
+            if isinstance(nlp_result, dict):
+                lang = nlp_result.get("language")
+            if not lang and isinstance(message.metadata, dict):
+                lang = message.metadata.get("detected_language")
+            lang = lang or "es"
+
+            # Try to parse ISO strings to date for proper locale formatting
+            def _to_date(val):
+                from datetime import datetime, date as _date
+
+                if isinstance(val, _date):
+                    return val
+                if isinstance(val, str):
+                    try:
+                        return datetime.fromisoformat(val).date()
+                    except Exception:
+                        return val
+                return val
+
+            ci_disp = format_date_locale(_to_date(check_in_date), lang)
+            co_disp = format_date_locale(_to_date(check_out_date), lang)
+
             # Si tenemos QR code, enviar confirmación completa con QR
             if qr_data:
                 guest_name = session_data.get("guest_name", "Estimado Huésped")
@@ -932,8 +956,8 @@ class Orchestrator:
                     "booking_confirmed_with_qr",
                     booking_id=qr_data["booking_id"],
                     guest_name=guest_name,
-                    check_in=check_in_date,
-                    check_out=check_out_date,
+                    check_in=ci_disp,
+                    check_out=co_disp,
                     room_number=room_number,
                 )
 
@@ -950,8 +974,8 @@ class Orchestrator:
                     "content": self.template_service.get_response(
                         "booking_confirmed_no_qr",
                         booking_id=f"HTL-{int(time.time())}",
-                        check_in=check_in_date,
-                        check_out=check_out_date,
+                        check_in=ci_disp,
+                        check_out=co_disp,
                     ),
                 }
         else:
