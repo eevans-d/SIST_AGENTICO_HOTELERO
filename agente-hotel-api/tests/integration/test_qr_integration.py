@@ -115,7 +115,7 @@ class TestQRCodeIntegrationE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
+        pms_adapter = get_pms_adapter()  # NO usar await - no es async
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
@@ -168,7 +168,7 @@ class TestQRCodeIntegrationE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
+        pms_adapter = get_pms_adapter()  # NO usar await - no es async
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
@@ -431,7 +431,7 @@ class TestQRCodeIntegrationE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
+        pms_adapter = get_pms_adapter()  # NO usar await - no es async
         session_manager = SessionManager()
         lock_service = LockService()
         orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
