@@ -376,6 +376,41 @@ class SessionManager:
         # Guardar con retry automático
         await self._save_session_with_retry(session_key, session_data, operation="update")
 
+    async def set_session_data(self, user_id: str, data_key: str, data_value: Any, tenant_id: Optional[str] = None):
+        """
+        Wrapper para actualizar un campo específico en el contexto de sesión.
+        
+        Útil para tests y APIs que necesitan modificar solo un campo sin
+        obtener primero toda la sesión.
+
+        Args:
+            user_id: Identificador del usuario.
+            data_key: Clave del campo a actualizar en session["context"].
+            data_value: Valor a asignar al campo.
+            tenant_id: Identificador del tenant (opcional).
+
+        Raises:
+            RedisError: Si falla la operación de Redis.
+
+        Ejemplo:
+        -------
+        ```python
+        # Actualizar un solo campo
+        await session_manager.set_session_data("user123", "qr_code", "QR123456")
+        # session["context"]["qr_code"] = "QR123456"
+        ```
+        """
+        # Obtener sesión actual (crea si no existe)
+        session = await self.get_or_create_session(user_id, canal="whatsapp", tenant_id=tenant_id)
+        
+        # Actualizar campo en contexto
+        if "context" not in session:
+            session["context"] = {}
+        session["context"][data_key] = data_value
+        
+        # Guardar sesión actualizada
+        await self.update_session(user_id, session, tenant_id=tenant_id)
+
     async def _update_active_sessions_metric(self):
         """Actualiza la métrica de sesiones activas."""
         try:
