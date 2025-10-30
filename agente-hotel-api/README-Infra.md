@@ -1,5 +1,7 @@
 # [PROMPT GA-01] Documentación de Infraestructura
 
+> Fuente de verdad del estado: consulta `STATUS.md` (raíz del repo) para situación actual y próximos pasos.
+
 ## Guía de Alineación (Resumen)
 
 Para iniciar una sesión de trabajo consistente y evitar desviaciones:
