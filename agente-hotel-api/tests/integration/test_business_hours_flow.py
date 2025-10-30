@@ -6,7 +6,7 @@ Tests para el orchestrator con lógica de business hours.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.services.orchestrator import Orchestrator
@@ -18,25 +18,27 @@ from app.models.unified_message import UnifiedMessage
 class TestBusinessHoursIntegration:
     """Tests de integración para respuestas con horarios diferenciados."""
 
-    @pytest.fixture
-    async def orchestrator(self):
-        """Fixture que crea instancia del orchestrator."""
+    async def _create_orchestrator(self):
+        """Helper para crear instancia del orchestrator."""
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
+        pms_adapter = get_pms_adapter()  # NO usar await - no es async
         session_manager = SessionManager()
         lock_service = LockService()
         return Orchestrator(pms_adapter, session_manager, lock_service)
 
     @pytest.mark.asyncio
-    async def test_after_hours_response_standard(self, orchestrator):
+    async def test_after_hours_response_standard(self):
         """Test: Respuesta estándar fuera de horario."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Mensaje a las 22:00 (fuera de horario)
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch("app.utils.business_hours.datetime") as mock_datetime:
                 # Mock weekday para que no sea fin de semana
-                mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)  # Jueves
-                mock_datetime.now.return_value.weekday.return_value = 3  # Jueves = 3
+                mock_now = MagicMock()
+                mock_now.weekday.return_value = 3  # Jueves = 3
+                mock_datetime.now.return_value = mock_now
 
                 message = UnifiedMessage(
                     user_id="5491112345678", texto="¿tienen disponibilidad?", canal="whatsapp", tipo="text", metadata={}
@@ -54,8 +56,10 @@ class TestBusinessHoursIntegration:
                 assert any(keyword in response_text.lower() for keyword in ["horario", "fuera", "mañana", "urgente"])
 
     @pytest.mark.asyncio
-    async def test_after_hours_weekend_response(self, orchestrator):
+    async def test_after_hours_weekend_response(self):
         """Test: Respuesta específica para fin de semana."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Mensaje el sábado
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch("app.utils.business_hours.datetime") as mock_datetime:
@@ -79,8 +83,10 @@ class TestBusinessHoursIntegration:
                 assert isinstance(response_text, str)
 
     @pytest.mark.asyncio
-    async def test_urgent_keyword_escalation(self, orchestrator):
+    async def test_urgent_keyword_escalation(self):
         """Test: Escalamiento cuando mensaje contiene palabra URGENTE."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Mensaje urgente fuera de horario
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(
@@ -102,8 +108,10 @@ class TestBusinessHoursIntegration:
             assert any(keyword in response_text.lower() for keyword in ["guardia", "derivando", "personal", "escalado"])
 
     @pytest.mark.asyncio
-    async def test_urgent_variations_detection(self, orchestrator):
+    async def test_urgent_variations_detection(self):
         """Test: Detección de variaciones de urgente."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Diferentes formas de urgencia
         urgent_keywords = ["urgente", "urgent", "emergency", "URGENTE"]
 
@@ -124,8 +132,10 @@ class TestBusinessHoursIntegration:
                 assert isinstance(response_text, str)
 
     @pytest.mark.asyncio
-    async def test_normal_response_during_business_hours(self, orchestrator):
+    async def test_normal_response_during_business_hours(self):
         """Test: Respuesta normal durante horario comercial."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Mensaje a las 14:00 (dentro de horario)
         with patch("app.utils.business_hours.is_business_hours", return_value=True):
             message = UnifiedMessage(
@@ -139,14 +149,12 @@ class TestBusinessHoursIntegration:
             assert result is not None
             # Durante horario comercial, debe procesar normalmente
             # No debe mostrar mensaje de "fuera de horario"
-            str(result.get("response", "")) + str(result.get("content", ""))
-
-            # La respuesta NO debe mencionar "fuera de horario"
-            # (aunque puede mencionar otras cosas relacionadas con disponibilidad)
 
     @pytest.mark.asyncio
-    async def test_business_hours_with_location_request(self, orchestrator):
+    async def test_business_hours_with_location_request(self):
         """Test: Solicitud de ubicación fuera de horario (debe responder)."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Ubicación no debería estar bloqueada por horario
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(
@@ -162,8 +170,10 @@ class TestBusinessHoursIntegration:
             # incluso fuera de horario
 
     @pytest.mark.asyncio
-    async def test_after_hours_includes_next_open_time(self, orchestrator):
+    async def test_after_hours_includes_next_open_time(self):
         """Test: Mensaje fuera de horario incluye próximo horario de apertura."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch("app.utils.business_hours.get_next_business_open_time") as mock_next_open:
@@ -172,8 +182,9 @@ class TestBusinessHoursIntegration:
                 mock_next_open.return_value = next_open
 
                 with patch("app.utils.business_hours.datetime") as mock_datetime:
-                    mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)
-                    mock_datetime.now.return_value.weekday.return_value = 3
+                    mock_now = MagicMock()
+                    mock_now.weekday.return_value = 3
+                    mock_datetime.now.return_value = mock_now
 
                     message = UnifiedMessage(
                         user_id="5491112345678", texto="consulta", canal="whatsapp", tipo="text", metadata={}
@@ -190,8 +201,10 @@ class TestBusinessHoursIntegration:
                     assert "9" in response_text or "09:00" in response_text
 
     @pytest.mark.asyncio
-    async def test_business_hours_logging(self, orchestrator):
+    async def test_business_hours_logging(self):
         """Test: Verificar logging de verificación de horarios."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch("app.core.logging.logger"):
@@ -207,8 +220,10 @@ class TestBusinessHoursIntegration:
                 # mock_logger.info.assert_called() - Verificación depende de implementación
 
     @pytest.mark.asyncio
-    async def test_after_hours_no_pms_call(self, orchestrator):
+    async def test_after_hours_no_pms_call(self):
         """Test: Fuera de horario NO debe llamar al PMS innecesariamente."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch.object(orchestrator.pms_adapter, "check_availability", new_callable=AsyncMock):
@@ -229,8 +244,10 @@ class TestBusinessHoursIntegration:
                 # mock_pms.assert_not_called() - Dependiendo de la implementación
 
     @pytest.mark.asyncio
-    async def test_business_hours_with_audio_message(self, orchestrator):
+    async def test_business_hours_with_audio_message(self):
         """Test: Verificación de horarios con mensaje de audio."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             with patch.object(
@@ -239,8 +256,9 @@ class TestBusinessHoursIntegration:
                 mock_stt.return_value = {"text": "necesito una habitación", "confidence": 0.95}
 
                 with patch("app.utils.business_hours.datetime") as mock_datetime:
-                    mock_datetime.now.return_value = datetime(2025, 10, 9, 22, 0)
-                    mock_datetime.now.return_value.weekday.return_value = 3
+                    mock_now = MagicMock()
+                    mock_now.weekday.return_value = 3
+                    mock_datetime.now.return_value = mock_now
 
                     message = UnifiedMessage(
                         user_id="5491112345678",
@@ -260,8 +278,10 @@ class TestBusinessHoursIntegration:
                     mock_stt.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_timezone_aware_business_hours(self, orchestrator):
+    async def test_timezone_aware_business_hours(self):
         """Test: Verificación de horarios es timezone-aware."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange - Usar timezone de Buenos Aires
         with patch("app.utils.business_hours.is_business_hours") as mock_is_hours:
             mock_is_hours.return_value = False
@@ -279,8 +299,10 @@ class TestBusinessHoursIntegration:
             assert result is not None
 
     @pytest.mark.asyncio
-    async def test_multiple_urgent_keywords_in_message(self, orchestrator):
+    async def test_multiple_urgent_keywords_in_message(self):
         """Test: Múltiples keywords urgentes en un mensaje."""
+        orchestrator = await self._create_orchestrator()
+
         # Arrange
         with patch("app.utils.business_hours.is_business_hours", return_value=False):
             message = UnifiedMessage(

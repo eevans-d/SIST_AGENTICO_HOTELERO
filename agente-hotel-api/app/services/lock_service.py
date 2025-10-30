@@ -2,7 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Optional, List, Any
 
 import redis.asyncio as redis
 
@@ -10,8 +10,37 @@ from ..core.logging import logger
 
 
 class LockService:
-    def __init__(self, redis_client: redis.Redis):
-        self.redis = redis_client
+    def __init__(self, redis_client: Optional[redis.Redis] = None):
+        # Fallback a Redis en memoria si no se provee cliente (útil para tests)
+        if redis_client is None:
+            class _InMemoryRedis:
+                def __init__(self):
+                    self._store: dict[str, Any] = {}
+
+                async def get(self, key: str):
+                    return self._store.get(key)
+
+                async def set(self, key: str, value: Any, ex: int | None = None, nx: bool | None = None):
+                    if nx and key in self._store:
+                        return False
+                    self._store[key] = value
+                    return True
+
+                async def delete(self, key: str):
+                    return 1 if self._store.pop(key, None) is not None else 0
+
+                async def ttl(self, key: str):
+                    return 600
+
+                async def scan_iter(self, match: str = "*"):
+                    import fnmatch
+                    for k in list(self._store.keys()):
+                        if fnmatch.fnmatch(k, match):
+                            yield k
+
+            self.redis = _InMemoryRedis()  # type: ignore[assignment]
+        else:
+            self.redis = redis_client
 
     def _get_lock_key(self, room_id: str, check_in: str, check_out: str) -> str:
         return f"lock:room:{room_id}:{check_in}:{check_out}"

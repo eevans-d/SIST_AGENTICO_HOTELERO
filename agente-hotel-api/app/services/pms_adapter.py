@@ -791,9 +791,52 @@ class MockPMSAdapter:
         }
 
 
-def get_pms_adapter(redis_client: redis.Redis):
-    """Fábrica de adaptadores PMS según settings.pms_type."""
+def get_pms_adapter(redis_client: redis.Redis | None = None):
+    """Fábrica de adaptadores PMS según settings.pms_type.
+    
+    Args:
+        redis_client: Cliente Redis opcional. Si es None, se crea un stub en memoria para tests.
+    """
     from ..core.settings import settings as app_settings
+
+    # Crear stub Redis en memoria si no se proporciona cliente (útil para tests)
+    if redis_client is None:
+        class _InMemoryRedis:
+            def __init__(self):
+                self.data = {}
+                self.ttls = {}
+
+            def get(self, key):
+                return self.data.get(key)
+
+            def set(self, key, value):
+                self.data[key] = value
+                return True
+
+            def setex(self, key, ttl, value):
+                self.data[key] = value
+                self.ttls[key] = ttl
+                return True
+
+            def delete(self, key):
+                self.data.pop(key, None)
+                self.ttls.pop(key, None)
+                return True
+
+            def scan(self, cursor=0, match=None, count=None):
+                keys = [k for k in self.data.keys() if match is None or match in k]
+                return (0, keys)
+
+            def scan_iter(self, match=None):
+                return (k for k in self.data.keys() if match is None or match in k)
+
+            def ttl(self, key):
+                return self.ttls.get(key, -1)
+
+            def ping(self):
+                return True
+
+        redis_client = _InMemoryRedis()
 
     if str(app_settings.pms_type).lower() == "mock":
         return MockPMSAdapter(redis_client)

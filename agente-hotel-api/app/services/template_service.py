@@ -29,6 +29,8 @@ TEXT_TEMPLATES_ES = {
     "escalated_to_staff": "Entendido, derivando tu consulta al personal de guardia. ⚡\nAlguien te contactará en breve.",
     # NEW: Location request response
     "location_info": "📍 Aquí está nuestra ubicación:",
+    # NEW: Business hours explicit info
+    "business_hours_info": "Nuestro horario de atención es: {business_hours}.",
     # NEW: Image sending
     "room_photo_caption": "✨ {room_type}\n💰 ${price}/noche\n👥 Capacidad: {guests} persona(s)\n\n¿Te gusta? ¡Reservala ahora!",
     # NEW: Late checkout templates
@@ -74,6 +76,8 @@ TEXT_TEMPLATES_EN = {
     "after_hours_weekend": "Thanks for your message. 😊\n\nIt's the weekend and our hours are reduced.\nWe'll get back to you on Monday first thing.\n\nFor emergencies, reply 'URGENT'.",
     "escalated_to_staff": "Understood, escalating your request to on-call staff. ⚡ Someone will contact you shortly.",
     "location_info": "📍 Here is our location:",
+    # NEW: Business hours explicit info
+    "business_hours_info": "Our business hours are: {business_hours}.",
     "room_photo_caption": "✨ {room_type}\n💰 ${price}/night\n👥 Capacity: {guests} guest(s)\n\nDo you like it? Book now!",
     "late_checkout_available": "Perfect! Late checkout available until {checkout_time} ✅\n\n💰 Extra fee: ${fee} (50% of daily rate)\n\nDo you confirm the late checkout?",
     "late_checkout_not_available": "Sorry, late checkout is not available. 😔\n\nThe room is reserved for another guest.\n\nStandard checkout time: {standard_time}\n\nNeed luggage storage? We offer it for free.",

@@ -3,7 +3,7 @@
 import json
 import asyncio
 from datetime import datetime, UTC
-from typing import Optional
+from typing import Optional, Any
 import redis.asyncio as redis
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 from prometheus_client import Gauge, Counter
@@ -76,7 +76,7 @@ class SessionManager:
 
     def __init__(
         self,
-        redis_client: redis.Redis,
+        redis_client: Optional[redis.Redis] = None,
         ttl: int = SESSION_TTL_DEFAULT,
         max_retries: int = MAX_RETRIES_DEFAULT,
         retry_delay_base: int = RETRY_DELAY_BASE,
@@ -90,7 +90,50 @@ class SessionManager:
             max_retries: Número máximo de reintentos (default: 3).
             retry_delay_base: Delay base para backoff exponencial (default: 1).
         """
-        self.redis = redis_client
+        # Fallback a un Redis en memoria si no se provee cliente (útil para tests)
+        if redis_client is None:
+            class _InMemoryRedis:
+                def __init__(self):
+                    self._store: dict[str, Any] = {}
+
+                async def get(self, key: str):
+                    return self._store.get(key)
+
+                async def set(self, key: str, value: Any, ex: int | None = None, nx: bool | None = None):
+                    if nx and key in self._store:
+                        return False
+                    self._store[key] = value
+                    return True
+
+                async def setex(self, key: str, ttl: int, value: Any):
+                    self._store[key] = value
+                    return True
+
+                async def delete(self, key: str):
+                    return 1 if self._store.pop(key, None) is not None else 0
+
+                async def ttl(self, key: str):
+                    # No expiración real en memoria; devolver un TTL fijo
+                    return 600
+
+                async def scan(self, cursor: int = 0, match: str = "*", count: int = 100):
+                    import fnmatch
+                    keys = [k for k in self._store.keys() if fnmatch.fnmatch(k, match)]
+                    # Sin paginación real; devolver todo y cursor 0
+                    return 0, keys[:count]
+
+                async def scan_iter(self, match: str = "*"):
+                    import fnmatch
+                    for k in list(self._store.keys()):
+                        if fnmatch.fnmatch(k, match):
+                            yield k
+
+                async def ping(self):
+                    return True
+
+            self.redis = _InMemoryRedis()  # type: ignore[assignment]
+        else:
+            self.redis = redis_client
         self.ttl = ttl
         self.max_retries = max_retries
         self.retry_delay_base = retry_delay_base

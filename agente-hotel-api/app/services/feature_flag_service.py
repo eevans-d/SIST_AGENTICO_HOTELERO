@@ -32,6 +32,8 @@ DEFAULT_FLAGS: Dict[str, bool] = {
     "humanize.es_ar.enabled": False,
     "humanize.consolidate_text.enabled": False,
     "humanize.delay.enabled": False,
+    # Confirmación de reserva con QR (opcional, desactivado por defecto)
+    "reservation.qr.enabled": False,
 }
 
 
