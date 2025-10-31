@@ -426,6 +426,33 @@ class SessionManager:
         except Exception as e:
             logger.warning(f"Failed to update active sessions metric: {e}")
 
+    async def get_session_data(self, user_id: str, tenant_id: Optional[str] = None) -> dict:
+        """
+        Obtiene los datos de sesión para un usuario (o {} si no existe).
+
+        Args:
+            user_id: Identificador del usuario.
+            tenant_id: Identificador del tenant (opcional).
+
+        Returns:
+            Dict con los datos de la sesión o {} si no existe/está corrupta.
+        """
+        session_key = self._get_session_key(user_id, tenant_id)
+        try:
+            data = await self.redis.get(session_key)
+            if not data:
+                return {}
+            if isinstance(data, (bytes, bytearray)):
+                data = data.decode("utf-8")
+            if isinstance(data, str):
+                return json.loads(data)
+            if isinstance(data, dict):
+                return data
+            # Formato inesperado
+            return {}
+        except Exception:
+            return {}
+
     async def cleanup_expired_sessions(self):
         """
         Background task para limpiar sesiones expiradas y actualizar métricas.
