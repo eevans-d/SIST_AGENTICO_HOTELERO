@@ -1044,6 +1044,12 @@ class Orchestrator:
                     room_number=str(room_number) if room_number else None,
                     hotel_name=settings.hotel_name,
                 )
+                logger.info(
+                    "orchestrator.qr_generation_attempt",
+                    booking_id=booking_id,
+                    guest_name=guest_name,
+                    result_success=bool(qr_result and qr_result.get("success")),
+                )
             except Exception as _qr_err:
                 logger.debug("qr_generation_failed", error=str(_qr_err))
                 qr_result = None
@@ -1553,6 +1559,11 @@ class Orchestrator:
         if message.tipo == "image" and (
             session.get("reservation_pending") or session.get("context", {}).get("reservation_pending")
         ):
+            logger.info(
+                "orchestrator.payment_heuristic_triggered",
+                has_pending_top=session.get("reservation_pending"),
+                has_pending_ctx=session.get("context", {}).get("reservation_pending"),
+            )
             return await self._handle_payment_confirmation(nlp_result, session, message)
 
         # Handle payment confirmation with image (special case)
