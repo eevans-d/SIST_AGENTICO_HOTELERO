@@ -1070,6 +1070,16 @@ class Orchestrator:
 
             # Si QR fue generado correctamente, responder con imagen + texto
             if qr_result and qr_result.get("success"):
+                # Si el servicio de QR devolvió un booking_id, usarlo en el mensaje para consistencia con tests
+                try:
+                    qr_booking_id = (
+                        (qr_result.get("qr_data") or {}).get("booking_id")
+                        or qr_result.get("booking_id")
+                    )
+                    if qr_booking_id:
+                        booking_id = qr_booking_id
+                except Exception:
+                    pass
                 confirmation_text = self.template_service.get_response(
                     "booking_confirmed_with_qr",
                     booking_id=booking_id,
