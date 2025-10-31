@@ -1310,8 +1310,11 @@ class Orchestrator:
                         "language": detected_language,
                     }
 
-                    # Return multilingual error message
-                    return {"response": self._get_technical_error_message(detected_language)}
+                    # Para mensajes con imagen (como comprobantes de pago), no cortamos el flujo aquí;
+                    # dejamos que el manejo posterior (heurísticas) procese el caso especial.
+                    if message.tipo != "image":
+                        # Return multilingual error message
+                        return {"response": self._get_technical_error_message(detected_language)}
 
             # Métrica de negocio: registrar intent detectado
             intent_obj = nlp_result.get("intent", {})
