@@ -988,14 +988,18 @@ class Orchestrator:
         getattr(message, "tenant_id", None)
 
         # Si el usuario envía una imagen de comprobante de pago y tiene una reserva pendiente
-        if session_data.get("reservation_pending"):
+        has_pending = session_data.get("reservation_pending") or session_data.get("context", {}).get(
+            "reservation_pending"
+        )
+        if has_pending:
             # Confirmación del pago (simulada) y generación de QR si está disponible
 
             # Datos base de la reserva desde sesión o valores mock
-            check_in_date = session_data.get("check_in_date", MOCK_CHECKIN_DATE)
-            check_out_date = session_data.get("check_out_date", MOCK_CHECKOUT_DATE)
-            room_number = session_data.get("room_number", MOCK_ROOM_NUMBER)
-            guest_name = session_data.get("guest_name", "Estimado Huésped")
+            ctx = session_data.get("context", {}) if isinstance(session_data, dict) else {}
+            check_in_date = session_data.get("check_in_date") or ctx.get("check_in_date") or MOCK_CHECKIN_DATE
+            check_out_date = session_data.get("check_out_date") or ctx.get("check_out_date") or MOCK_CHECKOUT_DATE
+            room_number = session_data.get("room_number") or ctx.get("room_number") or MOCK_ROOM_NUMBER
+            guest_name = session_data.get("guest_name") or ctx.get("guest_name") or "Estimado Huésped"
 
             # Calcular/obtener booking_id y persistirlo
             booking_id = session_data.get("booking_id") or session_data.get("reservation_id")
@@ -1047,7 +1051,10 @@ class Orchestrator:
             # Actualizar estado de sesión tras confirmar
             session_data["booking_confirmed"] = True
             session_data["qr_generated"] = bool(qr_result and qr_result.get("success"))
+            # Mantener consistencia en ambos niveles
             session_data["reservation_pending"] = False
+            if "context" in session_data and isinstance(session_data["context"], dict):
+                session_data["context"]["reservation_pending"] = False
             # Persistir cambios (ignorar errores en tests)
             try:
                 tenant_id = getattr(message, "tenant_id", None)
@@ -1543,7 +1550,9 @@ class Orchestrator:
         # Robust payment confirmation detection: if user sends an image and has
         # a pending reservation in session, treat it as payment confirmation
         # regardless of NLP intent (useful when NLP is in fallback mode during tests).
-        if message.tipo == "image" and session.get("reservation_pending"):
+        if message.tipo == "image" and (
+            session.get("reservation_pending") or session.get("context", {}).get("reservation_pending")
+        ):
             return await self._handle_payment_confirmation(nlp_result, session, message)
 
         # Handle payment confirmation with image (special case)
