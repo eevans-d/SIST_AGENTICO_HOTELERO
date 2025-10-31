@@ -1540,6 +1540,12 @@ class Orchestrator:
         # ============================================================
         # INTENT DISPATCH PATTERN
         # ============================================================
+        # Robust payment confirmation detection: if user sends an image and has
+        # a pending reservation in session, treat it as payment confirmation
+        # regardless of NLP intent (useful when NLP is in fallback mode during tests).
+        if message.tipo == "image" and session.get("reservation_pending"):
+            return await self._handle_payment_confirmation(nlp_result, session, message)
+
         # Handle payment confirmation with image (special case)
         if intent == "payment_confirmation" and message.tipo == "image":
             return await self._handle_payment_confirmation(nlp_result, session, message)
