@@ -1338,7 +1338,7 @@ class Orchestrator:
             # Get language from NLP result or message metadata
             response_language = nlp_result.get("language", message.metadata.get("detected_language", "es"))
 
-            if enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_VERY_LOW:
+            if enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_VERY_LOW and message.tipo != "image":
                 # Respuesta de bajo nivel de confianza agresiva
                 metrics_service.record_nlp_fallback("very_low_confidence")
                 nlp_fallbacks.inc()  # Métrica de negocio: fallback detectado
