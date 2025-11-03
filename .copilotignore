@@ -1,0 +1,59 @@
+# Excluir archivos pesados de contexto de Copilot
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql
+*.tar.gz
+*.gz
+*.zip
+*.bak
+*.backup
+
+# Directorios de backups
+backups/
+.backups/
+.flyio-backups/
+
+# Cache y temporales
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Docker y builds
+docker/
+node_modules/
+dist/
+build/
+*.egg-info/
+
+# Archivos de entorno y secretos
+.env
+.env.*
+!.env.example
+*.secret
+secrets/
+credentials/
+
+# Logs y auditoría
+logs/
+audit_logs/
+*.log
+
+# Archivos de base de datos
+*.db
+agente_hotel.db
+
+# Archivos grandes de documentación histórica
+archive/
+docs/archive/
+tests/legacy/
+
+# Herramientas
+tools/
