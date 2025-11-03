@@ -4,11 +4,10 @@ Business hours utilities for time-differentiated responses.
 """
 
 from datetime import datetime
-import os
 from zoneinfo import ZoneInfo
 from typing import Optional
 
-from ..core.settings import settings, Environment
+from ..core.settings import settings
 from ..core.logging import logger
 
 
@@ -38,20 +37,7 @@ def is_business_hours(
             # Send after-hours response
         ```
     """
-    # In test runs (pytest), always treat as business hours to keep tests deterministic
-    try:
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            return True
-    except Exception:
-        pass
-
-    # In development environment, always treat as business hours to keep tests deterministic
-    try:
-        if settings.environment == Environment.DEV:
-            return True
-    except Exception:
-        # If settings/environment is not accessible for any reason, fall back to normal logic
-        pass
+    # Importante: No forzar True en tests o DEV. Mantener lógica determinística basada en horario real.
 
     # Use defaults from settings
     start = start_hour if start_hour is not None else settings.business_hours_start

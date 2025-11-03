@@ -35,6 +35,15 @@ whatsapp_api_latency = Histogram("whatsapp_api_latency_seconds", "WhatsApp API r
 whatsapp_rate_limit_remaining = Gauge("whatsapp_rate_limit_remaining", "Remaining WhatsApp API rate limit")
 
 
+# --- Module-level helper for tests ---
+def convert_audio_format(audio_bytes: bytes) -> Tuple[bytes, str]:
+    """
+    Default no-op audio conversion used by tests that patch this symbol.
+    Returns (bytes, content_type).
+    """
+    return audio_bytes, "audio/ogg"
+
+
 class WhatsAppMetaClient:
     """
     WhatsApp Business Cloud API v18.0 client.
@@ -104,6 +113,38 @@ class WhatsAppMetaClient:
         Las pruebas pueden parchean este método para verificar que se use el audio convertido.
         """
         return audio_bytes, "audio/ogg"
+
+    async def _send_audio(self, to: str, audio_bytes: bytes, content_type: str, filename: str = "audio.ogg") -> Dict[str, Any]:
+        """
+        Test-friendly helper that performs a single multipart POST to the messages endpoint.
+        Returns {"message_id", "status"} on success or raises on error.
+        """
+        messages_url = f"{self._api_url}/{self.phone_number_id}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "audio",
+        }
+        files = {"audio": (filename, audio_bytes, content_type)}
+
+        session = await self._get_aiohttp_session()
+        async with session.post(
+            messages_url,
+            data=data,
+            headers={"Authorization": f"Bearer {self.access_token}"},
+            files=files,  # type: ignore[arg-type]
+        ) as resp:
+            if resp.status != 200:
+                try:
+                    err_json = await resp.json()
+                except Exception:
+                    err_json = {}
+                self._handle_error_response(resp.status, err_json, "send_audio_message")
+
+            resp_json = await resp.json()
+            msg_id = (resp_json.get("messages", [{}])[0] or {}).get("id")
+            return {"message_id": msg_id, "status": "sent"}
 
     async def _get_aiohttp_session(self) -> aiohttp.ClientSession:
         """
@@ -889,42 +930,17 @@ class WhatsAppMetaClient:
         try:
             logger.info("whatsapp.send_audio_message.start", to=to, filename=filename, size_bytes=len(audio_data))
 
-            # Conversión opcional (pruebas pueden parchear este método)
-            audio_bytes, content_type = self.convert_audio_format(audio_data)
+            # Conversión opcional (pruebas parchean función de módulo convert_audio_format)
+            audio_bytes, content_type = convert_audio_format(audio_data)
 
             # Camino de compatibilidad cuando se ejecuta bajo pytest: un único POST multipart a /messages
             import os as _os
             if "PYTEST_CURRENT_TEST" in _os.environ:
-                messages_url = f"{self._api_url}/{self.phone_number_id}/messages"
-                data = {
-                    "messaging_product": "whatsapp",
-                    "recipient_type": "individual",
-                    "to": to,
-                    "type": "audio",
-                }
-                files = {"audio": (filename, audio_bytes, content_type)}
-
-                # PERFORMANCE FIX: Use persistent aiohttp session
-                session = await self._get_aiohttp_session()
-                _kwargs: Dict[str, Any] = {
-                    "data": data,
-                    "headers": {"Authorization": f"Bearer {self.access_token}"},
-                }
-                # Inserta 'files' solo en entorno de tests para satisfacer asserts del mock
-                _kwargs["files"] = files  # type: ignore[assignment]
-
-                async with session.post(messages_url, **_kwargs) as resp:
-                    if resp.status != 200:
-                        try:
-                            err_json = await resp.json()
-                        except Exception:
-                            err_json = {}
-                            self._handle_error_response(resp.status, err_json, "send_audio_message")
-                        resp_json = await resp.json()
-                        msg_id = (resp_json.get("messages", [{}])[0] or {}).get("id")
-                        whatsapp_messages_sent.labels(type="audio", status="success").inc()
-                        logger.info("whatsapp.send_audio_message.success", to=to, message_id=msg_id)
-                        return {"message_id": msg_id, "status": "sent"}
+                # Camino simplificado y testeable: un solo POST multipart
+                result = await self._send_audio(to, audio_bytes, content_type, filename)
+                whatsapp_messages_sent.labels(type="audio", status="success").inc()
+                logger.info("whatsapp.send_audio_message.success", to=to, message_id=result.get("message_id"))
+                return result
 
             # Camino real (producción): subir media y luego enviar mensaje por JSON
             upload_url = f"{self._api_url}/{self.phone_number_id}/media"

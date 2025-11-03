@@ -669,17 +669,29 @@ class AudioCacheService:
                 cursor, keys = await redis_client.scan(cursor=cursor, match=f"{self.CACHE_PREFIX}*", count=100)
 
                 # Filtrar sólo claves de audio (sin metadata)
-                audio_keys = [k for k in keys if b":meta" not in k]
+                audio_keys: list = []
+                for k in keys:
+                    # Compatibilidad: keys pueden llegar como bytes o str
+                    if (isinstance(k, bytes) and b":meta" in k) or (isinstance(k, str) and ":meta" in k):
+                        continue
+                    audio_keys.append(k.decode() if isinstance(k, bytes) else k)
+
                 count += len(audio_keys)
 
-                # Calcular tamaño de las entradas encontradas
-                if audio_keys:
-                    # Obtener tamaños en pipeline para optimizar
-                    pipe = redis_client.pipeline()
-                    for key in audio_keys:
-                        pipe.strlen(key)
-                    sizes = await pipe.execute()
-                    total_size += sum(s for s in sizes if s)
+                # Calcular tamaño de las entradas encontradas usando memory_usage (mejor estimación)
+                for key in audio_keys:
+                    try:
+                        size = await redis_client.memory_usage(key)  # type: ignore[attr-defined]
+                        if size:
+                            total_size += int(size)
+                    except Exception:
+                        # Fallback a STRLEN si memory_usage no está disponible
+                        try:
+                            strlen = await redis_client.strlen(key)
+                            if strlen:
+                                total_size += int(strlen)
+                        except Exception:
+                            pass
 
                 if cursor == 0:
                     break
@@ -764,6 +776,38 @@ class AudioCacheService:
         except Exception as e:
             logger.warning(f"Error getting audio cache stats: {e}")
             return {"enabled": self._enabled, "error": str(e)}
+
+    # --- Métodos de compatibilidad con pruebas existentes ---
+    async def delete(self, text: str, voice: str = "default") -> bool:
+        """
+        Compatibilidad: alias de 'invalidate'. Elimina una entrada específica (datos y metadatos).
+
+        Returns True si alguna clave fue eliminada.
+        """
+        if not self._enabled:
+            return False
+
+        try:
+            redis_client = await self._get_redis()
+            cache_key = self._get_cache_key(text, voice)
+
+            deleted_data = await redis_client.delete(cache_key)
+            deleted_meta = await redis_client.delete(f"{cache_key}:meta")
+
+            success = int(deleted_data or 0) + int(deleted_meta or 0) > 0
+            if success:
+                AudioMetrics.record_operation("audio_cache", "invalidate")
+            return success
+        except Exception as e:
+            logger.warning(f"Error deleting audio cache: {e}")
+            AudioMetrics.record_error("audio_cache_invalidate_error")
+            return False
+
+    async def get_stats(self) -> Dict[str, Any]:
+        """
+        Compatibilidad: alias que delega a get_cache_stats pero usando el formato esperado por tests.
+        """
+        return await self.get_cache_stats()
 
     async def clear_cache(self) -> int:
         """

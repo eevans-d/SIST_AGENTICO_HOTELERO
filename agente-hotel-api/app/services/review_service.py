@@ -60,7 +60,7 @@ class ReviewRequest:
     last_sent: Optional[datetime] = None
     responded: bool = False
     review_submitted: bool = False
-    created_at: datetime = None
+    created_at: Optional[datetime] = None
 
     def __post_init__(self):
         if self.created_at is None:
@@ -206,7 +206,7 @@ class ReviewService:
             # Get stored request
             request = await self._get_review_request(guest_id)
             if not request:
-                return {"success": False, "error": "No review request found"}
+                return {"success": False, "error": "Review request not found"}
 
             # Check if ready to send (unless forced)
             if not force_send and not self._is_ready_to_send(request):
@@ -221,9 +221,7 @@ class ReviewService:
             message_content = await self._generate_review_message(request)
 
             # Send via WhatsApp
-            result = await self.whatsapp_client.send_message(
-                to=guest_id, content=message_content["text"], message_type="text"
-            )
+            result = await self.whatsapp_client.send_message(to=guest_id, text=message_content["text"])
 
             if result.get("success"):
                 # Update request tracking
@@ -283,9 +281,7 @@ class ReviewService:
                 # Send platform links
                 platform_message = await self._generate_platform_links_message(request)
 
-                await self.whatsapp_client.send_message(
-                    to=guest_id, content=platform_message["text"], message_type="text"
-                )
+                await self.whatsapp_client.send_message(to=guest_id, text=platform_message["text"])
 
                 self.analytics["responses_received"] += 1
                 self._update_segment_stats(request.segment, "responded")
@@ -302,9 +298,7 @@ class ReviewService:
                 request.responded = True
 
                 feedback_message = await self._generate_feedback_message(request)
-                await self.whatsapp_client.send_message(
-                    to=guest_id, content=feedback_message["text"], message_type="text"
-                )
+                await self.whatsapp_client.send_message(to=guest_id, text=feedback_message["text"])
 
                 logger.info(
                     "review_negative_response",
@@ -452,8 +446,7 @@ class ReviewService:
         template_name = f"review_request_{request.segment.value}"
         if request.sent_count > 0:
             template_name += "_reminder"
-
-        return await self.template_service.get_template(template_name, template_data)
+        return await self.template_service.get_template_dict(template_name, template_data)
 
     async def _generate_platform_links_message(self, request: ReviewRequest) -> Dict:
         """Genera mensaje con links a plataformas."""
@@ -463,14 +456,12 @@ class ReviewService:
             links.append(f"{platform.value.title()}: {url}")
 
         template_data = {"guest_name": request.guest_name, "platform_links": "\n".join(links)}
-
-        return await self.template_service.get_template("review_platform_links", template_data)
+        return await self.template_service.get_template_dict("review_platform_links", template_data)
 
     async def _generate_feedback_message(self, request: ReviewRequest) -> Dict:
         """Genera mensaje para feedback negativo."""
         template_data = {"guest_name": request.guest_name, "hotel_name": settings.hotel_name}
-
-        return await self.template_service.get_template("review_negative_feedback", template_data)
+        return await self.template_service.get_template_dict("review_negative_feedback", template_data)
 
     def _analyze_response(self, text: str) -> Dict:
         """Analiza respuesta del huésped."""
@@ -509,7 +500,7 @@ class ReviewService:
             "last_sent": request.last_sent.isoformat() if request.last_sent else None,
             "responded": request.responded,
             "review_submitted": request.review_submitted,
-            "created_at": request.created_at.isoformat(),
+            "created_at": (request.created_at or datetime.utcnow()).isoformat(),
         }
 
         await self.session_manager.set_session_data(request.guest_id, session_key, data)
@@ -518,8 +509,8 @@ class ReviewService:
         """Recupera solicitud de sesión."""
         session_key = f"review_request_{guest_id}"
         data = await self.session_manager.get_session_data(guest_id)
-
-        request_data = data.get(session_key)
+        context = data.get("context", {}) if isinstance(data, dict) else {}
+        request_data = context.get(session_key)
         if not request_data:
             return None
 

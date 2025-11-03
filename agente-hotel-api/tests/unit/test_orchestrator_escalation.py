@@ -21,7 +21,8 @@ def mock_pms_adapter():
 def mock_session_manager():
     """Mock del session manager"""
     manager = AsyncMock(spec=SessionManager)
-    manager.save_session = AsyncMock()
+    # Contrato actual usa update_session(user_id, data, tenant_id)
+    manager.update_session = AsyncMock()
     return manager
 
 
@@ -119,12 +120,11 @@ class TestEscalateToStaff:
                 session_data=sample_session,
             )
 
-            # Verificar que se guardó la sesión
-            mock_session_manager.save_session.assert_called_once()
-            call_args = mock_session_manager.save_session.call_args
-
-            # Verificar que la sesión tiene los flags de escalamiento
-            saved_data = call_args[1]["data"]
+            # Verificar que se guardó la sesión (update_session)
+            mock_session_manager.update_session.assert_called_once()
+            args, _kwargs = mock_session_manager.update_session.call_args
+            # args = (user_id, data, tenant_id)
+            saved_data = args[1]
             assert saved_data["escalated"] is True
             assert "escalation_timestamp" in saved_data
             assert saved_data["escalation_reason"] == "urgent_after_hours"
@@ -154,7 +154,7 @@ class TestEscalateToStaff:
         self, orchestrator, mock_session_manager, sample_message, sample_session, caplog
     ):
         """Test: Manejo de fallo al guardar sesión"""
-        mock_session_manager.save_session = AsyncMock(side_effect=Exception("DB error"))
+        mock_session_manager.update_session = AsyncMock(side_effect=Exception("DB error"))
 
         with patch("app.services.orchestrator.alert_manager"):
             # No debe fallar aunque el guardado de sesión falle

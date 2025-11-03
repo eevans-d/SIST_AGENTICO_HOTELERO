@@ -251,6 +251,20 @@ class TemplateService:
             template = _TEXT_TEMPLATES_BY_LANG.get("es", {}).get(template_name, "")
         return template.format(**kwargs)
 
+    def get_template(self, template_name: str, data: Dict[str, Any] | None = None) -> str:
+        """Compatibilidad: retorna texto formateado (sincrónico).
+
+        Tests e integraciones existentes llaman a get_template y esperan un string.
+        """
+        params = data or {}
+        return self.get_response(template_name, **params)
+
+    async def get_template_dict(self, template_name: str, data: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        """Versión asíncrona que retorna un dict {'text': ...} para servicios que lo requieren."""
+        params = data or {}
+        text = self.get_response(template_name, **params)
+        return {"text": text}
+
     def get_interactive_buttons(self, template_name: str, **kwargs) -> Dict[str, Any]:
         """Obtiene una plantilla para mensaje interactivo con botones (i18n con fallback)."""
         lang = self._language
