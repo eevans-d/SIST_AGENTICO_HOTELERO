@@ -18,7 +18,8 @@ import io
 import base64
 
 from app.core.settings import get_settings
-from app.core.redis_client import get_redis_client
+from app.core.redis_client import get_redis
+from app.security.password_policy import get_password_policy, PasswordPolicyViolation
 from prometheus_client import Counter, Histogram, Gauge
 
 logger = logging.getLogger(__name__)
@@ -198,40 +199,37 @@ class AdvancedJWTAuth:
     async def initialize(self):
         """Initialize Redis connection and load revoked tokens"""
         try:
-            self.redis_client = await get_redis_client()
+            self.redis_client = await get_redis()
             logger.info("JWT Auth Redis connection established")
         except Exception as e:
             logger.error(f"Failed to initialize JWT Auth Redis: {e}")
             raise
 
     def hash_password(self, password: str) -> str:
-        """Hash password using bcrypt"""
+        """Hash password using bcrypt - DEPRECATED: Use password_policy.hash_password()"""
+        logger.warning("Using deprecated hash_password in advanced_jwt_auth. Migrate to password_policy")
         return self.pwd_context.hash(password)
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify password against hash"""
+        """Verify password against hash - DEPRECATED: Use password_policy.verify_password()"""
         return self.pwd_context.verify(plain_password, hashed_password)
 
     def validate_password_strength(self, password: str) -> List[str]:
-        """Validate password strength"""
-        errors = []
+        """
+        Validate password strength using PasswordPolicy.
 
-        if len(password) < self.password_min_length:
-            errors.append(f"Password must be at least {self.password_min_length} characters long")
+        DEPRECATED: Use password_policy.validate_password_strength() directly.
+        This method maintained for backward compatibility.
 
-        if not any(c.isupper() for c in password):
-            errors.append("Password must contain at least one uppercase letter")
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        logger.warning("Using deprecated validate_password_strength. Migrate to password_policy module")
 
-        if not any(c.islower() for c in password):
-            errors.append("Password must contain at least one lowercase letter")
+        policy = get_password_policy()
+        is_valid, violations = policy.validate_password_strength(password)
 
-        if not any(c.isdigit() for c in password):
-            errors.append("Password must contain at least one digit")
-
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-            errors.append("Password must contain at least one special character")
-
-        return errors
+        return violations if not is_valid else []
 
     def generate_mfa_secret(self) -> str:
         """Generate MFA secret for TOTP"""

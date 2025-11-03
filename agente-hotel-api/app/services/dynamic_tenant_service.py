@@ -2,11 +2,12 @@ from __future__ import annotations
 import asyncio
 from typing import Dict, Optional, List
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from ..core.database import AsyncSessionFactory, engine
 from ..core.logging import logger
 from prometheus_client import Counter, Gauge, Histogram
 from ..models.lock_audit import Base
-from ..models.tenant import Tenant, TenantUserIdentifier
+from ..models.tenant import Tenant
 
 
 class DynamicTenantService:
@@ -60,7 +61,16 @@ class DynamicTenantService:
             async with AsyncSessionFactory() as session:  # type: ignore
                 mapping: Dict[str, str] = {}
                 tenants_meta: Dict[str, dict] = {}
-                tenants = (await session.execute(select(Tenant).where(Tenant.status == "active"))).scalars().all()
+
+                # PERFORMANCE FIX: Use selectinload to avoid N+1 queries
+                # Single query with eager loading of identifiers relationship
+                stmt = (
+                    select(Tenant)
+                    .options(selectinload(Tenant.identifiers))
+                    .where(Tenant.status == "active")
+                )
+                tenants = (await session.execute(stmt)).unique().scalars().all()
+
                 for t in tenants:
                     tenants_meta[t.tenant_id] = {
                         "name": t.name,
@@ -70,11 +80,11 @@ class DynamicTenantService:
                         "business_hours_end": getattr(t, "business_hours_end", None),
                         "business_hours_timezone": getattr(t, "business_hours_timezone", None),
                     }
-                ids = (await session.execute(select(TenantUserIdentifier))).scalars().all()
-                for i in ids:
-                    if i.tenant and i.tenant.status == "active":
-                        norm = self._normalize_identifier(str(i.identifier))
-                        mapping[norm] = i.tenant.tenant_id
+                    # Process pre-loaded identifiers (no lazy loading)
+                    for identifier in t.identifiers:
+                        norm = self._normalize_identifier(str(identifier.identifier))
+                        mapping[norm] = t.tenant_id
+
                 self._mapping = mapping
                 self._tenants_meta = tenants_meta
                 # Métricas gauges

@@ -1,7 +1,6 @@
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock
-from prometheus_client import REGISTRY
 
 from app.services.orchestrator import Orchestrator, escalations_total
 from app.models.unified_message import UnifiedMessage

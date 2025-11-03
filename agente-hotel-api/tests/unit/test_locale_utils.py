@@ -1,4 +1,3 @@
-import pytest
 from datetime import date, datetime
 
 from app.utils.locale_utils import format_currency, format_date_locale

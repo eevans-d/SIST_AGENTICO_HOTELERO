@@ -5,13 +5,27 @@ from fastapi import HTTPException
 from ..services.dynamic_tenant_service import dynamic_tenant_service
 from ..services.audio_processor import AudioProcessor
 from ..models.tenant import Tenant, TenantUserIdentifier
+from ..models.admin_schemas import (
+    TenantCreateSchema,
+    TenantUpdateSchema,
+    TenantIdentifierCreateSchema,
+    FeatureFlagUpdateSchema,
+    ConfigUpdateSchema,
+    ReviewRequestSchema,
+    ReviewScheduleSchema,
+    ReviewMarkSubmittedSchema,
+    UserCreateSchema,
+    UserUpdateSchema,
+    SessionCleanupSchema,
+    LockForceReleaseSchema,
+)
 from ..core.database import AsyncSessionFactory
 from sqlalchemy import select
 from ..core.security import get_current_user
 from ..core.ratelimit import limit
 from ..services.feature_flag_service import DEFAULT_FLAGS
 from ..core.redis_client import get_redis
-from ..services.feature_flag_service import get_feature_flag_service, DEFAULT_FLAGS
+from ..services.feature_flag_service import get_feature_flag_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_current_user)])
 
@@ -96,40 +110,47 @@ async def refresh_tenants(request: Request):
 
 @router.post("/tenants")
 @limit("30/minute")
-async def create_tenant(request: Request, body: dict):
-    tenant_id = body.get("tenant_id")
-    name = body.get("name")
-    if not tenant_id or not name:
-        raise HTTPException(status_code=400, detail="tenant_id y name requeridos")
+async def create_tenant(request: Request, body: TenantCreateSchema):
+    """Create a new tenant with validation"""
     async with AsyncSessionFactory() as session:  # type: ignore
-        exists = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
+        exists = (await session.execute(select(Tenant).where(Tenant.tenant_id == body.tenant_id))).scalar_one_or_none()
         if exists:
             raise HTTPException(status_code=409, detail="Tenant ya existe")
-        t = Tenant(tenant_id=tenant_id, name=name)
+
+        t = Tenant(
+            tenant_id=body.tenant_id,
+            name=body.name,
+            status=body.status,
+            business_hours_start=body.business_hours_start,
+            business_hours_end=body.business_hours_end,
+            business_hours_timezone=body.business_hours_timezone,
+        )
         session.add(t)
         await session.commit()
+
     await dynamic_tenant_service.refresh()
-    return {"status": "created", "tenant_id": tenant_id}
+    return {"status": "created", "tenant_id": body.tenant_id}
 
 
 @router.post("/tenants/{tenant_id}/identifiers")
-async def add_identifier(tenant_id: str, body: dict):
-    identifier = body.get("identifier")
-    if not identifier:
-        raise HTTPException(status_code=400, detail="identifier requerido")
+async def add_identifier(tenant_id: str, body: TenantIdentifierCreateSchema):
+    """Add identifier to tenant with validation"""
     async with AsyncSessionFactory() as session:  # type: ignore
         tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
+
         existing = (
-            await session.execute(select(TenantUserIdentifier).where(TenantUserIdentifier.identifier == identifier))
+            await session.execute(select(TenantUserIdentifier).where(TenantUserIdentifier.identifier == body.identifier))
         ).scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=409, detail="Identifier ya asignado")
-        session.add(TenantUserIdentifier(tenant_id=tenant.id, identifier=identifier))
+
+        session.add(TenantUserIdentifier(tenant_id=tenant.id, identifier=body.identifier))
         await session.commit()
+
     await dynamic_tenant_service.refresh()
-    return {"status": "identifier_added", "tenant_id": tenant_id, "identifier": identifier}
+    return {"status": "identifier_added", "tenant_id": tenant_id, "identifier": body.identifier}
 
 
 @router.delete("/tenants/{tenant_id}/identifiers/{identifier}")
@@ -155,68 +176,29 @@ async def remove_identifier(tenant_id: str, identifier: str):
 
 
 @router.patch("/tenants/{tenant_id}")
-async def update_tenant(tenant_id: str, body: dict):
-    """
-    Actualiza estado y/o horario comercial del tenant.
-
-    Body opcional:
-      - status: "active" | "inactive"
-      - business_hours_start: int (0-23)
-      - business_hours_end: int (1-24)
-      - business_hours_timezone: str (IANA TZ)
-    """
+async def update_tenant(tenant_id: str, body: TenantUpdateSchema):
+    """Update tenant properties with validation"""
     async with AsyncSessionFactory() as session:  # type: ignore
         tenant = (await session.execute(select(Tenant).where(Tenant.tenant_id == tenant_id))).scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
 
-        if "status" in body:
-            status = body.get("status")
-            if status not in ("active", "inactive"):
-                raise HTTPException(status_code=400, detail="status inválido")
-            tenant.status = status  # type: ignore[assignment]
-
-        if "business_hours_start" in body:
-            try:
-                raw = body.get("business_hours_start")
-                if raw is None:
-                    raise ValueError
-                bh_start = int(raw)
-                if not (0 <= bh_start <= 23):
-                    raise ValueError
-                tenant.business_hours_start = bh_start  # type: ignore[attr-defined]
-            except Exception:
-                raise HTTPException(status_code=400, detail="business_hours_start inválido")
-
-        if "business_hours_end" in body:
-            try:
-                raw = body.get("business_hours_end")
-                if raw is None:
-                    raise ValueError
-                bh_end = int(raw)
-                if not (1 <= bh_end <= 24):
-                    raise ValueError
-                tenant.business_hours_end = bh_end  # type: ignore[attr-defined]
-            except Exception:
-                raise HTTPException(status_code=400, detail="business_hours_end inválido")
-
-        if "business_hours_timezone" in body:
-            bh_tz = body.get("business_hours_timezone")
-            if not isinstance(bh_tz, str) or not bh_tz:
-                raise HTTPException(status_code=400, detail="business_hours_timezone inválido")
-            tenant.business_hours_timezone = bh_tz  # type: ignore[attr-defined]
+        # Update only provided fields
+        if body.name is not None:
+            tenant.name = body.name  # type: ignore[assignment]
+        if body.status is not None:
+            tenant.status = body.status  # type: ignore[assignment]
+        if body.business_hours_start is not None:
+            tenant.business_hours_start = body.business_hours_start  # type: ignore[attr-defined]
+        if body.business_hours_end is not None:
+            tenant.business_hours_end = body.business_hours_end  # type: ignore[attr-defined]
+        if body.business_hours_timezone is not None:
+            tenant.business_hours_timezone = body.business_hours_timezone  # type: ignore[attr-defined]
 
         await session.commit()
 
     await dynamic_tenant_service.refresh()
-    return {
-        "status": "updated",
-        "tenant_id": tenant_id,
-        "new_status": getattr(tenant, "status", None),
-        "business_hours_start": getattr(tenant, "business_hours_start", None),
-        "business_hours_end": getattr(tenant, "business_hours_end", None),
-        "business_hours_timezone": getattr(tenant, "business_hours_timezone", None),
-    }
+    return {"status": "updated", "tenant_id": tenant_id}
 
 
 # Endpoints para gestión de caché de audio
@@ -270,26 +252,12 @@ async def trigger_audio_cache_cleanup(request: Request):
 
 @router.post("/reviews/send")
 @limit("10/minute")
-async def send_review_request(request: Request, body: dict):
-    """
-    Envía una solicitud de reseña manualmente a un huésped.
-
-    Body:
-        {
-            "guest_id": "5491112345678",
-            "force_send": false
-        }
-    """
+async def send_review_request(request: Request, body: ReviewRequestSchema):
+    """Send review request to guest with validation"""
     from ..services.review_service import get_review_service
 
-    guest_id = body.get("guest_id")
-    if not guest_id:
-        raise HTTPException(status_code=400, detail="guest_id es requerido")
-
-    force_send = body.get("force_send", False)
-
     review_service = get_review_service()
-    result = await review_service.send_review_request(guest_id, force_send)
+    result = await review_service.send_review_request(body.guest_id, body.force_send)
 
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to send review request"))
@@ -299,49 +267,24 @@ async def send_review_request(request: Request, body: dict):
 
 @router.post("/reviews/schedule")
 @limit("10/minute")
-async def schedule_review_request_admin(request: Request, body: dict):
-    """
-    Programa una solicitud de reseña para envío diferido.
-
-    Body:
-        {
-            "guest_id": "5491112345678",
-            "guest_name": "Juan Pérez",
-            "booking_id": "HTL-001",
-            "checkout_date": "2025-01-10T12:00:00Z",
-            "segment": "couple",  # couple|business|family|solo|group|vip
-            "language": "es"
-        }
-    """
+async def schedule_review_request_admin(request: Request, body: ReviewScheduleSchema):
+    """Schedule review request with validation"""
     from ..services.review_service import get_review_service, GuestSegment
-    from datetime import datetime
-
-    required_fields = ["guest_id", "guest_name", "booking_id", "checkout_date"]
-    for field in required_fields:
-        if field not in body:
-            raise HTTPException(status_code=400, detail=f"{field} es requerido")
 
     # Parse segment
-    segment_str = body.get("segment", "couple")
     try:
-        segment = GuestSegment(segment_str)
+        segment = GuestSegment(body.segment)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Segment inválido: {segment_str}")
-
-    # Parse checkout date
-    try:
-        checkout_date = datetime.fromisoformat(body["checkout_date"].replace("Z", "+00:00"))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="checkout_date debe ser ISO 8601")
+        raise HTTPException(status_code=400, detail=f"Segment inválido: {body.segment}")
 
     review_service = get_review_service()
     result = await review_service.schedule_review_request(
-        guest_id=body["guest_id"],
-        guest_name=body["guest_name"],
-        booking_id=body["booking_id"],
-        checkout_date=checkout_date,
+        guest_id=body.guest_id,
+        guest_name=body.guest_name,
+        booking_id=body.booking_id,
+        checkout_date=body.checkout_date,
         segment=segment,
-        language=body.get("language", "es"),
+        language=body.language,
     )
 
     return result
@@ -349,31 +292,15 @@ async def schedule_review_request_admin(request: Request, body: dict):
 
 @router.post("/reviews/mark-submitted")
 @limit("30/minute")
-async def mark_review_submitted_admin(request: Request, body: dict):
-    """
-    Marca una reseña como enviada (cuando se confirma externamente).
-
-    Body:
-        {
-            "guest_id": "5491112345678",
-            "platform": "google"  # google|tripadvisor|booking|expedia|facebook
-        }
-    """
+async def mark_review_submitted_admin(request: Request, body: ReviewMarkSubmittedSchema):
+    """Mark review as submitted with validation"""
     from ..services.review_service import get_review_service, ReviewPlatform
 
-    guest_id = body.get("guest_id")
-    platform_str = body.get("platform")
-
-    if not guest_id or not platform_str:
-        raise HTTPException(status_code=400, detail="guest_id y platform son requeridos")
-
-    try:
-        platform = ReviewPlatform(platform_str)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Platform inválida: {platform_str}")
+    # Default platform to google (can be extended in schema)
+    platform = ReviewPlatform("google")
 
     review_service = get_review_service()
-    result = await review_service.mark_review_submitted(guest_id, platform)
+    result = await review_service.mark_review_submitted(body.guest_id, platform)
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result.get("error", "Review request not found"))

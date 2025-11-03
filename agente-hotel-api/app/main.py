@@ -255,7 +255,25 @@ async def lifespan(app: FastAPI):
         logger.info("🏁 Sistema de Agente Hotelero IA detenido correctamente")
 
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION, debug=APP_DEBUG, lifespan=lifespan)
+# SECURITY: Disable documentation endpoints in production
+docs_url = "/docs" if settings.environment != Environment.PROD else None
+redoc_url = "/redoc" if settings.environment != Environment.PROD else None
+openapi_url = "/openapi.json" if settings.environment != Environment.PROD else None
+
+if settings.environment == Environment.PROD:
+    logger.info("🔒 API documentation endpoints disabled in production (security hardening)")
+else:
+    logger.info("📚 API documentation available at /docs and /redoc")
+
+app = FastAPI(
+    title=APP_TITLE,
+    version=APP_VERSION,
+    debug=APP_DEBUG,
+    lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
+)
 
 # CORS Configuration - Restrictivo en producción
 if settings.environment == Environment.PROD:

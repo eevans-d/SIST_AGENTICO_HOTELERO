@@ -983,7 +983,6 @@ class Orchestrator:
         Returns:
             Dict con response_type y content según si hay QR o no
         """
-        import time
 
         getattr(message, "tenant_id", None)
 

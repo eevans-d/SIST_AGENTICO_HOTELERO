@@ -21,6 +21,7 @@ class Tenant(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     identifiers = relationship("TenantUserIdentifier", back_populates="tenant", cascade="all,delete-orphan")
+    users = relationship("User", back_populates="tenant")
 
 
 class TenantUserIdentifier(Base):

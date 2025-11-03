@@ -107,7 +107,7 @@ async def test_admin_tenants_e2e_and_metrics(monkeypatch):
 
         # 2) Add identifier and refresh cache implicitly
         identifier = "+549110001111"
-        r = await ac.post(f"/admin/tenants/hotel_e2e/identifiers", headers=headers, json={"identifier": identifier})
+        r = await ac.post("/admin/tenants/hotel_e2e/identifiers", headers=headers, json={"identifier": identifier})
         assert r.status_code == 200, r.text
 
         # 3) List tenants

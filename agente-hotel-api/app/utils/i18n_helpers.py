@@ -7,8 +7,7 @@ Proporciona helpers para formatear valores según el idioma/región seleccionada
 """
 
 from datetime import datetime, date
-from typing import Union, Literal
-import locale as std_locale
+from typing import Union
 
 # Configuraciones de formato por idioma
 _LOCALE_CONFIGS = {

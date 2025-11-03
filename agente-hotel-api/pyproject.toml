@@ -45,6 +45,8 @@ pre-commit = "^3.7.1"
 aiosqlite = "^0.21.0"
 mypy = "^1.11.2"
 alembic = "^1.13.2"
+pyotp = "^2.9.0"
+locust = "^2.42.1"
 
 [build-system]
 requires = ["poetry-core"]

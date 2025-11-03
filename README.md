@@ -1,42 +1,51 @@
 # Sistema Agente Hotelero IA 🏨🤖
 
+> **⚠️ IMPORTANTE**: Este README está desactualizado. **Consultar [`MASTER_PROJECT_GUIDE.md`](./MASTER_PROJECT_GUIDE.md)** para información actual del proyecto.
+
 [![Fly.io](https://img.shields.io/badge/Fly.io-gru%20(S%C3%A3o%20Paulo)-8a2be2)](https://fly.io/apps/agente-hotel-api)
 [![Live status](https://img.shields.io/website?url=https%3A%2F%2Fagente-hotel-api.fly.dev%2Fhealth%2Flive&label=app%20health&up_message=alive&down_message=down)](https://agente-hotel-api.fly.dev/health/live)
-[![Open app](https://img.shields.io/badge/URL-agente--hotel--api.fly.dev-0aa)](https://agente-hotel-api.fly.dev)
-
 [![Deploy](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml/badge.svg)](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml)
 
+**Sistema multi-servicio de recepcionista hotelera con IA** - WhatsApp/Gmail con integración QloApps PMS.
 
+## 📋 Quick Links
 
-**Sistema multi-servicio de recepcionista hotelera con IA** que maneja comunicaciones de huéspedes vía WhatsApp, Gmail y otros canales, con integración a QloApps PMS.![CI](https://img.shields.io/badge/CI-passing-brightgreen)
+- **🎯 [Master Project Guide](./MASTER_PROJECT_GUIDE.md)** - Guía única consolidada (roadmap + arquitectura + checklist)
+- **🚀 [Roadmap to Production](./ROADMAP_TO_PRODUCTION.md)** - Plan detallado 14 días
+- **�️ [Copilot Instructions](./.github/copilot-instructions.md)** - Guía para AI agents
+- **📖 [API Documentation](./agente-hotel-api/README.md)** - Setup técnico + comandos
 
-[![Tests](https://img.shields.io/badge/tests-197%2B%20passing-success)](agente-hotel-api/tests/)
+## � Estado Actual (Nov 3, 2025)
 
----[![Coverage](https://img.shields.io/badge/coverage-85%25%2B-brightgreen)](agente-hotel-api/tests/)
+```
+Score: 80/100 → Target: 85/100 (Nov 17)
+Tests: 43/891 pasando (21 password + 22 schemas)
+Coverage: 31% → Target: 70%+
+Deployment Readiness: 8.9/10
+```
 
-[![Features](https://img.shields.io/badge/features-6%2F6%20complete-blue)](agente-hotel-api/docs/features/)
+**Progreso Hardening**:
+- ✅ Día 1: Password Policy (21 tests)
+- ✅ Día 2: Pydantic Schemas (22 tests)  
+- 🔄 Día 3: Test Coverage 70%+ (en progreso)
+- ⏳ Días 4-14: Chaos tests, OWASP, load testing, deployment
 
-## 📊 Estado del Proyecto[![Status](https://img.shields.io/badge/status-production%20ready-green)](agente-hotel-api/docs/deployment/)
+## 🏗️ Arquitectura
 
-[![Documentation](https://img.shields.io/badge/docs-organized-blue)](agente-hotel-api/docs/)
+**7 Servicios Docker Compose**:
+- `agente-api:8002` - FastAPI async app
+- `postgres:5432` - Agent database
+- `redis:6379` - Cache + rate limiting
+- `prometheus:9090` - Metrics
+- `grafana:3000` - Dashboards
+- `alertmanager:9093` - Alerting
+- `jaeger:16686` - Tracing
 
-**Progreso Global:** 90% Completado (18/20 prompts) 🚀  
+**Tech Stack**: Python 3.12.3, FastAPI, SQLAlchemy, Redis, Prometheus, Jaeger
 
-**Última Actualización:** 15 de Octubre de 2025**Estado**: En producción  
+---
 
-**Última actualización**: 10 de octubre, 2025  
-
-```**Versión**: 1.0.0  
-
-FASE 1: ANÁLISIS              ████████████████████  100% ✅**Features Completadas**: 6/6 (100%) ✅
-
-FASE 2: TESTING CORE          ████████████████████  100% ✅
-
-FASE 3: SECURITY              ████████████████████  100% ✅**Sistema integral de IA para hoteles** - Automatización completa de comunicaciones hoteleras mediante inteligencia artificial. Solución multi-canal (WhatsApp, Gmail) con integración nativa a QloApps PMS y arquitectura de microservicios robusta.
-
-FASE 4: PERFORMANCE           ████████████████████  100% ✅
-
-FASE 5: OPERATIONS            ██████░░░░░░░░░░░░░░   33% ⏳---
+**📖 Para información detallada, ver [`MASTER_PROJECT_GUIDE.md`](./MASTER_PROJECT_GUIDE.md)**
 
 
 

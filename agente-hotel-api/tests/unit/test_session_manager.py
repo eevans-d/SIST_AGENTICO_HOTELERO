@@ -1,11 +1,10 @@
-import asyncio
 import json
 from datetime import datetime, UTC
 
 import pytest
 import pytest_asyncio
 
-from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.services.session_manager import (
     SessionManager,

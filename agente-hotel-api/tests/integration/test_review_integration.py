@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.unified_message import UnifiedMessage
-from app.models.schemas import GuestSegment
+from app.services.review_service import GuestSegment
 from app.core.settings import settings
 
 
@@ -309,8 +309,7 @@ class TestReviewRequestsIntegrationE2E:
     @pytest.mark.asyncio
     async def test_platform_recommendations_by_segment(self):
         """Test platform recommendations match guest segments."""
-        from app.services.review_service import get_review_service
-        from app.models.schemas import GuestSegment
+        from app.services.review_service import get_review_service, GuestSegment
 
         review_service = await get_review_service()
 

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from ..models.unified_message import UnifiedMessage
 from ..exceptions.pms_exceptions import ChannelSpoofingError
@@ -10,6 +10,23 @@ from .feature_flag_service import DEFAULT_FLAGS
 from .metrics_service import metrics_service
 
 logger = logging.getLogger(__name__)
+
+
+# SECURITY: Custom exception for tenant isolation violations
+class TenantIsolationError(Exception):
+    """Raised when a user attempts to access resources from another tenant"""
+    def __init__(
+        self,
+        message: str,
+        user_id: Optional[str] = None,
+        requested_tenant_id: Optional[str] = None,
+        actual_tenant_id: Optional[str] = None
+    ):
+        super().__init__(message)
+        self.user_id = user_id
+        self.requested_tenant_id = requested_tenant_id
+        self.actual_tenant_id = actual_tenant_id
+
 
 # BLOQUEANTE 2: Metadata whitelist - Only allow specific keys
 ALLOWED_METADATA_KEYS = {
@@ -65,17 +82,17 @@ class MessageGateway:
     ) -> None:
         """
         Validate that user_id belongs to tenant_id.
-        
+
         BLOQUEANTE 1: Tenant Isolation Validation
         Prevents multi-tenant data confusion attacks where attacker claims
         to be a user from a different tenant.
-        
+
         Args:
             user_id: The user claiming to send the message
             tenant_id: The tenant this user should belong to
             channel: The channel (whatsapp, gmail, etc)
             correlation_id: Request correlation ID for logging
-            
+
         Raises:
             TenantIsolationError: If user does not belong to tenant
         """
@@ -87,26 +104,77 @@ class MessageGateway:
                 correlation_id=correlation_id
             )
             return
-        
-        # In a real implementation, this would query the DB:
-        # user_tenant = await self.db.execute(
-        #     select(TenantUserIdentifier.tenant_id)
-        #     .where(
-        #         (TenantUserIdentifier.user_id == user_id) &
-        #         (TenantUserIdentifier.channel == channel)
-        #     )
-        # )
-        # if user_tenant and user_tenant != tenant_id:
-        #     raise TenantIsolationError(...)
-        
-        # For now, log validation attempt (DB integration will be added separately)
-        logger.info(
-            "tenant_isolation_validation_passed",
-            user_id=user_id,
-            tenant_id=tenant_id,
-            channel=channel,
-            correlation_id=correlation_id
-        )
+
+        # SECURITY FIX: Query DB to validate user belongs to tenant
+        try:
+            from app.core.database import AsyncSessionFactory
+            from app.models.tenant import TenantUserIdentifier, Tenant
+            from sqlalchemy import select
+
+            async with AsyncSessionFactory() as session:
+                # Query to check if user_id + channel match tenant_id
+                stmt = (
+                    select(Tenant.tenant_id)
+                    .join(TenantUserIdentifier)
+                    .where(
+                        (TenantUserIdentifier.identifier == user_id) &
+                        (Tenant.status == "active")
+                    )
+                )
+                result = await session.execute(stmt)
+                actual_tenant_id = result.scalar_one_or_none()
+
+                if actual_tenant_id is None:
+                    # User not found in any tenant - allow with warning
+                    logger.warning(
+                        "tenant_isolation_user_not_found",
+                        user_id=user_id,
+                        requested_tenant_id=tenant_id,
+                        channel=channel,
+                        correlation_id=correlation_id
+                    )
+                    return
+
+                if actual_tenant_id != tenant_id:
+                    # User belongs to different tenant - SECURITY VIOLATION
+                    logger.critical(
+                        "tenant_isolation_violation_detected",
+                        user_id=user_id,
+                        requested_tenant_id=tenant_id,
+                        actual_tenant_id=actual_tenant_id,
+                        channel=channel,
+                        correlation_id=correlation_id
+                    )
+                    raise TenantIsolationError(
+                        f"User {user_id} does not belong to tenant {tenant_id}. "
+                        f"Actual tenant: {actual_tenant_id}",
+                        user_id=user_id,
+                        requested_tenant_id=tenant_id,
+                        actual_tenant_id=actual_tenant_id
+                    )
+
+                # Validation passed
+                logger.info(
+                    "tenant_isolation_validation_passed",
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    channel=channel,
+                    correlation_id=correlation_id
+                )
+        except TenantIsolationError:
+            # Re-raise security violations
+            raise
+        except Exception as e:
+            # DB errors should not block the request, but log critical error
+            logger.error(
+                "tenant_isolation_validation_failed",
+                user_id=user_id,
+                tenant_id=tenant_id,
+                error=str(e),
+                correlation_id=correlation_id
+            )
+            # In production, you might want to raise here to be strict
+            # For now, we allow but log the error
 
     def _get_correlation_id(self, webhook_payload: Dict[str, Any]) -> str:
         """Extract or generate correlation ID for request tracing."""
@@ -120,29 +188,29 @@ class MessageGateway:
     ) -> Dict[str, Any]:
         """
         Filter metadata to only allow whitelisted keys.
-        
+
         BLOQUEANTE 2: Metadata Injection Prevention
         Prevents attackers from injecting malicious keys like:
         - admin, bypass_validation, override_tenant_id, role, etc.
-        
+
         Args:
             raw_metadata: Raw metadata from webhook payload
             user_id: User ID for logging
             correlation_id: Request correlation ID
-            
+
         Returns:
             Filtered metadata dict with only whitelisted keys
         """
         if not raw_metadata or not isinstance(raw_metadata, dict):
             return {}
-        
+
         # Filter to whitelisted keys
         filtered = {
             key: value
             for key, value in raw_metadata.items()
             if key in ALLOWED_METADATA_KEYS
         }
-        
+
         # Log if unexpected keys were dropped
         unexpected_keys = set(raw_metadata.keys()) - ALLOWED_METADATA_KEYS
         if unexpected_keys:
@@ -150,7 +218,7 @@ class MessageGateway:
                 f"metadata_keys_dropped: {list(unexpected_keys)} "
                 f"(user_id={user_id}, correlation_id={correlation_id})"
             )
-        
+
         # Validate value types (only scalar values allowed)
         final_metadata = {}
         for key, value in filtered.items():
@@ -166,7 +234,7 @@ class MessageGateway:
                 logger.warning(
                     f"metadata_value_type_invalid: key={key}, type={type(value).__name__} (user_id={user_id})"
                 )
-        
+
         return final_metadata
 
     def _validate_channel_not_spoofed(
@@ -178,17 +246,17 @@ class MessageGateway:
     ) -> None:
         """
         Validate that claimed channel matches actual channel.
-        
+
         BLOQUEANTE 3: Channel Spoofing Protection
         Prevents attackers from sending SMS payloads to WhatsApp endpoints
         or vice versa by claiming a different channel.
-        
+
         Args:
             claimed_channel: Channel from payload (attacker-controlled)
             actual_channel: Channel from request source (server-controlled)
             user_id: User ID for logging
             correlation_id: Request correlation ID
-            
+
         Raises:
             ChannelSpoofingError: If claimed != actual channel
         """
@@ -198,7 +266,7 @@ class MessageGateway:
                 f"channel_not_claimed (user_id={user_id}, correlation_id={correlation_id})"
             )
             return
-        
+
         if claimed_channel != actual_channel:
             logger.error(
                 f"channel_spoofing_attempt: claimed={claimed_channel}, actual={actual_channel} "
@@ -208,7 +276,7 @@ class MessageGateway:
                 f"Claimed channel '{claimed_channel}' does not match "
                 f"actual channel '{actual_channel}'"
             )
-        
+
         logger.debug(
             f"channel_validated: channel={actual_channel} "
             f"(user_id={user_id}, correlation_id={correlation_id})"
@@ -221,25 +289,25 @@ class MessageGateway:
     ) -> UnifiedMessage:
         """
         Normalize WhatsApp webhook payload to UnifiedMessage.
-        
+
         BLOQUEANTE 3: Channel Spoofing Protection
         The request_source is passed explicitly from the router,
         not extracted from the payload. This prevents attackers from
         claiming a different channel than what they actually used.
-        
+
         Args:
             webhook_payload: Raw WhatsApp webhook payload
             request_source: Where request came from (webhook_whatsapp, etc)
                 - Prevents channel spoofing attacks
                 - Always "webhook_whatsapp" for this method
-                
+
         Returns:
             UnifiedMessage instance
         """
         # Actual channel is always "whatsapp" for this endpoint
         actual_channel = "whatsapp"
         canal = actual_channel
-        
+
         with metrics_service.time_message_normalization(canal):
             try:
                 payload = webhook_payload or {}
@@ -368,7 +436,7 @@ class MessageGateway:
         """
         # Actual channel is always "gmail" for this endpoint
         actual_channel = "gmail"
-        
+
         try:
             # Validar campos requeridos
             if not isinstance(email_dict, dict):

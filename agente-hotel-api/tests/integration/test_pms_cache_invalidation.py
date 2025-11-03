@@ -1,7 +1,5 @@
-import asyncio
 import json
 import fnmatch
-from datetime import date
 
 import pytest
 

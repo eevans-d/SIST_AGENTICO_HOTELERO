@@ -5,8 +5,8 @@ Cubre contratos de entrada/salida, fallbacks y manejo de errores.
 """
 
 import pytest
-from datetime import datetime, date
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import AsyncMock
 from app.services.orchestrator import Orchestrator
 from app.models.unified_message import UnifiedMessage
 from app.exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
@@ -49,7 +49,6 @@ def orchestrator(mock_pms_adapter, mock_session_manager, mock_lock_service):
 @pytest.fixture
 def sample_message():
     """Mensaje de ejemplo."""
-    from datetime import datetime
     return UnifiedMessage(
         message_id="msg_123",
         user_id="user_123",

@@ -5,7 +5,6 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock
-from prometheus_client import REGISTRY
 from app.services.orchestrator import escalations_total
 
 from app.main import app

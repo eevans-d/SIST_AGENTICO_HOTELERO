@@ -1,4 +1,3 @@
-import pytest
 from datetime import datetime, date
 from app.utils.i18n_helpers import (
     format_currency,

@@ -24,7 +24,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # Import target metadata from app models (after sys.path patch)
 from app.models.lock_audit import Base as LockAuditBase  # type: ignore  # noqa: E402
-from app.models import tenant as tenant_models  # type: ignore  # noqa: E402
 
 target_metadata = LockAuditBase.metadata
 

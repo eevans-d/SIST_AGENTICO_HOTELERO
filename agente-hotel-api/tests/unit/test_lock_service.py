@@ -3,7 +3,6 @@
 import asyncio
 import json
 import time
-from datetime import datetime, timezone, timedelta
 from typing import cast
 
 import pytest

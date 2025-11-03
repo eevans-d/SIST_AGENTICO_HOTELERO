@@ -509,9 +509,14 @@ class AudioCacheService:
         now = time.time()
         cursor = 0
 
+        # PERFORMANCE FIX: Límites de seguridad para evitar bloqueo de Redis
+        max_entries = 1000  # Máximo de entradas a retornar
+        max_iterations = 100  # Máximo de iteraciones SCAN
+        iterations = 0
+
         # Obtener todas las claves de audio (sin metadata)
         all_keys = []
-        while True:
+        while iterations < max_iterations:
             cursor, keys = await redis_client.scan(cursor=cursor, match=f"{self.CACHE_PREFIX}*", count=100)
 
             # Filtrar solo claves principales (no metadata)
@@ -519,9 +524,28 @@ class AudioCacheService:
                 k.decode() if isinstance(k, bytes) else k for k in keys if b":meta" not in k and ":meta" not in str(k)
             ]
             all_keys.extend(audio_keys)
+            iterations += 1
+
+            # Límite de resultados alcanzado
+            if len(all_keys) >= max_entries:
+                logger.warning(
+                    "audio_cache.scan_truncated",
+                    total_keys=len(all_keys),
+                    iterations=iterations,
+                    max_entries=max_entries
+                )
+                all_keys = all_keys[:max_entries]
+                break
 
             if cursor == 0:
                 break
+
+        logger.info(
+            "audio_cache.scan_completed",
+            total_keys=len(all_keys),
+            iterations=iterations,
+            truncated=len(all_keys) >= max_entries
+        )
 
         # Procesar en lotes para evitar operaciones individuales
         batch_size = 50

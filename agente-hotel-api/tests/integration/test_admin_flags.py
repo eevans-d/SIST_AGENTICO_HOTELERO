@@ -7,9 +7,8 @@ Tests the GET and POST endpoints for managing feature flags with Redis overrides
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from app.main import app
-from app.services.feature_flag_service import DEFAULT_FLAGS, FeatureFlagService
 
 
 @pytest_asyncio.fixture

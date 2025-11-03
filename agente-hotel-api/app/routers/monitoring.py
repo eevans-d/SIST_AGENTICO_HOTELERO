@@ -1,6 +1,8 @@
 """
 Monitoring API Router
 Comprehensive monitoring endpoints for business intelligence and system observability
+
+SECURITY NOTE: All endpoints require authentication to prevent information disclosure.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
@@ -16,8 +18,14 @@ from app.monitoring.performance_service import get_performance_service
 from app.monitoring.health_service import get_health_service, CheckType, HealthStatus
 from app.monitoring.tracing_service import get_tracing_service, SpanStatus
 from app.core.settings import get_settings
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+# SECURITY: All monitoring endpoints require authentication
+router = APIRouter(
+    prefix="/monitoring",
+    tags=["monitoring"],
+    dependencies=[Depends(get_current_user)]
+)
 settings = get_settings()
 
 

@@ -108,13 +108,93 @@ class LockService:
         return False
 
     async def check_conflicts(self, room_id: str, check_in: str, check_out: str) -> bool:
-        """Verifica si el rango de fechas solicitado se solapa con locks existentes."""
-        # Simplificación: Por ahora, solo chequea si existe un lock para la misma habitación.
-        # Una implementación completa requeriría chequear solapamiento de fechas.
+        """
+        Verifica si el rango de fechas solicitado se solapa con locks existentes.
+
+        PERFORMANCE FIX: Implementa comparación real de rangos de fechas para evitar
+        falsos positivos que rechazan reservas válidas.
+
+        Args:
+            room_id: ID de la habitación
+            check_in: Fecha de check-in (ISO 8601 format)
+            check_out: Fecha de check-out (ISO 8601 format)
+
+        Returns:
+            True si existe solapamiento (conflicto), False si no hay conflicto
+        """
+        from datetime import datetime
+        import json
+
+        try:
+            # Parse requested dates
+            check_in_dt = datetime.fromisoformat(check_in.replace("Z", "+00:00"))
+            check_out_dt = datetime.fromisoformat(check_out.replace("Z", "+00:00"))
+        except (ValueError, AttributeError) as e:
+            logger.error(
+                "lock_service.invalid_date_format",
+                room_id=room_id,
+                check_in=check_in,
+                check_out=check_out,
+                error=str(e)
+            )
+            # If dates are invalid, assume no conflict (fail open)
+            return False
+
+        # Scan all locks for this room
         pattern = f"lock:room:{room_id}:*"
         async for key in self.redis.scan_iter(pattern):
-            # Aquí iría la lógica de comparación de rangos de fechas
-            return True  # Asumimos conflicto si hay cualquier lock para la habitación
+            lock_data_raw = await self.redis.get(key)
+            if not lock_data_raw:
+                continue
+
+            try:
+                lock_data = json.loads(lock_data_raw)
+                existing_in_str = lock_data.get("check_in")
+                existing_out_str = lock_data.get("check_out")
+
+                if not existing_in_str or not existing_out_str:
+                    logger.warning(
+                        "lock_service.malformed_lock_data",
+                        room_id=room_id,
+                        lock_key=key
+                    )
+                    continue
+
+                existing_in = datetime.fromisoformat(existing_in_str.replace("Z", "+00:00"))
+                existing_out = datetime.fromisoformat(existing_out_str.replace("Z", "+00:00"))
+
+                # Date range overlap check:
+                # Two ranges overlap if NOT (new ends before existing starts OR new starts after existing ends)
+                has_overlap = not (check_out_dt <= existing_in or check_in_dt >= existing_out)
+
+                if has_overlap:
+                    logger.info(
+                        "lock_service.conflict_detected",
+                        room_id=room_id,
+                        requested_check_in=check_in,
+                        requested_check_out=check_out,
+                        existing_check_in=existing_in_str,
+                        existing_check_out=existing_out_str,
+                        lock_key=key
+                    )
+                    return True  # Conflict found
+
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
+                logger.error(
+                    "lock_service.error_parsing_lock",
+                    room_id=room_id,
+                    lock_key=key,
+                    error=str(e)
+                )
+                continue
+
+        # No conflicts found
+        logger.debug(
+            "lock_service.no_conflicts",
+            room_id=room_id,
+            check_in=check_in,
+            check_out=check_out
+        )
         return False
 
     async def get_active_locks(self) -> List[dict]:
