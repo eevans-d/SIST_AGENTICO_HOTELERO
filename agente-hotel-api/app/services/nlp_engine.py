@@ -11,22 +11,60 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from prometheus_client import Counter, Gauge, Histogram
+from ..core.prometheus import registry
 from ..core.circuit_breaker import CircuitBreaker
 from ..exceptions.pms_exceptions import CircuitBreakerOpenError
 from ..core.logging import logger
 
 # Metrics
-nlp_operations = Counter("nlp_operations_total", "NLP operations", ["operation", "status"])
-nlp_errors = Counter("nlp_errors_total", "NLP errors", ["operation", "error_type"])
-nlp_circuit_breaker_state = Gauge(
+def _safe_counter(name: str, documentation: str, labelnames=None):
+    labelnames = labelnames or []
+    try:
+        return Counter(name, documentation, labelnames, registry=registry)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Counter):
+            return existing
+        raise
+
+
+def _safe_gauge(name: str, documentation: str, labelnames=None):
+    labelnames = labelnames or []
+    try:
+        return Gauge(name, documentation, labelnames, registry=registry)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Gauge):
+            return existing
+        raise
+
+
+def _safe_histogram(name: str, documentation: str, labelnames=None, **kwargs):
+    labelnames = labelnames or []
+    try:
+        return Histogram(name, documentation, labelnames, registry=registry, **kwargs)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Histogram):
+            return existing
+        raise
+
+
+nlp_operations = _safe_counter("nlp_operations_total", "NLP operations", ["operation", "status"])
+nlp_errors = _safe_counter("nlp_errors_total", "NLP errors", ["operation", "error_type"])
+nlp_circuit_breaker_state = _safe_gauge(
     "nlp_circuit_breaker_state", "NLP circuit breaker state (0=closed, 1=open, 2=half-open)"
 )
-nlp_circuit_breaker_calls = Counter("nlp_circuit_breaker_calls_total", "NLP circuit breaker calls", ["state", "result"])
-nlp_confidence = Histogram(
+nlp_circuit_breaker_calls = _safe_counter(
+    "nlp_circuit_breaker_calls_total", "NLP circuit breaker calls", ["state", "result"]
+)
+nlp_confidence = _safe_histogram(
     "nlp_confidence_score", "NLP confidence score distribution", buckets=[0.3, 0.5, 0.7, 0.85, 0.95, 1.0]
 )
-nlp_intent_predictions = Counter("nlp_intent_predictions_total", "Intent predictions", ["intent", "confidence_bucket"])
-nlp_language_detection = Counter(
+nlp_intent_predictions = _safe_counter(
+    "nlp_intent_predictions_total", "Intent predictions", ["intent", "confidence_bucket"]
+)
+nlp_language_detection = _safe_counter(
     "nlp_language_detection_total", "Language detection results", ["detected_language", "source"]
 )
 
@@ -385,6 +423,20 @@ class NLPEngine:
     async def process_text(self, text: str, language: Optional[str] = None) -> Dict[str, Any]:
         """
         Compat wrapper: delegates to process_message. Some tests patch this method directly.
+
+        Args:
+            text: User message
+            language: Optional ISO language code
+
+        Returns:
+            Parsed NLP result dict (same contract as process_message)
+        """
+        return await self.process_message(text=text, language=language)
+
+    # Backward-compatibility shim for tests that expect `analyze_text`
+    async def analyze_text(self, text: str, language: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Compat wrapper: historical name used in some tests. Delegates to process_message.
 
         Args:
             text: User message

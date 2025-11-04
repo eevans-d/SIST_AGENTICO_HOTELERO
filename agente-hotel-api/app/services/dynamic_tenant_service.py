@@ -58,6 +58,12 @@ class DynamicTenantService:
     async def refresh(self):
         start = asyncio.get_event_loop().time()
         async with self._lock:
+            # Ensure all ORM models with relationships are registered before configuring mappers
+            # This avoids failures resolving string-based relationships like Tenant.users -> "User"
+            try:  # lazy import to prevent cycles during module import
+                from ..models.user import User  # noqa: F401
+            except Exception:
+                pass
             async with AsyncSessionFactory() as session:  # type: ignore
                 mapping: Dict[str, str] = {}
                 tenants_meta: Dict[str, dict] = {}

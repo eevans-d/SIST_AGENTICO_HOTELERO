@@ -1,6 +1,11 @@
 # [PROMPT 2.9] app/services/metrics_service.py
 
 from prometheus_client import Counter, Histogram, Gauge
+from ..core.prometheus import (
+    registry,
+    http_requests_total as core_http_requests_total,
+    http_request_duration_seconds as core_http_request_duration_seconds,
+)
 
 
 # ===================== NORMALIZACIÓN MENSAJES =====================
@@ -8,48 +13,53 @@ MESSAGE_NORMALIZED_TOTAL = Counter(
     "message_normalized_total",
     "Total de mensajes inbound normalizados por canal y tenant",
     ["canal", "tenant_id"],
+    registry=registry,
 )
 
 MESSAGE_NORMALIZATION_ERRORS_TOTAL = Counter(
     "message_normalization_errors_total",
     "Errores de normalización de mensajes inbound por canal y tipo",
     ["canal", "error_type"],
+    registry=registry,
 )
 
 MESSAGE_NORMALIZATION_LATENCY_SECONDS = Histogram(
     "message_normalization_latency_seconds",
     "Latencia de normalización de mensajes por canal",
     ["canal"],
+    registry=registry,
 )
 
 
 class MetricsService:
     def __init__(self) -> None:
         # Histograma de latencia por método y endpoint (nombre alineado a dashboards)
-        self.request_latency = Histogram(
-            "request_duration_seconds",
-            "Request duration in seconds",
-            ["method", "endpoint", "status_code"],
-        )
-        # Contador total de requests (nombre alineado a dashboards/alertas)
-        self.requests_total = Counter(
-            "http_requests_total", "HTTP requests total", ["method", "endpoint", "status_code"]
-        )
+        # Usar métricas centrales para evitar duplicidades
+        self.request_latency = core_http_request_duration_seconds
+        # Contador total de requests (métrica central)
+        self.requests_total = core_http_requests_total
         # Gauge de conexiones activas (opcional)
-        self.active_connections = Gauge("active_connections", "Active connections")
+        self.active_connections = Gauge("active_connections", "Active connections", registry=registry)
         # Gauge para feature flags (1=enabled,0=disabled)
-        self.feature_flag_enabled = Gauge("feature_flag_enabled", "Estado actual de un feature flag", ["flag"])
+        self.feature_flag_enabled = Gauge(
+            "feature_flag_enabled", "Estado actual de un feature flag", ["flag"], registry=registry
+        )
         # Métricas multi-tenant (fase 5 groundwork)
-        self.tenant_request_total = Counter("tenant_request_total", "Total de requests por tenant", ["tenant_id"])
-        self.tenant_request_errors = Counter("tenant_request_errors", "Errores de requests por tenant", ["tenant_id"])
+        self.tenant_request_total = Counter(
+            "tenant_request_total", "Total de requests por tenant", ["tenant_id"], registry=registry
+        )
+        self.tenant_request_errors = Counter(
+            "tenant_request_errors", "Errores de requests por tenant", ["tenant_id"], registry=registry
+        )
         # Métricas NLP (fase 5) – categorías de confianza y fallbacks activados
         self.nlp_confidence_category_total = Counter(
             "nlp_confidence_category_total",
             "Total de intents clasificados por categoría de confianza",
             ["category"],
+            registry=registry,
         )
         self.nlp_fallback_total = Counter(
-            "nlp_fallback_total", "Total de fallbacks NLP activados por razón", ["reason"]
+            "nlp_fallback_total", "Total de fallbacks NLP activados por razón", ["reason"], registry=registry
         )
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):

@@ -1165,26 +1165,36 @@ class Orchestrator:
         messages_by_channel.labels(channel=message.canal).inc()
 
         if message.tipo == "audio":
-            if not message.media_url:
-                raise ValueError("Missing media_url for audio message")
-            # Compatibilidad: algunos tests parchean transcribe_audio
-            transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
-            if callable(transcribe_fn):
-                maybe_coro = transcribe_fn(message.media_url)
-                if asyncio.iscoroutine(maybe_coro):
-                    stt_result = await maybe_coro
-                else:
-                    stt_result = maybe_coro
+            media_url = getattr(message, "media_url", None)
+            if not media_url:
+                # No forzamos error: degradamos con texto vacío y metadatos por defecto
+                logger.warning(
+                    "audio_message_without_media_url",
+                    user_id=getattr(message, "user_id", None),
+                    message_id=getattr(message, "message_id", None),
+                )
+                message.texto = message.texto or ""
+                message.metadata["confidence_stt"] = message.metadata.get("confidence_stt", 0.0)
+                message.metadata["language_stt"] = message.metadata.get("language_stt")
             else:
-                stt_result = await self.audio_processor.transcribe_whatsapp_audio(message.media_url)
+                # Compatibilidad: algunos tests parchean transcribe_audio
+                transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
+                if callable(transcribe_fn):
+                    maybe_coro = transcribe_fn(media_url)
+                    if asyncio.iscoroutine(maybe_coro):
+                        stt_result = await maybe_coro
+                    else:
+                        stt_result = maybe_coro
+                else:
+                    stt_result = await self.audio_processor.transcribe_whatsapp_audio(media_url)
 
-            if not isinstance(stt_result, dict):
-                stt_result = {}
+                if not isinstance(stt_result, dict):
+                    stt_result = {}
 
-            message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
-            message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
-            if lang := stt_result.get("language"):
-                message.metadata["language_stt"] = lang
+                message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
+                message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
+                if lang := stt_result.get("language"):
+                    message.metadata["language_stt"] = lang
 
         try:
             text = message.texto or ""
@@ -1225,17 +1235,20 @@ class Orchestrator:
                 if any(
                     word in text_lower
                     for word in [
+                        # Spanish
                         "disponibilidad",
                         "disponible",
                         "habitacion",
-                        "cuarto",  # Spanish
+                        "cuarto",
+                        # English
                         "availability",
                         "available",
                         "room",
-                        "rooms",  # English
+                        "rooms",
+                        # Portuguese
                         "disponibilidade",
                         "quarto",
-                        "quartos",  # Portuguese
+                        "quartos",
                     ]
                 ):
                     intent_name = "check_availability"

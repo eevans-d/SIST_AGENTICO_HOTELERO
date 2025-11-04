@@ -33,7 +33,7 @@ from prometheus_client import (
     Histogram,
     Info,
     Summary,
-    CollectorRegistry,
+    REGISTRY,
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
@@ -48,8 +48,8 @@ logger = structlog.get_logger(__name__)
 # PROMETHEUS REGISTRY
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Use default registry for automatic collection
-registry = CollectorRegistry()
+# Use default Prometheus REGISTRY to allow test fixtures to reset between runs
+registry = REGISTRY
 
 
 # ═══════════════════════════════════════════════════════════════════════════

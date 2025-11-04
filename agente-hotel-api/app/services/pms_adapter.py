@@ -9,6 +9,7 @@ from uuid import uuid4
 import httpx
 import redis.asyncio as redis
 from prometheus_client import Counter, Gauge, Histogram
+from ..core.prometheus import registry
 
 from ..core.settings import settings
 from ..core.circuit_breaker import CircuitBreaker
@@ -18,13 +19,48 @@ from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError, PMSAu
 from .business_metrics import record_reservation, failed_reservations
 from .qloapps_client import create_qloapps_client
 
-# Métricas Prometheus
-pms_latency = Histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
-pms_operations = Counter("pms_operations_total", "PMS operations", ["operation", "status"])
-pms_errors = Counter("pms_errors_total", "PMS errors by type", ["operation", "error_type"])
-cache_hits = Counter("pms_cache_hits_total", "Cache hits")
-cache_misses = Counter("pms_cache_misses_total", "Cache misses")
-circuit_breaker_state = Gauge("pms_circuit_breaker_state", "Circuit breaker state (0=closed, 1=open, 2=half-open)")
+# Métricas Prometheus (creadores seguros para evitar duplicados en tests)
+def _safe_counter(name: str, documentation: str, labelnames=None):
+    labelnames = labelnames or []
+    try:
+        return Counter(name, documentation, labelnames, registry=registry)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Counter):
+            return existing
+        raise
+
+
+def _safe_histogram(name: str, documentation: str, labelnames=None):
+    labelnames = labelnames or []
+    try:
+        return Histogram(name, documentation, labelnames, registry=registry)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Histogram):
+            return existing
+        raise
+
+
+def _safe_gauge(name: str, documentation: str, labelnames=None):
+    labelnames = labelnames or []
+    try:
+        return Gauge(name, documentation, labelnames, registry=registry)
+    except ValueError:
+        existing = getattr(registry, "_names_to_collectors", {}).get(name)
+        if isinstance(existing, Gauge):
+            return existing
+        raise
+
+
+pms_latency = _safe_histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
+pms_operations = _safe_counter("pms_operations_total", "PMS operations", ["operation", "status"])
+pms_errors = _safe_counter("pms_errors_total", "PMS errors by type", ["operation", "error_type"])
+cache_hits = _safe_counter("pms_cache_hits_total", "Cache hits")
+cache_misses = _safe_counter("pms_cache_misses_total", "Cache misses")
+circuit_breaker_state = _safe_gauge(
+    "pms_circuit_breaker_state", "Circuit breaker state (0=closed, 1=open, 2=half-open)"
+)
 
 
 class QloAppsAdapter:
@@ -136,7 +172,7 @@ class QloAppsAdapter:
     ) -> List[dict]:
         """
         Check room availability using QloApps API.
-        
+
         BLOQUEANTE 4: Stale Cache Marking
         When PMS fails, we return stale cache with potentially_stale marker.
         This prevents guests from booking unavailable rooms.
@@ -152,7 +188,7 @@ class QloAppsAdapter:
         """
         cache_key = f"availability:{check_in}:{check_out}:{guests}:{room_type or 'any'}"
         stale_cache_key = f"{cache_key}:stale"
-        
+
         cached_data = await self._get_from_cache(cache_key)
         if isinstance(cached_data, list):
             logger.debug("Returning availability from cache")
@@ -203,7 +239,7 @@ class QloAppsAdapter:
             logger.error("Circuit breaker is open, attempting fallback with stale cache")
             circuit_breaker_state.set(1)
             pms_operations.labels(operation="check_availability", status="circuit_open").inc()
-            
+
             # BLOQUEANTE 4: Try stale cache with marker
             stale_data = await self._get_from_cache(cache_key)
             if isinstance(stale_data, list):
@@ -212,9 +248,9 @@ class QloAppsAdapter:
                 await self.redis.setex(stale_cache_key, 60, "true")
                 # Return stale data with marker
                 return [{**room, "potentially_stale": True} for room in stale_data]
-            
+
             return []  # No fallback available
-            
+
         except PMSAuthError:
             # Don't retry on auth errors
             pms_errors.labels(operation="check_availability", error_type="auth_error").inc()
@@ -223,7 +259,7 @@ class QloAppsAdapter:
             logger.error(f"Failed to fetch availability: {e}")
             pms_operations.labels(operation="check_availability", status="error").inc()
             pms_errors.labels(operation="check_availability", error_type=e.__class__.__name__).inc()
-            
+
             # BLOQUEANTE 4: Try stale cache with marker on error
             stale_data = await self._get_from_cache(cache_key)
             if isinstance(stale_data, list):
@@ -232,7 +268,7 @@ class QloAppsAdapter:
                 await self.redis.setex(stale_cache_key, 60, "true")
                 # Return stale data with marker
                 return [{**room, "potentially_stale": True} for room in stale_data]
-            
+
             raise PMSError(f"Unable to check availability: {str(e)}")
 
     async def create_reservation(self, reservation_data: dict) -> dict:
@@ -793,7 +829,7 @@ class MockPMSAdapter:
 
 def get_pms_adapter(redis_client: redis.Redis | None = None):
     """Fábrica de adaptadores PMS según settings.pms_type.
-    
+
     Args:
         redis_client: Cliente Redis opcional. Si es None, se crea un stub en memoria para tests.
     """

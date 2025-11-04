@@ -2,6 +2,7 @@
 
 import warnings
 import pytest_asyncio
+import httpx
 # Silenciar DeprecationWarning específico de passlib (crypt será removido en Python 3.13)
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="passlib.utils")
 
@@ -26,6 +27,31 @@ async def _reset_prometheus_registry() -> Any:
         # If prometheus_client not present or API changes, ignore silently
         pass
     yield
+
+
+# --- Compatibility shim for httpx.AsyncClient(app=..., base_url=...) in newer httpx versions ---
+# Some tests use AsyncClient(app=app, base_url="http://test"), which was removed in newer httpx.
+# Provide a lightweight subclass that accepts `app` and translates it into an ASGITransport.
+try:
+    from httpx import ASGITransport  # type: ignore
+except Exception:  # pragma: no cover - older httpx
+    ASGITransport = None  # type: ignore
+
+
+class _AsyncClientCompat(httpx.AsyncClient):  # type: ignore[misc]
+    def __init__(self, *args, app=None, **kwargs):  # type: ignore[no-untyped-def]
+        if app is not None and "transport" not in kwargs:
+            try:
+                if ASGITransport is not None:
+                    kwargs["transport"] = ASGITransport(app=app)
+            except Exception:
+                # Fallback: leave transport unset
+                pass
+        super().__init__(*args, **kwargs)
+
+
+# Apply the shim globally for tests
+httpx.AsyncClient = _AsyncClientCompat  # type: ignore[assignment]
 
 
 @pytest_asyncio.fixture
