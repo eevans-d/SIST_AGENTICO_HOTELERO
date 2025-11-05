@@ -1,7 +1,7 @@
 # 📚 DOCUMENTACIÓN - ÍNDICE CENTRAL ÚNICO
 
-**Última Actualización**: Octubre 16, 2025  
-**Estado**: Consolidado y Optimizado
+**Última Actualización**: Noviembre 5, 2025  
+**Estado**: Consolidado, Actualizado y Seguro ✅
 
 ---
 
@@ -11,43 +11,219 @@
 
 | Rol | Lee PRIMERO | Luego | Referencia |
 |-----|-------------|-------|-----------|
-| **Equipo de Validación** | START-HERE.md | QUICK-START-VALIDATION-GUIDE.md | EVIDENCE-TEMPLATE.md |
-| **Engineering Manager** | PRE-LAUNCH-IMMEDIATE-CHECKLIST.md | CHECKLIST-DISTRIBUTION-GUIDE.md | VALIDATION-TRACKING-DASHBOARD.md |
-| **Backend** | START-HERE.md | QUICK-START-VALIDATION-GUIDE.md | PRODUCTION-LAUNCH-RUNBOOK.md |
-| **DevOps** | START-HERE.md | PRODUCTION-LAUNCH-RUNBOOK.md | POST-LAUNCH-MONITORING.md |
-| **CTO/Leadership** | COMPLETION-CERTIFICATE.md | GO-NO-GO-DECISION.md | FINAL-PROJECT-STATUS-REPORT.md |
+| **Desarrollador** | START-HERE.md | ORCHESTRATOR_INTENTS.md | SECURITY_HARDENING_REPORT.md |
+| **DevOps/SRE** | START-HERE.md | runbooks/ | operations/ |
+| **Security Engineer** | SECURITY_HARDENING_REPORT.md | guides/P013-OWASP-VALIDATION-GUIDE.md | guides/P012-SECRET-SCANNING-GUIDE.md |
+| **Backend Lead** | START-HERE.md | ORCHESTRATOR_INTENTS.md | runbooks/PRODUCTION-LAUNCH-RUNBOOK.md |
+| **CTO/Leadership** | START-HERE.md | SECURITY_HARDENING_REPORT.md | deployment/ |
 
 ---
 
-## 📋 DOCUMENTACIÓN PRINCIPAL (Debe Leer)
+## 🆕 DOCUMENTACIÓN RECIENTE (Noviembre 2025)
 
-### 1️⃣ **START-HERE.md** (312 líneas)
-- **Propósito**: Resumen ejecutivo para nuevos usuarios
+### ⚡ **SECURITY_HARDENING_REPORT.md** (450 líneas) - NUEVO
+- **Propósito**: Implementación completa de hardening OWASP A01:2021
+- **Audiencia**: Security Engineers, Backend Team, DevOps
+- **Tiempo**: 15-20 minutos lectura
+- **Contenido**: 
+  - JWT authentication en 18 endpoints administrativos
+  - IP allowlist para /metrics (Prometheus)
+  - TrustedHostMiddleware (validación Host headers)
+  - Suite de 104 tests de seguridad
+  - Configuración de deployment (SECRET_KEY, allowed_hosts, etc.)
+  - Vulnerabilidades mitigadas (OWASP A01, A02, A05, A07)
+  - Deployment Readiness: 9.3/10 (+4.5%)
+
+### 🔐 **INTEGRATION-SUPABASE.md** (85 líneas) - NUEVO
+- **Propósito**: Integración con Supabase para gestión de usuarios
+- **Audiencia**: Backend Team
+- **Contenido**: Schema, RLS policies, API integration
+
+---
+
+
+---
+
+## � ESTRUCTURA DE DOCUMENTACIÓN
+
+```
+agente-hotel-api/docs/
+├── 00-DOCUMENTATION-CENTRAL-INDEX.md   ← ESTE ARCHIVO (índice principal)
+├── START-HERE.md                        ← Punto de entrada
+├── README.md                            ← Overview del directorio docs/
+│
+├── SECURITY_HARDENING_REPORT.md        ← 🆕 Reporte seguridad OWASP
+├── INTEGRATION-SUPABASE.md             ← 🆕 Integración Supabase
+├── ORCHESTRATOR_INTENTS.md             ← Documentación NLP intents
+│
+├── guides/                              ← Guías técnicas
+│   ├── P011-DEPENDENCY-SCAN-GUIDE.md
+│   ├── P012-SECRET-SCANNING-GUIDE.md
+│   ├── P013-OWASP-VALIDATION-GUIDE.md
+│   ├── P014-COMPLIANCE-REPORT-GUIDE.md
+│   ├── P015-PERFORMANCE-TESTING-GUIDE.md
+│   ├── P016-OBSERVABILITY-GUIDE.md
+│   ├── P017-CHAOS-ENGINEERING-GUIDE.md
+│   ├── P018-DEPLOYMENT-AUTOMATION-GUIDE.md
+│   ├── P019-INCIDENT-RESPONSE-GUIDE.md
+│   └── P020-PRODUCTION-READINESS-CHECKLIST.md
+│
+├── runbooks/                            ← Runbooks operacionales
+│   ├── PRODUCTION-LAUNCH-RUNBOOK.md
+│   ├── RUNBOOK_DATABASE_ALERTS.md
+│   ├── RTO-RPO-PROCEDURES.md
+│   ├── ON-CALL-GUIDE.md
+│   └── INCIDENT-COMMUNICATION.md
+│
+├── operations/                          ← Documentos operacionales
+│   ├── OPERATIONS_MANUAL.md
+│   ├── POST-LAUNCH-MONITORING.md
+│   └── AUDIO_CACHE_STATUS.md
+│
+├── deployment/                          ← Deployment documentation
+│   ├── DEPLOYMENT_READINESS_CHECKLIST.md
+│   └── ...
+│
+├── security/                            ← Security documentation
+│   └── ...
+│
+└── features/                            ← Feature documentation
+    └── ...
+```
+
+---
+
+## 🔐 DOCUMENTACIÓN DE SEGURIDAD (PRIORITARIO)
+
+### **SECURITY_HARDENING_REPORT.md**
+- **Implementación**: JWT authentication en 18 endpoints
+- **IP Allowlist**: /metrics protegido por IP
+- **TrustedHostMiddleware**: Validación Host headers
+- **Tests**: 104 tests de seguridad (12 passing, 92 pending deps)
+- **Deployment Readiness**: 9.3/10 (antes: 8.9/10)
+
+**Archivos Modificados**:
+- `app/core/settings.py` - Campos de seguridad
+- `app/routers/performance.py` - 16 endpoints con JWT
+- `app/routers/nlp.py` - 2 admin endpoints con JWT
+- `app/routers/metrics.py` - IP allowlist
+- `app/main.py` - TrustedHostMiddleware
+
+**Tests Creados**:
+- `tests/auth/test_performance_auth.py` - 70 tests
+- `tests/auth/test_nlp_admin_auth.py` - 22 tests
+- `tests/security/test_metrics_ip_filter.py` - 12 tests ✅
+
+---
+
+## 📚 GUÍAS TÉCNICAS (guides/)
+
+### P011 - Dependency Scanning
+- Herramientas: Trivy, pip-audit
+- Frecuencia: Pre-commit, CI/CD
+- Thresholds: CRITICAL → Fail, HIGH → Warn
+
+### P012 - Secret Scanning
+- Herramientas: gitleaks, trufflehog
+- Patrones: API keys, JWT secrets, DB credentials
+- Pre-commit hooks
+
+### P013 - OWASP Validation ⚡
+- OWASP Top 10 2021 compliance
+- A01:2021 Broken Access Control ✅ IMPLEMENTADO
+- A02:2021 Cryptographic Failures ✅ MITIGADO
+
+### P014 - Compliance Reporting
+- GDPR, PCI-DSS considerations
+- Data retention policies
+
+### P015 - Performance Testing
+- Load testing: k6, Locust
+- Benchmarks: P95 latency < 500ms
+- Throughput: 100 req/s sustained
+
+### P016 - Observability
+- Prometheus metrics exposition
+- Grafana dashboards
+- Jaeger distributed tracing
+
+### P017 - Chaos Engineering
+- Chaos Monkey patterns
+- Circuit breaker testing
+- Resilience validation
+
+### P018 - Deployment Automation
+- CI/CD pipelines
+- Blue-green deployments
+- Rollback procedures
+
+### P019 - Incident Response
+- On-call procedures
+- Escalation matrix
+- Post-mortem templates
+
+### P020 - Production Readiness
+- Pre-launch checklist (98% complete)
+- Go/No-Go criteria
+
+---
+
+## 📖 RUNBOOKS OPERACIONALES (runbooks/)
+
+### PRODUCTION-LAUNCH-RUNBOOK.md
+- Pre-flight checks
+- Deployment steps
+- Validation procedures
+- Rollback instructions
+
+### RUNBOOK_DATABASE_ALERTS.md
+- Database monitoring
+- Alert thresholds
+- Remediation steps
+
+### RTO-RPO-PROCEDURES.md
+- Recovery Time Objective: < 1 hour
+- Recovery Point Objective: < 15 minutes
+- Backup/restore procedures
+
+### ON-CALL-GUIDE.md
+- On-call rotation
+- Escalation contacts
+- Common issues & fixes
+
+### INCIDENT-COMMUNICATION.md
+- Stakeholder notifications
+- Status page updates
+- Post-incident reporting
+
+---
+
+## ⚙️ DOCUMENTOS OPERACIONALES (operations/)
+
+### OPERATIONS_MANUAL.md
+- Day-to-day operations
+- Maintenance windows
+- Monitoring dashboards
+
+### POST-LAUNCH-MONITORING.md
+- KPI tracking
+- SLO/SLA monitoring
+- Performance baselines
+
+### AUDIO_CACHE_STATUS.md
+- Audio cache implementation
+- Redis configuration
+- Cache hit rates
+
+### 1️⃣ **START-HERE.md**
+- **Propósito**: Punto de entrada para nuevos usuarios
 - **Audiencia**: Todos
 - **Tiempo**: 5 minutos
-- **Contenido**: Resumen 30 seg, asignaciones por rol, workflow diario
 
-### 2️⃣ **PRE-LAUNCH-IMMEDIATE-CHECKLIST.md** (337 líneas)
-- **Propósito**: Acciones concretas HOY
-- **Audiencia**: Engineering Manager
-- **Tiempo**: 2-3 horas (ejecución)
-- **Contenido**: 10 tareas setup, dashboard, comunicación
-
-### 3️⃣ **CHECKLIST-DISTRIBUTION-GUIDE.md** (300 líneas)
-- **Propósito**: Coordinación proceso validación
-- **Audiencia**: Engineering Manager + Team Leads
-- **Tiempo**: 30 minutos
-- **Contenido**: Asignaciones, timeline 6 días, escalación
-
-### 4️⃣ **QUICK-START-VALIDATION-GUIDE.md** (400 líneas)
-- **Propósito**: Cómo validar cada ítem
-- **Audiencia**: Validadores
-- **Tiempo**: 20 minutos + uso durante validación
-- **Contenido**: 5 pasos, ejemplos, comandos, tips
-
-### 5️⃣ **EVIDENCE-TEMPLATE.md** (150 líneas)
-- **Propósito**: Template para documentar validaciones
-- **Audiencia**: Validadores
+### 2️⃣ **ORCHESTRATOR_INTENTS.md**
+- **Propósito**: Documentación de intents del sistema NLP
+- **Audiencia**: Desarrolladores Backend
+- **Tiempo**: 10 minutos
 - **Tiempo**: 5 minutos (copiar por cada ítem)
 - **Contenido**: 13 secciones, checklist completitud
 
