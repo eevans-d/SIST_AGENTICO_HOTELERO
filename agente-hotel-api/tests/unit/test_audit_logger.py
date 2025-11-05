@@ -4,7 +4,7 @@ Tests unitarios para AuditLogger y persistencia en PostgreSQL
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.services.security.audit_logger import AuditLogger, AuditEventType
 from app.models.audit_log import AuditLog
@@ -142,7 +142,7 @@ class TestAuditLogModel:
     def test_audit_log_creation(self):
         """Test: Creación básica de AuditLog"""
         log = AuditLog(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type="login_success",
             user_id="test_user",
             ip_address="127.0.0.1",
@@ -158,7 +158,7 @@ class TestAuditLogModel:
 
     def test_audit_log_to_dict(self):
         """Test: Serialización a diccionario"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         log = AuditLog(
             id=1,
             timestamp=now,
@@ -184,7 +184,7 @@ class TestAuditLogModel:
 
     def test_audit_log_repr(self):
         """Test: Representación string"""
-        log = AuditLog(id=1, timestamp=datetime.utcnow(), event_type="login_failed", user_id="test_user")
+        log = AuditLog(id=1, timestamp=datetime.now(timezone.utc), event_type="login_failed", user_id="test_user")
 
         repr_str = repr(log)
         assert "AuditLog" in repr_str
@@ -215,7 +215,7 @@ class TestAuditLogIntegration:
         async with AsyncSessionFactory() as session:
             # Crear log
             log = AuditLog(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 event_type="test_event",
                 user_id="integration_test_user",
                 details={"test": True},

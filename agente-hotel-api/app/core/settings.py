@@ -153,6 +153,42 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: int = 60
 
+    # Metrics Security Configuration
+    metrics_allowed_ips: list[str] = Field(
+        default=["127.0.0.1", "::1"],
+        description="Allowed IPs for Prometheus scraping. IPv4 and IPv6 supported."
+    )
+
+    # TrustedHost Configuration (PROD only)
+    allowed_hosts: list[str] = Field(
+        default=["localhost", "127.0.0.1"],
+        description="Allowed Host headers in production. Configure with real domains."
+    )
+
+    @field_validator("metrics_allowed_ips")
+    @classmethod
+    def validate_metrics_ips(cls, v: list[str]) -> list[str]:
+        """Validate IP addresses in allowlist"""
+        import ipaddress
+        validated_ips = []
+
+        for ip_str in v:
+            try:
+                # Validate IPv4 or IPv6
+                ipaddress.ip_address(ip_str)
+                validated_ips.append(ip_str)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid IP address in metrics_allowed_ips: {ip_str}"
+                )
+
+        if not validated_ips:
+            raise ValueError(
+                "metrics_allowed_ips must contain at least one valid IP address"
+            )
+
+        return validated_ips
+
     @field_validator(
         "pms_api_key",
         "whatsapp_access_token",

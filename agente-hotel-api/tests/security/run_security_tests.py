@@ -6,7 +6,7 @@ Comprehensive security test execution and reporting
 import subprocess
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import argparse
 
@@ -18,7 +18,7 @@ class SecurityTestRunner:
         self.test_directory = Path(test_directory)
         self.results = {}
         self.report_data = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "test_suites": {},
             "summary": {},
             "security_findings": [],
@@ -303,7 +303,7 @@ class SecurityTestRunner:
         <h1>🔒 Security Test Report</h1>
         <p>Generated: {self.report_data["timestamp"]}</p>
     </div>
-    
+
     <div class="summary">
         <h2>📊 Summary</h2>
         <p><strong>Total Test Suites:</strong> {self.report_data["summary"]["total_suites"]}</p>
@@ -311,7 +311,7 @@ class SecurityTestRunner:
         <p><strong>Failed:</strong> {self.report_data["summary"]["failed_suites"]}</p>
         <p><strong>Success Rate:</strong> {self.report_data["summary"]["success_rate"]:.1f}%</p>
     </div>
-    
+
     <h2>🧪 Test Suites</h2>
 """
 

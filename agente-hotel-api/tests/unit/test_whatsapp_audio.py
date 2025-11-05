@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 from app.services.whatsapp_client import WhatsAppMetaClient
 
@@ -58,11 +58,18 @@ async def test_process_audio_message():
 
     # Mock para el tempfile
     with patch("tempfile.NamedTemporaryFile") as mock_temp_file:
-        # Configurar mock del archivo temporal
-        mock_temp = Mock()
+        # Configurar mocks de archivos temporales sin usar context manager
+        mock_temp = MagicMock()
         mock_temp.name = "/tmp/test_audio.ogg"
-        mock_temp.__enter__.return_value = mock_temp
-        mock_temp_file.return_value = mock_temp
+        mock_temp.write = MagicMock()
+        mock_temp.close = MagicMock()
+
+        mock_wav = MagicMock()
+        mock_wav.name = "/tmp/test_audio.wav"
+        mock_wav.close = MagicMock()
+
+        # Devolver primero el .ogg y luego el .wav
+        mock_temp_file.side_effect = [mock_temp, mock_wav]
 
         # Mock para Path
         with patch("pathlib.Path") as mock_path:

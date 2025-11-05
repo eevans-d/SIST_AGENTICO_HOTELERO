@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import MagicMock
 import tempfile
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 
 
@@ -194,7 +194,7 @@ def mock_database():
 
         async def log_audit_event(self, event_data):
             event_data["id"] = len(self.audit_logs) + 1
-            event_data["timestamp"] = datetime.utcnow().isoformat()
+            event_data["timestamp"] = datetime.now(timezone.utc).isoformat()
             self.audit_logs.append(event_data)
             return event_data
 
@@ -219,13 +219,13 @@ def mock_jwt_service():
             self.tokens[token] = {
                 "type": "access",
                 "data": data,
-                "expires_at": datetime.utcnow() + (expires_delta or timedelta(minutes=30)),
+                "expires_at": datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=30)),
             }
             return token
 
         def create_refresh_token(self, data: dict):
             token = f"refresh_token_{secrets.token_urlsafe(16)}"
-            self.tokens[token] = {"type": "refresh", "data": data, "expires_at": datetime.utcnow() + timedelta(days=7)}
+            self.tokens[token] = {"type": "refresh", "data": data, "expires_at": datetime.now(timezone.utc) + timedelta(days=7)}
             return token
 
         def verify_token(self, token: str):
@@ -233,7 +233,7 @@ def mock_jwt_service():
                 raise Exception("Token not found")
 
             token_data = self.tokens[token]
-            if datetime.utcnow() > token_data["expires_at"]:
+            if datetime.now(timezone.utc) > token_data["expires_at"]:
                 raise Exception("Token expired")
 
             return token_data["data"]
@@ -309,7 +309,7 @@ def mock_audit_logger():
         async def log_event(self, event_type: str, user_id: str = None, details: dict = None, ip_address: str = None):
             log_entry = {
                 "id": len(self.logs) + 1,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "event_type": event_type,
                 "user_id": user_id,
                 "details": details or {},
@@ -330,7 +330,7 @@ def mock_audit_logger():
             return filtered_logs[offset : offset + limit]
 
         async def get_user_activity(self, user_id: str, days: int = 30):
-            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
             return [
                 log
@@ -352,7 +352,7 @@ def mock_rate_limiter():
 
         async def check_rate_limit(self, key: str, limit: int = 60, window: int = 60):
             """Check if request is within rate limit"""
-            now = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
 
             if key in self.blocked_ips:
                 return False, "IP blocked"
@@ -387,7 +387,7 @@ def mock_rate_limiter():
             if key not in self.requests:
                 return 0
 
-            now = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             window_start = now - window
 
             return len([timestamp for timestamp in self.requests[key] if timestamp > window_start])
@@ -474,7 +474,7 @@ class SecurityTestDataGenerator:
             "roles": [role],
             "is_active": active,
             "mfa_enabled": False,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "last_login": None,
         }
 
@@ -485,8 +485,8 @@ class SecurityTestDataGenerator:
             "sub": user_id,
             "username": username,
             "roles": roles or ["guest"],
-            "iat": datetime.utcnow().timestamp(),
-            "exp": (datetime.utcnow() + timedelta(hours=1)).timestamp(),
+            "iat": datetime.now(timezone.utc).timestamp(),
+            "exp": (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp(),
         }
 
     @staticmethod

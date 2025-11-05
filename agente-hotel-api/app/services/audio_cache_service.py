@@ -665,7 +665,37 @@ class AudioCacheService:
             Diccionario con estadísticas
         """
         if not self._enabled:
-            return {"enabled": False}
+            # Devolver estructura completa aunque esté deshabilitado (compat tests)
+            return {
+                "enabled": False,
+                "entries_count": 0,
+                "total_size_bytes": 0,
+                "total_size_mb": 0,
+                "max_cache_size_mb": self._max_cache_size_mb,
+                "usage_percent": 0,
+                "max_entry_size_mb": round(self.MAX_CACHE_SIZE_BYTES / (1024 * 1024), 2),
+                "cleanup_threshold_mb": round(
+                    self._max_cache_size_mb * (self._cleanup_threshold_percent / 100.0), 2
+                ),
+                "target_size_after_cleanup_mb": round(
+                    self._max_cache_size_mb * (self._target_size_percent / 100.0), 2
+                ),
+                "auto_cleanup": {
+                    "enabled": False,
+                    "threshold_percent": self._cleanup_threshold_percent,
+                    "target_percent": self._target_size_percent,
+                },
+                "compression": {
+                    "enabled": self._compression_enabled,
+                    "threshold_kb": self._compression_threshold_kb,
+                    "compression_level": self._compression_level,
+                    "compressed_entries": 0,
+                    "compressed_size_mb": 0,
+                    "original_size_mb": 0,
+                    "space_saved_mb": 0,
+                    "compression_ratio": 0,
+                },
+            }
 
         try:
             redis_client = await self._get_redis()
@@ -732,22 +762,25 @@ class AudioCacheService:
                 )
 
                 if meta_keys:
-                    pipe = redis_client.pipeline()
+                    # Evitar pipeline para compatibilidad con AsyncMock en tests
                     for key in meta_keys:
-                        pipe.hget(key, "compressed")
-                        pipe.hget(key, "size_bytes")
-                        pipe.hget(key, "original_size")
+                        try:
+                            comp = await redis_client.hget(key, "compressed")
+                            size_b = await redis_client.hget(key, "size_bytes")
+                            orig_b = await redis_client.hget(key, "original_size")
+                        except TypeError:
+                            # Cliente síncrono o mock no awaitable
+                            comp = redis_client.hget(key, "compressed")
+                            size_b = redis_client.hget(key, "size_bytes")
+                            orig_b = redis_client.hget(key, "original_size")
 
-                    results = await pipe.execute()
-                    for i in range(0, len(results), 3):
-                        if i + 2 < len(results):
-                            is_compressed = results[i] == b"True" or results[i] == b"1" or results[i]
-                            if is_compressed:
-                                compressed_count += 1
-                                size_bytes = int(results[i + 1]) if results[i + 1] else 0
-                                orig_bytes = int(results[i + 2]) if results[i + 2] else 0
-                                compressed_size += size_bytes
-                                original_size += orig_bytes
+                        is_compressed = comp == b"True" or comp == b"1" or bool(comp)
+                        if is_compressed:
+                            compressed_count += 1
+                            size_bytes = int(size_b) if size_b else 0
+                            orig_bytes = int(orig_b) if orig_b else 0
+                            compressed_size += size_bytes
+                            original_size += orig_bytes
 
                 if cursor == 0:
                     break

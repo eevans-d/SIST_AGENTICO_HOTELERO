@@ -8,7 +8,7 @@ SECURITY NOTE: All endpoints require authentication to prevent information discl
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from fastapi.responses import JSONResponse, Response
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from app.monitoring.business_metrics import get_business_metrics_service
@@ -60,7 +60,7 @@ async def get_business_metrics(
             "status": "success",
             "data": metrics,
             "time_range": time_range,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -82,7 +82,7 @@ async def get_key_performance_indicators(
             "status": "success",
             "data": kpis,
             "time_range": time_range,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -96,7 +96,7 @@ async def get_business_alerts(metrics_service=Depends(get_business_metrics_servi
     try:
         alerts = await metrics_service.check_business_alerts()
 
-        return {"status": "success", "data": alerts, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": alerts, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving business alerts: {str(e)}")
@@ -110,7 +110,7 @@ async def list_dashboards(dashboard_service=Depends(get_dashboard_service)):
     try:
         dashboards = await dashboard_service.list_dashboards()
 
-        return {"status": "success", "data": dashboards, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": dashboards, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing dashboards: {str(e)}")
@@ -136,7 +136,7 @@ async def get_dashboard(
             "status": "success",
             "data": dashboard_data,
             "time_range": time_range,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -173,7 +173,7 @@ async def get_executive_summary(
             "status": "success",
             "data": summary,
             "time_range": time_range,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -215,7 +215,7 @@ async def get_alerts(
                 for alert in alerts
             ],
             "total_count": len(alerts),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -259,7 +259,7 @@ async def get_alert_statistics(days: int = Query(7, ge=1, le=30), alerting_servi
     try:
         stats = await alerting_service.get_alert_statistics(days=days)
 
-        return {"status": "success", "data": stats, "period_days": days, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": stats, "period_days": days, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving alert statistics: {str(e)}")
@@ -298,7 +298,7 @@ async def get_performance_report(
                 "trends": report.trends,
                 "alerts_triggered": report.alerts_triggered,
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -324,7 +324,7 @@ async def get_realtime_performance(performance_service=Depends(get_performance_s
                 }
                 for metric_name, metric in metrics.items()
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -340,7 +340,7 @@ async def get_performance_insights(
     try:
         insights = await performance_service.get_performance_insights(metric_name=metric_name, hours=hours)
 
-        return {"status": "success", "data": insights, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": insights, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving performance insights: {str(e)}")
@@ -406,7 +406,7 @@ async def get_system_health(
                 "performance_indicators": health.performance_indicators,
                 "alerts_active": health.alerts_active,
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -433,7 +433,7 @@ async def check_liveness(health_service=Depends(get_health_service)):
             content={
                 "status": "error",
                 "message": f"Liveness check failed: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -464,7 +464,7 @@ async def check_readiness(health_service=Depends(get_health_service)):
             content={
                 "status": "error",
                 "message": f"Readiness check failed: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -490,7 +490,7 @@ async def get_dependency_health(dependency_name: Optional[str] = None, health_se
                 }
                 for name, dep in dependencies.items()
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -504,7 +504,7 @@ async def diagnose_issues(health_service=Depends(get_health_service)):
     try:
         diagnosis = await health_service.diagnose_issues()
 
-        return {"status": "success", "data": diagnosis, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": diagnosis, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error performing diagnosis: {str(e)}")
@@ -547,7 +547,7 @@ async def get_traces(
                 for trace in traces
             ],
             "total_count": len(traces),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -600,7 +600,7 @@ async def get_trace_details(trace_id: str, tracing_service=Depends(get_tracing_s
                     for span in trace.spans
                 ],
             },
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:
@@ -616,7 +616,7 @@ async def get_critical_path_analysis(trace_id: str, tracing_service=Depends(get_
     try:
         analysis = await tracing_service.get_critical_path_analysis(trace_id)
 
-        return {"status": "success", "data": analysis, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": analysis, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error performing critical path analysis: {str(e)}")
@@ -629,7 +629,7 @@ async def get_operation_analytics(hours: int = Query(24, ge=1, le=168), tracing_
     try:
         analytics = await tracing_service.get_operation_analytics(hours=hours)
 
-        return {"status": "success", "data": analytics, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": analytics, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving operation analytics: {str(e)}")
@@ -642,7 +642,7 @@ async def get_service_map(hours: int = Query(24, ge=1, le=168), tracing_service=
     try:
         service_map = await tracing_service.get_service_map(hours=hours)
 
-        return {"status": "success", "data": service_map, "generated_at": datetime.utcnow().isoformat()}
+        return {"status": "success", "data": service_map, "generated_at": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving service map: {str(e)}")
@@ -670,7 +670,7 @@ async def search_traces(query: Dict[str, Any], tracing_service=Depends(get_traci
             ],
             "total_count": len(traces),
             "query": query,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -735,7 +735,7 @@ async def get_monitoring_overview(
             "status": "success",
             "data": overview,
             "time_range": time_range,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:

@@ -19,7 +19,7 @@ import functools
 import random
 import time
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, TypeVar
 
@@ -189,7 +189,7 @@ class ChaosManager:
 
         experiment = self._experiments[experiment_id]
         experiment.state = ChaosState.RUNNING
-        experiment.start_time = datetime.utcnow()
+        experiment.start_time = datetime.now(timezone.utc)
         self._active_experiments.add(experiment_id)
 
         # Enable fault injection
@@ -212,7 +212,7 @@ class ChaosManager:
 
         experiment = self._experiments[experiment_id]
         experiment.state = ChaosState.COMPLETED if success else ChaosState.FAILED
-        experiment.end_time = datetime.utcnow()
+        experiment.end_time = datetime.now(timezone.utc)
         self._active_experiments.discard(experiment_id)
 
         # Disable fault injection (rollback)

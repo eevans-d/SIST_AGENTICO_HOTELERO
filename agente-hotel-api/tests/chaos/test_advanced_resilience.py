@@ -9,7 +9,7 @@ Extended resilience test suite using chaos engineering framework:
 - Fallback mechanism verification
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -46,9 +46,9 @@ class TestMTTRMetrics:
             steady_state_hypothesis="Circuit breaker opens, cache fallback works",
         )
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         metrics = await orchestrator.run_experiment(experiment)
-        mttr = (datetime.utcnow() - start_time).total_seconds()
+        mttr = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         # MTTR should be under 90 seconds
         assert mttr < 90, f"MTTR too high: {mttr}s (target: <90s)"
@@ -77,9 +77,9 @@ class TestMTTRMetrics:
             steady_state_hypothesis="Timeouts prevent queue buildup, system recovers",
         )
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         await orchestrator.run_experiment(experiment)
-        recovery_time = (datetime.utcnow() - start_time).total_seconds()
+        recovery_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         # Should recover within 2 minutes
         assert recovery_time < 120, f"Recovery took {recovery_time}s (target: <120s)"

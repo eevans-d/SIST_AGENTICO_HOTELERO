@@ -9,6 +9,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import logging
+
+from app.core.security import get_current_user
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, validator
@@ -415,7 +417,7 @@ async def process_batch_messages(
 
 
 # Admin endpoints
-@router.get("/admin/sessions")
+@router.get("/admin/sessions", dependencies=[Depends(get_current_user)])
 @limiter.limit("5/minute")
 async def get_active_sessions(request: Request, redis_client=Depends(get_redis_client)):
     """
@@ -439,7 +441,7 @@ async def get_active_sessions(request: Request, redis_client=Depends(get_redis_c
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/admin/cleanup")
+@router.post("/admin/cleanup", dependencies=[Depends(get_current_user)])
 @limiter.limit("2/minute")
 async def force_cleanup(request: Request, redis_client=Depends(get_redis_client)):
     """

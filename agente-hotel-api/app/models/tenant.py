@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, UTC
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 
 from .lock_audit import Base
 
@@ -21,7 +21,12 @@ class Tenant(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     identifiers = relationship("TenantUserIdentifier", back_populates="tenant", cascade="all,delete-orphan")
-    users = relationship("User", back_populates="tenant")
+    # Relación por clave lógica tenant_id (no PK). Usar ruta completa para evitar problemas de import.
+    users = relationship(
+        "app.models.user.User",
+        back_populates="tenant",
+        primaryjoin="Tenant.tenant_id==foreign(app.models.user.User.tenant_id)",
+    )
 
 
 class TenantUserIdentifier(Base):
@@ -34,3 +39,11 @@ class TenantUserIdentifier(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     tenant = relationship("Tenant", back_populates="identifiers")
+
+
+# Asegurar que el modelo User esté registrado en el registry antes de configurar mappers
+# para que la relación por nombre "User"/ruta completa pueda resolverse en tests.
+try:
+    from .user import User  # noqa: F401
+except Exception:
+    pass

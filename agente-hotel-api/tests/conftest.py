@@ -1,6 +1,7 @@
 # [PROMPT 2.10] tests/conftest.py
 
 import warnings
+import pytest
 import pytest_asyncio
 import httpx
 # Silenciar DeprecationWarning específico de passlib (crypt será removido en Python 3.13)

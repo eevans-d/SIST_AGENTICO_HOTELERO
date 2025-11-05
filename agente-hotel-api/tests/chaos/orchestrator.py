@@ -11,7 +11,7 @@ Coordinates chaos experiments and provides safe execution with:
 
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 
 from app.core.chaos import (
@@ -202,7 +202,7 @@ class ChaosScheduler:
         """Main scheduler loop."""
         while self._running:
             try:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
 
                 for exp_id, schedule in list(self._schedules.items()):
                     last_run = schedule["last_run"]
@@ -289,7 +289,7 @@ class ChaosOrchestrator:
 
         try:
             # Run for specified duration
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             end_time = start_time + timedelta(seconds=experiment.duration_seconds)
 
             logger.info(
@@ -299,7 +299,7 @@ class ChaosOrchestrator:
             )
 
             # Monitor during execution
-            while datetime.utcnow() < end_time:
+            while datetime.now(timezone.utc) < end_time:
                 await asyncio.sleep(10)  # Check every 10 seconds
 
                 # Collect metrics
@@ -425,7 +425,7 @@ class ChaosOrchestrator:
             total = max(exp.total_requests, 1)
             return ChaosMetrics(
                 experiment_id=experiment.id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 total_requests=exp.total_requests,
                 affected_requests=exp.affected_requests,
                 failed_requests=exp.errors_induced,
@@ -435,7 +435,7 @@ class ChaosOrchestrator:
 
         return ChaosMetrics(
             experiment_id=experiment.id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
     def _simulate_experiment(self, experiment: ChaosExperiment) -> ChaosMetrics:
@@ -449,7 +449,7 @@ class ChaosOrchestrator:
 
         return ChaosMetrics(
             experiment_id=experiment.id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             total_requests=1000,
             successful_requests=950,
             failed_requests=50,

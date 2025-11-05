@@ -11,7 +11,7 @@ Date: 2025-11-03
 from datetime import datetime
 
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 
 from app.models.lock_audit import Base
 
@@ -57,7 +57,12 @@ class User(Base):
 
     # Relationships
     password_history = relationship("PasswordHistory", back_populates="user", cascade="all, delete-orphan")
-    tenant = relationship("Tenant", back_populates="users")
+    # Relación por clave lógica tenant_id (no PK). Usar ruta completa y primaryjoin explícito.
+    tenant = relationship(
+        "app.models.tenant.Tenant",
+        back_populates="users",
+        primaryjoin="foreign(User.tenant_id)==app.models.tenant.Tenant.tenant_id",
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, email={self.email})>"

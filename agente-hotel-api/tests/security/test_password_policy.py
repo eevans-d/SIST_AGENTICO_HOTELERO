@@ -10,7 +10,7 @@ Date: 2025-11-03
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from app.security.password_policy import (
@@ -180,7 +180,7 @@ class TestPasswordHistory:
             history_entry = PasswordHistory(
                 user_id=user_id,
                 password_hash=password_policy.hash_password(f"RecentP@ss{i}"),
-                created_at=datetime.utcnow() - timedelta(days=i*20),
+                created_at=datetime.now(timezone.utc) - timedelta(days=i*20),
             )
             db_session.add(history_entry)
 
@@ -200,14 +200,14 @@ class TestPasswordRotation:
 
     def test_rotation_required_old_password(self, password_policy):
         """Test that old passwords trigger rotation requirement"""
-        last_changed = datetime.utcnow() - timedelta(days=95)
+        last_changed = datetime.now(timezone.utc) - timedelta(days=95)
         rotation_required = password_policy.check_rotation_required(last_changed)
 
         assert rotation_required is True
 
     def test_rotation_not_required_recent_password(self, password_policy):
         """Test that recent passwords don't trigger rotation"""
-        last_changed = datetime.utcnow() - timedelta(days=30)
+        last_changed = datetime.now(timezone.utc) - timedelta(days=30)
         rotation_required = password_policy.check_rotation_required(last_changed)
 
         assert rotation_required is False
@@ -220,7 +220,7 @@ class TestPasswordRotation:
 
     def test_rotation_exactly_at_threshold(self, password_policy):
         """Test rotation at exact threshold (90 days)"""
-        last_changed = datetime.utcnow() - timedelta(days=90)
+        last_changed = datetime.now(timezone.utc) - timedelta(days=90)
         rotation_required = password_policy.check_rotation_required(last_changed)
 
         assert rotation_required is True

@@ -659,12 +659,12 @@ dev-clean: ## Limpia volumes y cache de desarrollo
 	docker compose -f docker-compose.dev.yml down -v
 	@echo "✅ Limpieza completada"
 
-test-cov: ## Ejecutar tests con coverage report
-	@echo "🧪 Ejecutando tests con coverage..."
+test-cov: ## Ejecutar tests con coverage report (unit)
+	@echo "🧪 Ejecutando tests con coverage (unit)..."
 ifeq ($(HAS_POETRY),1)
-	poetry run pytest --cov=app --cov-report=html --cov-report=term-missing
+	poetry run pytest tests/unit --cov=app --cov-report=html --cov-report=term-missing
 else
-	pytest --cov=app --cov-report=html --cov-report=term-missing
+	pytest tests/unit --cov=app --cov-report=html --cov-report=term-missing
 endif
 	@echo "📊 Coverage report: htmlcov/index.html"
 

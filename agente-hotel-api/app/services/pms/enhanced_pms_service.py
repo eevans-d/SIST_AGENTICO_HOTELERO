@@ -17,6 +17,7 @@ import hashlib
 import random
 import redis.asyncio as redis
 from prometheus_client import Counter, Histogram, Summary
+from app.core.prometheus import metrics as _metrics
 
 from app.core.circuit_breaker import CircuitBreaker
 from app.core.retry import retry_with_backoff
@@ -29,9 +30,9 @@ pms_requests_total = Counter("pms_requests_total", "Total PMS API requests", ["p
 
 pms_response_time = Histogram("pms_response_time_seconds", "PMS API response time", ["provider", "operation"])
 
-pms_cache_hits_total = Counter("pms_cache_hits_total", "PMS cache hits", ["operation"])
-
-pms_cache_misses_total = Counter("pms_cache_misses_total", "PMS cache misses", ["operation"])
+# Reusar métricas centralizadas para evitar duplicados
+pms_cache_hits_total = _metrics.pms_cache_hits_total
+pms_cache_misses_total = _metrics.pms_cache_misses_total
 
 pms_availability_check_duration = Summary("pms_availability_check_duration_seconds", "Duration of availability checks")
 
@@ -47,6 +48,9 @@ class PMSProvider(Enum):
     MOCK = "mock"
     OPERA = "opera"  # Future support
     FIDELIO = "fidelio"  # Future support
+
+# Compatibilidad con código/fixtures antiguos
+PMSType = PMSProvider
 
 
 class ReservationStatus(Enum):

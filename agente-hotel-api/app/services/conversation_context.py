@@ -3,7 +3,7 @@ Servicio para el procesamiento del contexto conversacional y gestión de referen
 Permite mantener y recuperar información contextual de conversaciones previas.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 import json
 
@@ -66,7 +66,7 @@ class ConversationContext:
         if tenant_id:
             context_id = f"{tenant_id}:{context_id}"
 
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         # Recuperar contexto previo si existe
         previous_context = await self._get_raw_context(context_id)

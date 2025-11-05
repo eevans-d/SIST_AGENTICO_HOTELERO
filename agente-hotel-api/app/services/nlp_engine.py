@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from prometheus_client import Counter, Gauge, Histogram
 from ..core.prometheus import registry
@@ -268,7 +268,7 @@ class NLPEngine:
                         "agent": agent,
                         "model_path": model_path,
                         "model_version": model_version,
-                        "loaded_at": datetime.utcnow(),
+                        "loaded_at": datetime.now(timezone.utc),
                     }
 
                     logger.info(

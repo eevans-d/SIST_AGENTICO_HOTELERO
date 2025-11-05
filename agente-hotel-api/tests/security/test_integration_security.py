@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import threading
 
 
@@ -529,7 +529,7 @@ class TestSecurityCompliance:
             """Log security event for compliance"""
             audit_events.append(
                 {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "event_type": event_type,
                     "user_id": user_id,
                     "details": details,
@@ -559,7 +559,7 @@ class TestSecurityCompliance:
         def should_retain_data(data_type, creation_date, retention_policy):
             """Check if data should be retained based on policy"""
             retention_days = retention_policy.get(data_type, 365)  # Default 1 year
-            age_days = (datetime.utcnow() - creation_date).days
+            age_days = (datetime.now(timezone.utc) - creation_date).days
             return age_days < retention_days
 
         # Define retention policy
@@ -571,9 +571,9 @@ class TestSecurityCompliance:
         }
 
         # Test data retention
-        old_audit_log = datetime.utcnow() - timedelta(days=3000)  # 8+ years old
-        recent_session = datetime.utcnow() - timedelta(days=30)  # 30 days old
-        old_payment = datetime.utcnow() - timedelta(days=1200)  # 3+ years old
+        old_audit_log = datetime.now(timezone.utc) - timedelta(days=3000)  # 8+ years old
+        recent_session = datetime.now(timezone.utc) - timedelta(days=30)  # 30 days old
+        old_payment = datetime.now(timezone.utc) - timedelta(days=1200)  # 3+ years old
 
         assert should_retain_data("audit_logs", old_audit_log, retention_policy) is False
         assert should_retain_data("user_sessions", recent_session, retention_policy) is True

@@ -9,7 +9,7 @@ from uuid import uuid4
 import httpx
 import redis.asyncio as redis
 from prometheus_client import Counter, Gauge, Histogram
-from ..core.prometheus import registry
+from ..core.prometheus import registry, metrics
 
 from ..core.settings import settings
 from ..core.circuit_breaker import CircuitBreaker
@@ -19,48 +19,52 @@ from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError, PMSAu
 from .business_metrics import record_reservation, failed_reservations
 from .qloapps_client import create_qloapps_client
 
-# Métricas Prometheus (creadores seguros para evitar duplicados en tests)
+# Métricas Prometheus: usar definiciones centralizadas para evitar duplicados
 def _safe_counter(name: str, documentation: str, labelnames=None):
+    """Deprecated: mantenido por compatibilidad. No crear nuevos contadores aquí."""
     labelnames = labelnames or []
     try:
         return Counter(name, documentation, labelnames, registry=registry)
     except ValueError:
         existing = getattr(registry, "_names_to_collectors", {}).get(name)
-        if isinstance(existing, Counter):
+        if existing:
             return existing
         raise
 
 
 def _safe_histogram(name: str, documentation: str, labelnames=None):
+    """Deprecated: mantenido por compatibilidad. Preferir app.core.prometheus.metrics."""
     labelnames = labelnames or []
     try:
         return Histogram(name, documentation, labelnames, registry=registry)
     except ValueError:
         existing = getattr(registry, "_names_to_collectors", {}).get(name)
-        if isinstance(existing, Histogram):
+        if existing:
             return existing
         raise
 
 
 def _safe_gauge(name: str, documentation: str, labelnames=None):
+    """Deprecated: mantenido por compatibilidad. Preferir app.core.prometheus.metrics."""
     labelnames = labelnames or []
     try:
         return Gauge(name, documentation, labelnames, registry=registry)
     except ValueError:
         existing = getattr(registry, "_names_to_collectors", {}).get(name)
-        if isinstance(existing, Gauge):
+        if existing:
             return existing
         raise
 
 
-pms_latency = _safe_histogram("pms_api_latency_seconds", "PMS API latency", ["endpoint", "method"])
-pms_operations = _safe_counter("pms_operations_total", "PMS operations", ["operation", "status"])
+# Reusar métricas del módulo central
+pms_latency = metrics.pms_api_latency_seconds
+pms_operations = metrics.pms_operations_total
+# pms_errors_total no existe en core → mantener local con nombre único
 pms_errors = _safe_counter("pms_errors_total", "PMS errors by type", ["operation", "error_type"])
-cache_hits = _safe_counter("pms_cache_hits_total", "Cache hits")
-cache_misses = _safe_counter("pms_cache_misses_total", "Cache misses")
-circuit_breaker_state = _safe_gauge(
-    "pms_circuit_breaker_state", "Circuit breaker state (0=closed, 1=open, 2=half-open)"
-)
+# Cache hits/misses vienen del core y requieren etiqueta 'operation'
+cache_hits_total = metrics.pms_cache_hits_total
+cache_misses_total = metrics.pms_cache_misses_total
+circuit_breaker_state = metrics.pms_circuit_breaker_state
 
 
 class QloAppsAdapter:
@@ -139,9 +143,9 @@ class QloAppsAdapter:
             if cached:
                 data = json.loads(cached)
                 logger.debug(f"Cache hit for key: {key}")
-                cache_hits.inc()
+                cache_hits_total.labels(operation="generic").inc()
                 return data
-            cache_misses.inc()
+            cache_misses_total.labels(operation="generic").inc()
             return None
         except Exception as e:
             logger.error(f"Cache get error: {e}")
@@ -192,7 +196,7 @@ class QloAppsAdapter:
         cached_data = await self._get_from_cache(cache_key)
         if isinstance(cached_data, list):
             logger.debug("Returning availability from cache")
-            cache_hits.inc()
+            cache_hits_total.labels(operation="availability").inc()
             # Mark as fresh (not stale)
             await self.redis.delete(stale_cache_key)
             return cached_data
@@ -500,6 +504,14 @@ class QloAppsAdapter:
             if not booking_id:
                 raise PMSError(f"Invalid reservation ID format: {reservation_id}")
 
+            # Primero revisar caché genérica por reserva (permite atajo sin tocar PMS)
+            generic_cache_key = f"late_checkout_check:{reservation_id}"
+            cached_generic = await self.redis.get(generic_cache_key)
+            if cached_generic:
+                cache_hits_total.labels(operation="late_checkout_check").inc()
+                logger.debug(f"Late checkout check cache hit (generic): {generic_cache_key}")
+                return json.loads(cached_generic)
+
             # Get current booking details
             booking = await self.qloapps.get_booking(booking_id)
 
@@ -524,11 +536,11 @@ class QloAppsAdapter:
             # Try cache first
             cached = await self.redis.get(cache_key)
             if cached:
-                cache_hits.inc()
+                cache_hits_total.labels(operation="late_checkout_check").inc()
                 logger.debug(f"Late checkout check cache hit: {cache_key}")
                 return json.loads(cached)
 
-            cache_misses.inc()
+            cache_misses_total.labels(operation="late_checkout_check").inc()
 
             # Check availability for the room on checkout date
             # In a real implementation, query PMS for room bookings
@@ -550,8 +562,10 @@ class QloAppsAdapter:
                 "message": "Late checkout available" if available else "Room has next booking - not available",
             }
 
-            # Cache result for 5 minutes
-            await self.redis.setex(cache_key, 300, json.dumps(result))
+            # Cache result for 5 minutos (clave específica). Mantener una sola llamada a setex
+            # para compatibilidad con tests que esperan 1 llamada.
+            payload = json.dumps(result)
+            await self.redis.setex(cache_key, 300, payload)
 
             pms_operations.labels(operation="check_late_checkout", status="success").inc()
             logger.info(

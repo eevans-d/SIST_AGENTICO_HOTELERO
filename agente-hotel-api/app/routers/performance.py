@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
 
+from app.core.security import get_current_user
 from app.services.performance_optimizer import get_performance_optimizer, PerformanceOptimizer
 from app.services.database_tuner import get_database_tuner, DatabasePerformanceTuner
 from app.services.cache_optimizer import get_cache_optimizer, CacheOptimizer
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/performance", tags=["Performance Optimization"])
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(get_current_user)])
 @rate_limit("60/minute")
 async def get_performance_status(
     performance_optimizer: PerformanceOptimizer = Depends(get_performance_optimizer),
@@ -69,7 +70,7 @@ async def get_performance_status(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(get_current_user)])
 @rate_limit("30/minute")
 async def get_performance_metrics(
     include_predictions: bool = True,
@@ -101,7 +102,7 @@ async def get_performance_metrics(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/optimization/report")
+@router.get("/optimization/report", dependencies=[Depends(get_current_user)])
 @rate_limit("20/minute")
 async def get_optimization_report(
     performance_optimizer: PerformanceOptimizer = Depends(get_performance_optimizer),
@@ -118,7 +119,7 @@ async def get_optimization_report(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/optimization/execute")
+@router.post("/optimization/execute", dependencies=[Depends(get_current_user)])
 @rate_limit("10/minute")
 async def execute_optimization(
     background_tasks: BackgroundTasks,
@@ -160,7 +161,7 @@ async def execute_optimization(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/database/report")
+@router.get("/database/report", dependencies=[Depends(get_current_user)])
 @rate_limit("15/minute")
 async def get_database_report(
     include_recommendations: bool = True, database_tuner: DatabasePerformanceTuner = Depends(get_database_tuner)
@@ -183,7 +184,7 @@ async def get_database_report(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/database/optimize")
+@router.post("/database/optimize", dependencies=[Depends(get_current_user)])
 @rate_limit("5/minute")
 async def optimize_database(
     background_tasks: BackgroundTasks,
@@ -229,7 +230,7 @@ async def optimize_database(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/cache/report")
+@router.get("/cache/report", dependencies=[Depends(get_current_user)])
 @rate_limit("15/minute")
 async def get_cache_report(
     include_patterns: bool = True, cache_optimizer: CacheOptimizer = Depends(get_cache_optimizer)
@@ -253,7 +254,7 @@ async def get_cache_report(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/cache/optimize")
+@router.post("/cache/optimize", dependencies=[Depends(get_current_user)])
 @rate_limit("10/minute")
 async def optimize_cache(
     background_tasks: BackgroundTasks,
@@ -307,7 +308,7 @@ async def optimize_cache(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/scaling/status")
+@router.get("/scaling/status", dependencies=[Depends(get_current_user)])
 @rate_limit("30/minute")
 async def get_scaling_status(auto_scaler: AutoScaler = Depends(get_auto_scaler)) -> JSONResponse:
     """
@@ -322,7 +323,7 @@ async def get_scaling_status(auto_scaler: AutoScaler = Depends(get_auto_scaler))
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/scaling/evaluate")
+@router.post("/scaling/evaluate", dependencies=[Depends(get_current_user)])
 @rate_limit("10/minute")
 async def evaluate_scaling_decisions(auto_scaler: AutoScaler = Depends(get_auto_scaler)) -> JSONResponse:
     """
@@ -361,7 +362,7 @@ async def evaluate_scaling_decisions(auto_scaler: AutoScaler = Depends(get_auto_
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/scaling/execute")
+@router.post("/scaling/execute", dependencies=[Depends(get_current_user)])
 @rate_limit("5/minute")
 async def execute_scaling_decisions(
     background_tasks: BackgroundTasks, auto_scaler: AutoScaler = Depends(get_auto_scaler)
@@ -399,7 +400,7 @@ async def execute_scaling_decisions(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.put("/scaling/rule/{service_name}/{rule_name}")
+@router.put("/scaling/rule/{service_name}/{rule_name}", dependencies=[Depends(get_current_user)])
 @rate_limit("10/minute")
 async def update_scaling_rule(
     service_name: str, rule_name: str, rule_updates: Dict[str, Any], auto_scaler: AutoScaler = Depends(get_auto_scaler)
@@ -446,7 +447,7 @@ async def update_scaling_rule(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/alerts")
+@router.get("/alerts", dependencies=[Depends(get_current_user)])
 @rate_limit("20/minute")
 async def get_performance_alerts(
     severity: Optional[str] = None,
@@ -487,7 +488,7 @@ async def get_performance_alerts(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.post("/alerts/{alert_id}/resolve")
+@router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(get_current_user)])
 @rate_limit("20/minute")
 async def resolve_performance_alert(
     alert_id: str, resource_monitor: ResourceMonitor = Depends(get_resource_monitor)
@@ -516,7 +517,7 @@ async def resolve_performance_alert(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/benchmark")
+@router.get("/benchmark", dependencies=[Depends(get_current_user)])
 @rate_limit("5/minute")
 async def run_performance_benchmark(
     background_tasks: BackgroundTasks,
@@ -558,7 +559,7 @@ async def run_performance_benchmark(
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
-@router.get("/recommendations")
+@router.get("/recommendations", dependencies=[Depends(get_current_user)])
 @rate_limit("10/minute")
 async def get_performance_recommendations(
     performance_optimizer: PerformanceOptimizer = Depends(get_performance_optimizer),

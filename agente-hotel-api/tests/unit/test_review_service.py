@@ -4,7 +4,7 @@ Tests review request scheduling, sending, response processing, and analytics
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from app.services.review_service import ReviewService, ReviewPlatform, GuestSegment, ReviewRequest, get_review_service
@@ -40,7 +40,7 @@ class TestReviewRequestScheduling:
         """Test successful review request scheduling."""
         service = ReviewService()
 
-        checkout_date = datetime.utcnow()
+        checkout_date = datetime.now(timezone.utc)
 
         result = await service.schedule_review_request(
             guest_id="5491112345678",
@@ -67,7 +67,7 @@ class TestReviewRequestScheduling:
             guest_id="5491112345678",
             guest_name="María González",
             booking_id="HTL-BUS-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             segment=GuestSegment.BUSINESS,
         )
 
@@ -85,7 +85,7 @@ class TestReviewRequestScheduling:
             guest_id="5491112345678",
             guest_name="VIP Guest",
             booking_id="HTL-VIP-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             segment=GuestSegment.VIP,
         )
 
@@ -113,7 +113,7 @@ class TestReviewRequestSending:
         service = ReviewService()
 
         # Schedule a request for future
-        checkout_date = datetime.utcnow() + timedelta(hours=48)
+        checkout_date = datetime.now(timezone.utc) + timedelta(hours=48)
         await service.schedule_review_request(
             guest_id="5491112345678", guest_name="Juan Pérez", booking_id="HTL-001", checkout_date=checkout_date
         )
@@ -130,7 +130,7 @@ class TestReviewRequestSending:
         service = ReviewService()
 
         # Schedule request
-        checkout_date = datetime.utcnow()
+        checkout_date = datetime.now(timezone.utc)
         await service.schedule_review_request(
             guest_id="5491112345678", guest_name="Test Guest", booking_id="HTL-FORCE-001", checkout_date=checkout_date
         )
@@ -157,7 +157,7 @@ class TestReviewRequestSending:
             guest_id="5491112345678",
             guest_name="Test Guest",
             booking_id="HTL-MAX-001",
-            checkout_date=datetime.utcnow() - timedelta(days=10),
+            checkout_date=datetime.now(timezone.utc) - timedelta(days=10),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=service.max_reminders,  # Already at max
@@ -185,7 +185,7 @@ class TestReviewResponseProcessing:
             guest_id="5491112345678",
             guest_name="Happy Guest",
             booking_id="HTL-POS-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
         )
 
         # Mock WhatsApp client for platform links message
@@ -211,7 +211,7 @@ class TestReviewResponseProcessing:
             guest_id="5491112345678",
             guest_name="Unhappy Guest",
             booking_id="HTL-NEG-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
         )
 
         with patch.object(service.whatsapp_client, "send_message", new_callable=AsyncMock) as mock_send:
@@ -235,7 +235,7 @@ class TestReviewResponseProcessing:
             guest_id="5491112345678",
             guest_name="Unsubscriber",
             booking_id="HTL-UNSUB-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
         )
 
         result = await service.process_review_response(
@@ -329,7 +329,7 @@ class TestTimingLogic:
             guest_id="ready",
             guest_name="Ready Guest",
             booking_id="HTL-READY",
-            checkout_date=datetime.utcnow() - timedelta(hours=25),
+            checkout_date=datetime.now(timezone.utc) - timedelta(hours=25),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=0,
@@ -342,7 +342,7 @@ class TestTimingLogic:
             guest_id="notready",
             guest_name="Not Ready",
             booking_id="HTL-NOTREADY",
-            checkout_date=datetime.utcnow() - timedelta(hours=20),
+            checkout_date=datetime.now(timezone.utc) - timedelta(hours=20),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=0,
@@ -359,11 +359,11 @@ class TestTimingLogic:
             guest_id="reminder_ready",
             guest_name="Reminder Ready",
             booking_id="HTL-REM-READY",
-            checkout_date=datetime.utcnow() - timedelta(days=5),
+            checkout_date=datetime.now(timezone.utc) - timedelta(days=5),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=1,
-            last_sent=datetime.utcnow() - timedelta(hours=73),
+            last_sent=datetime.now(timezone.utc) - timedelta(hours=73),
         )
 
         assert service._is_ready_to_send(request_ready) is True
@@ -376,7 +376,7 @@ class TestTimingLogic:
             guest_id="calc_test",
             guest_name="Calc Test",
             booking_id="HTL-CALC",
-            checkout_date=datetime.utcnow() - timedelta(hours=20),
+            checkout_date=datetime.now(timezone.utc) - timedelta(hours=20),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=0,
@@ -419,7 +419,7 @@ class TestAnalytics:
 
         # Schedule a request
         await service.schedule_review_request(
-            guest_id="5491112345678", guest_name="Submitter", booking_id="HTL-SUB-001", checkout_date=datetime.utcnow()
+            guest_id="5491112345678", guest_name="Submitter", booking_id="HTL-SUB-001", checkout_date=datetime.now(timezone.utc)
         )
 
         # Mark as submitted
@@ -453,7 +453,7 @@ class TestSessionPersistence:
             guest_id="5491112345678",
             guest_name="Persistence Test",
             booking_id="HTL-PERS-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             platforms=[ReviewPlatform.GOOGLE, ReviewPlatform.TRIPADVISOR],
             segment=GuestSegment.BUSINESS,
         )
@@ -479,7 +479,7 @@ class TestSessionPersistence:
             guest_id="5491112345678",
             guest_name="Update Test",
             booking_id="HTL-UPD-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
             sent_count=0,
@@ -489,7 +489,7 @@ class TestSessionPersistence:
 
         # Update sent_count
         request.sent_count = 1
-        request.last_sent = datetime.utcnow()
+        request.last_sent = datetime.now(timezone.utc)
         await service._update_review_request(request)
 
         # Retrieve and verify
@@ -512,7 +512,7 @@ class TestErrorHandling:
                 guest_id="5491112345678",
                 guest_name="Error Test",
                 booking_id="HTL-ERR-001",
-                checkout_date=datetime.utcnow(),
+                checkout_date=datetime.now(timezone.utc),
             )
 
             assert result["success"] is False
@@ -527,7 +527,7 @@ class TestErrorHandling:
             guest_id="5491112345678",
             guest_name="WhatsApp Fail",
             booking_id="HTL-WA-FAIL",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
         )
 
         # Mock WhatsApp client to fail
@@ -552,7 +552,7 @@ class TestMessageGeneration:
             guest_id="5491112345678",
             guest_name="Juan & María",
             booking_id="HTL-MSG-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             platforms=[ReviewPlatform.GOOGLE],
             segment=GuestSegment.COUPLE,
         )
@@ -571,7 +571,7 @@ class TestMessageGeneration:
             guest_id="5491112345678",
             guest_name="Test Guest",
             booking_id="HTL-LINKS-001",
-            checkout_date=datetime.utcnow(),
+            checkout_date=datetime.now(timezone.utc),
             platforms=[ReviewPlatform.GOOGLE, ReviewPlatform.TRIPADVISOR],
             segment=GuestSegment.COUPLE,
         )

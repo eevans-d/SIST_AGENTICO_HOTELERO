@@ -3,7 +3,7 @@ Advanced Business Metrics Service
 Hotel-specific business intelligence and operational metrics
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -194,7 +194,7 @@ class AdvancedBusinessMetrics:
             name="reservation_created",
             category=MetricCategory.RESERVATIONS,
             value=value,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             labels={"status": status, "channel": channel, "room_type": room_type},
             metadata=reservation_data,
         )
@@ -207,7 +207,7 @@ class AdvancedBusinessMetrics:
         """Calculate and update occupancy metrics"""
 
         if not date:
-            date = datetime.utcnow().strftime("%Y-%m-%d")
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         try:
             # Get room data from database
@@ -236,7 +236,7 @@ class AdvancedBusinessMetrics:
                 name="occupancy_calculated",
                 category=MetricCategory.OCCUPANCY,
                 value=occupancy_rate,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 labels={"date": date},
                 metadata=room_data,
             )
@@ -255,7 +255,7 @@ class AdvancedBusinessMetrics:
         """Calculate revenue metrics (ADR, RevPAR, etc.)"""
 
         if not date:
-            date = datetime.utcnow().strftime("%Y-%m-%d")
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         try:
             async with self.db_factory() as session:
@@ -290,7 +290,7 @@ class AdvancedBusinessMetrics:
                     name=name,
                     category=MetricCategory.REVENUE,
                     value=value,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     labels={"date": date},
                     metadata=revenue_data,
                 )
@@ -309,7 +309,7 @@ class AdvancedBusinessMetrics:
 
         score = float(satisfaction_data.get("score", 0))
         category = satisfaction_data.get("category", "overall")
-        date = satisfaction_data.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
+        date = satisfaction_data.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
 
         # Update Prometheus metrics
         self.guest_satisfaction_score.labels(category=category, date=date).set(score)
@@ -325,7 +325,7 @@ class AdvancedBusinessMetrics:
             name="guest_satisfaction",
             category=MetricCategory.GUEST_SATISFACTION,
             value=score,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             labels={"category": category, "date": date},
             metadata=satisfaction_data,
         )
@@ -360,7 +360,7 @@ class AdvancedBusinessMetrics:
             name=f"operation_{operation_type}",
             category=MetricCategory.OPERATIONAL,
             value=duration,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             labels={
                 "type": operation_type,
                 **{k: str(v) for k, v in operation_data.items() if k not in ["type", "duration_seconds"]},
@@ -392,7 +392,7 @@ class AdvancedBusinessMetrics:
             name="message_processed",
             category=MetricCategory.COMMUNICATION,
             value=1,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             labels={"channel": channel, "type": message_type, "status": status},
             metadata=message_data,
         )
@@ -409,7 +409,7 @@ class AdvancedBusinessMetrics:
 
         try:
             # Calculate timeframe
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if timeframe == "24h":
                 start_time = now - timedelta(hours=24)
             elif timeframe == "7d":
@@ -478,7 +478,7 @@ class AdvancedBusinessMetrics:
                     last_alert = self._get_last_alert_time(metric_name)
                     if (
                         last_alert
-                        and (datetime.utcnow() - last_alert).total_seconds() < condition.cooldown_minutes * 60
+                        and (datetime.now(timezone.utc) - last_alert).total_seconds() < condition.cooldown_minutes * 60
                     ):
                         continue
 
@@ -487,7 +487,7 @@ class AdvancedBusinessMetrics:
                         "metric_name": metric_name,
                         "condition": condition,
                         "current_value": current_value,
-                        "timestamp": datetime.utcnow(),
+                        "timestamp": datetime.now(timezone.utc),
                         "severity": condition.severity,
                     }
 

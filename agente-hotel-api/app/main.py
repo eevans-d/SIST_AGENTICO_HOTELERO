@@ -6,6 +6,7 @@ Sistema empresarial completo con integración de todos los servicios
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -292,6 +293,24 @@ else:
         "http://127.0.0.1:8000",
     ]
     logger.info("CORS enabled for development (localhost only)")
+
+# TrustedHostMiddleware - DEBE IR ANTES DE CORS para validar Host headers
+if settings.environment == Environment.PROD:
+    # Validar que allowed_hosts está configurado correctamente
+    default_hosts = ["localhost", "127.0.0.1"]
+    if settings.allowed_hosts == default_hosts:
+        logger.warning(
+            "⚠️  TrustedHostMiddleware in production with default localhost values. "
+            "Update allowed_hosts in settings with production domain(s)."
+        )
+
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.allowed_hosts
+    )
+    logger.info(f"🔒 TrustedHostMiddleware enabled. Allowed hosts: {settings.allowed_hosts}")
+else:
+    logger.info("TrustedHostMiddleware disabled in development (not production)")
 
 app.add_middleware(
     CORSMiddleware,

@@ -62,6 +62,8 @@ class DynamicTenantService:
             # This avoids failures resolving string-based relationships like Tenant.users -> "User"
             try:  # lazy import to prevent cycles during module import
                 from ..models.user import User  # noqa: F401
+                # Asegurar que el mapper de identificadores está registrado para relaciones
+                from ..models.tenant import TenantUserIdentifier  # noqa: F401
             except Exception:
                 pass
             async with AsyncSessionFactory() as session:  # type: ignore

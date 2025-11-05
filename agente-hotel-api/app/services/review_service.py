@@ -10,7 +10,7 @@ Funcionalidades:
 - Analytics y seguimiento de conversión
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -63,8 +63,24 @@ class ReviewRequest:
     created_at: Optional[datetime] = None
 
     def __post_init__(self):
+        # Normalize datetimes to timezone-aware UTC to avoid naive/aware TypeErrors
+        def _ensure_aware(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                return dt.replace(tzinfo=timezone.utc)
+            # Normalize to UTC
+            return dt.astimezone(timezone.utc)
+
         if self.created_at is None:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
+        else:
+            self.created_at = _ensure_aware(self.created_at)
+
+        # Coerce checkout_date and last_sent to aware UTC
+        self.checkout_date = _ensure_aware(self.checkout_date)  # type: ignore[assignment]
+        if self.last_sent is not None:
+            self.last_sent = _ensure_aware(self.last_sent)
 
 
 class ReviewService:
@@ -226,7 +242,7 @@ class ReviewService:
             if result.get("success"):
                 # Update request tracking
                 request.sent_count += 1
-                request.last_sent = datetime.utcnow()
+                request.last_sent = datetime.now(timezone.utc)
                 await self._update_review_request(request)
 
                 # Update analytics
@@ -388,7 +404,7 @@ class ReviewService:
             },
             "platform_performance": self.analytics["platform_preferences"],
             "segment_performance": self.analytics["segment_performance"],
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     # Private helper methods
@@ -407,7 +423,7 @@ class ReviewService:
 
     def _is_ready_to_send(self, request: ReviewRequest) -> bool:
         """Verifica si la solicitud está lista para envío."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # First send: check initial delay after checkout
         if request.sent_count == 0:
@@ -421,7 +437,7 @@ class ReviewService:
 
     def _time_until_ready(self, request: ReviewRequest) -> float:
         """Calcula horas hasta el próximo envío."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         if request.sent_count == 0:
             next_send = request.checkout_date + timedelta(hours=self.initial_delay_hours)
@@ -500,7 +516,7 @@ class ReviewService:
             "last_sent": request.last_sent.isoformat() if request.last_sent else None,
             "responded": request.responded,
             "review_submitted": request.review_submitted,
-            "created_at": (request.created_at or datetime.utcnow()).isoformat(),
+            "created_at": (request.created_at or datetime.now(timezone.utc)).isoformat(),
         }
 
         await self.session_manager.set_session_data(request.guest_id, session_key, data)
@@ -514,19 +530,27 @@ class ReviewService:
         if not request_data:
             return None
 
+        # Helper to ensure aware UTC
+        def _ensure_aware(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
         return ReviewRequest(
             guest_id=request_data["guest_id"],
             guest_name=request_data["guest_name"],
             booking_id=request_data["booking_id"],
-            checkout_date=datetime.fromisoformat(request_data["checkout_date"]),
+            checkout_date=_ensure_aware(datetime.fromisoformat(request_data["checkout_date"])) or datetime.now(timezone.utc),
             platforms=[ReviewPlatform(p) for p in request_data["platforms"]],
             segment=GuestSegment(request_data["segment"]),
             language=request_data["language"],
             sent_count=request_data["sent_count"],
-            last_sent=datetime.fromisoformat(request_data["last_sent"]) if request_data["last_sent"] else None,
+            last_sent=_ensure_aware(datetime.fromisoformat(request_data["last_sent"])) if request_data["last_sent"] else None,
             responded=request_data["responded"],
             review_submitted=request_data["review_submitted"],
-            created_at=datetime.fromisoformat(request_data["created_at"]),
+            created_at=_ensure_aware(datetime.fromisoformat(request_data["created_at"])) if request_data.get("created_at") else None,
         )
 
     async def _update_review_request(self, request: ReviewRequest):

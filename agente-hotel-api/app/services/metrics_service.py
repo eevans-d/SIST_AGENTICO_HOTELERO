@@ -63,13 +63,9 @@ class MetricsService:
         )
 
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
-        labels = {
-            "method": method,
-            "endpoint": endpoint,
-            "status_code": str(status_code),
-        }
-        self.request_latency.labels(**labels).observe(latency)
-        self.requests_total.labels(**labels).inc()
+        # Histograma no incluye status_code; el contador sí
+        self.request_latency.labels(method=method, endpoint=endpoint).observe(latency)
+        self.requests_total.labels(method=method, endpoint=endpoint, status_code=str(status_code)).inc()
 
     def check_slo_violations(self) -> list:
         # Placeholder: devolvería lista de violaciones basado en distribución

@@ -16,7 +16,7 @@ from app.services.session_manager import SessionManager
 from app.services.lock_service import LockService
 from app.models.unified_message import UnifiedMessage
 from app.exceptions.pms_exceptions import PMSError, CircuitBreakerOpenError
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def sample_message():
         user_id="test_user",
         tipo="text",
         texto="Hola, quiero consultar disponibilidad",
-        timestamp_iso=datetime.utcnow().isoformat(),
+    timestamp_iso=datetime.now(timezone.utc).isoformat(),
         metadata={},
     )
 

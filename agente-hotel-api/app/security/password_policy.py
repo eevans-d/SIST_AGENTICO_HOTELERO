@@ -14,7 +14,7 @@ Date: 2025-11-03
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from passlib.context import CryptContext
@@ -174,7 +174,11 @@ class PasswordPolicy:
             # No last changed date means never changed - require rotation
             return True
 
-        age = datetime.utcnow() - last_changed
+        # Ensure timezone-aware arithmetic (assume UTC if naive)
+        now = datetime.now(timezone.utc)
+        if last_changed.tzinfo is None:
+            last_changed = last_changed.replace(tzinfo=timezone.utc)
+        age = now - last_changed
         rotation_required = age.days >= self.rotation_days
 
         if rotation_required:
@@ -229,7 +233,10 @@ class PasswordPolicy:
                 logger.warning(
                     "password_rotation_overdue",
                     user_id=user_id,
-                    days_overdue=(datetime.utcnow() - last_changed).days - self.rotation_days,
+                    days_overdue=(
+                        (datetime.now(timezone.utc) - (last_changed.replace(tzinfo=timezone.utc) if last_changed.tzinfo is None else last_changed)).days
+                        - self.rotation_days
+                    ),
                 )
 
         # Raise if any violations

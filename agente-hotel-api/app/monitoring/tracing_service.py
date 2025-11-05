@@ -5,7 +5,7 @@ Advanced distributed tracing with correlation tracking and performance insights
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict, field
 from enum import Enum
@@ -137,7 +137,7 @@ class DistributedTracingService:
                 "total_duration": 0.0,
                 "error_count": 0,
                 "p95_duration": 0.0,
-                "last_updated": datetime.utcnow(),
+                "last_updated": datetime.now(timezone.utc),
             }
         )
 
@@ -200,7 +200,7 @@ class DistributedTracingService:
             operation_name=operation_name,
             service_name=self.service_name,
             span_kind=span_kind,
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
             tags=tags or {},
             trace_level=trace_level,
         )
@@ -239,7 +239,7 @@ class DistributedTracingService:
             return None
 
         # Update span
-        span.end_time = datetime.utcnow()
+        span.end_time = datetime.now(timezone.utc)
         span.duration_ms = (span.end_time - span.start_time).total_seconds() * 1000
         span.status = status
 
@@ -300,7 +300,7 @@ class DistributedTracingService:
         if not span:
             return
 
-        event = SpanEvent(name=name, timestamp=datetime.utcnow(), attributes=attributes or {})
+        event = SpanEvent(name=name, timestamp=datetime.now(timezone.utc), attributes=attributes or {})
 
         span.events.append(event)
         logger.debug(f"Added span event: {name}")
@@ -352,7 +352,7 @@ class DistributedTracingService:
     ) -> List[Trace]:
         """Get traces with filtering"""
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         # Filter from memory
         traces = [trace for trace in self.completed_traces if trace.start_time > cutoff_time]
@@ -375,7 +375,7 @@ class DistributedTracingService:
     async def get_operation_analytics(self, hours: int = 24) -> Dict[str, Any]:
         """Get operation performance analytics"""
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         # Get recent traces
         recent_traces = [trace for trace in self.completed_traces if trace.start_time > cutoff_time]
@@ -464,7 +464,7 @@ class DistributedTracingService:
     async def get_service_map(self, hours: int = 24) -> Dict[str, Any]:
         """Generate service dependency map"""
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         # Get recent traces
         recent_traces = [trace for trace in self.completed_traces if trace.start_time > cutoff_time]
@@ -664,7 +664,7 @@ class DistributedTracingService:
         if span.status == SpanStatus.ERROR:
             stats["error_count"] += 1
 
-        stats["last_updated"] = datetime.utcnow()
+        stats["last_updated"] = datetime.now(timezone.utc)
 
     async def _check_trace_completion(self, trace_id: str):
         """Check if trace is complete and process it"""
@@ -676,7 +676,7 @@ class DistributedTracingService:
             return
 
         trace_info = self.active_traces[trace_id]
-        time_since_start = (datetime.utcnow() - trace_info["start_time"]).total_seconds()
+        time_since_start = (datetime.now(timezone.utc) - trace_info["start_time"]).total_seconds()
 
         # Consider trace complete after reasonable time or explicit completion
         if time_since_start > 30:  # 30 seconds max trace duration
@@ -872,7 +872,7 @@ class DistributedTracingService:
 
         while True:
             try:
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
 
                 # Check active traces for completion
                 for trace_id in list(self.active_traces.keys()):
@@ -895,7 +895,7 @@ class DistributedTracingService:
         while True:
             try:
                 # Aggregate operation statistics
-                datetime.utcnow()
+                datetime.now(timezone.utc)
 
                 # This would push metrics to monitoring system
                 for op_name, stats in self.operation_stats.items():
