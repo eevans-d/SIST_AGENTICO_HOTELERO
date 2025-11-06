@@ -25,18 +25,18 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
-    
+
     -- Status y permisos
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
-    
+
     -- Multi-tenancy (FK lógica, sin constraint para flexibilidad)
     tenant_id VARCHAR(255),
-    
+
     -- Gestión de contraseñas
     password_last_changed TIMESTAMP NOT NULL DEFAULT NOW(),
     password_must_change BOOLEAN NOT NULL DEFAULT FALSE,
-    
+
     -- Auditoría
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -61,16 +61,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     id VARCHAR(255) PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
     token_jti VARCHAR(255) UNIQUE NOT NULL,
-    
+
     -- Ciclo de vida del token
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     is_revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    
+
     -- Auditoría de seguridad
     user_agent TEXT,
     ip_address VARCHAR(45),  -- IPv6 compatible (max 45 chars)
-    
+
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS password_history (
     user_id VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    
+
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -116,12 +116,12 @@ CREATE TABLE IF NOT EXISTS tenants (
     tenant_id VARCHAR(255) UNIQUE NOT NULL,  -- Slug: "hotel-abc", "resort-xyz"
     name VARCHAR(255) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'active',  -- active, inactive, suspended
-    
+
     -- Configuración opcional de horarios de negocio
     business_hours_start INTEGER,  -- Hora en formato 0-23 (ej: 8 = 8am)
     business_hours_end INTEGER,    -- Hora en formato 0-23 (ej: 22 = 10pm)
     business_hours_timezone VARCHAR(50),  -- Ej: "America/Argentina/Buenos_Aires"
-    
+
     -- Auditoría
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS tenant_user_identifiers (
     tenant_id INTEGER NOT NULL,
     identifier VARCHAR(255) NOT NULL,  -- phone: +54911xxxx, email: guest@example.com
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    
+
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     CONSTRAINT uq_identifier UNIQUE (identifier)
 );
@@ -192,14 +192,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_users_updated_at 
+CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
-    FOR EACH ROW 
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_tenants_updated_at 
+CREATE TRIGGER update_tenants_updated_at
     BEFORE UPDATE ON tenants
-    FOR EACH ROW 
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 COMMENT ON FUNCTION update_updated_at_column() IS 'Actualiza automáticamente updated_at en UPDATEs';
@@ -223,9 +223,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO agente_ba
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO agente_backend;
 
 -- Permisos en tablas futuras (auto-grant)
-ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO agente_backend;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO agente_backend;
 
 COMMENT ON ROLE agente_backend IS 'Rol dedicado para Agente Hotel API backend';
@@ -240,7 +240,7 @@ COMMENT ON ROLE agente_backend IS 'Rol dedicado para Agente Hotel API backend';
 /*
 -- Tenant de ejemplo
 INSERT INTO tenants (tenant_id, name, status, business_hours_start, business_hours_end, business_hours_timezone)
-VALUES 
+VALUES
     ('hotel-demo', 'Hotel Demo', 'active', 8, 22, 'America/Argentina/Buenos_Aires'),
     ('resort-test', 'Resort Test', 'active', 0, 23, 'UTC')
 ON CONFLICT (tenant_id) DO NOTHING;
@@ -273,21 +273,21 @@ ON CONFLICT (id) DO NOTHING;
 -- Ejecutar después de aplicar el schema para verificar integridad
 
 -- Verificar tablas creadas
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
   AND table_type = 'BASE TABLE'
 ORDER BY table_name;
 
 -- Verificar índices
-SELECT tablename, indexname 
-FROM pg_indexes 
+SELECT tablename, indexname
+FROM pg_indexes
 WHERE schemaname = 'public'
 ORDER BY tablename, indexname;
 
 -- Verificar foreign keys
 SELECT
-    tc.table_name, 
+    tc.table_name,
     tc.constraint_name,
     kcu.column_name,
     ccu.table_name AS foreign_table_name,
@@ -297,7 +297,7 @@ JOIN information_schema.key_column_usage AS kcu
   ON tc.constraint_name = kcu.constraint_name
 JOIN information_schema.constraint_column_usage AS ccu
   ON ccu.constraint_name = tc.constraint_name
-WHERE tc.constraint_type = 'FOREIGN KEY' 
+WHERE tc.constraint_type = 'FOREIGN KEY'
   AND tc.table_schema = 'public'
 ORDER BY tc.table_name;
 

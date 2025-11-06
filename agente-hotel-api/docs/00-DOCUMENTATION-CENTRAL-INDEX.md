@@ -21,7 +21,7 @@
 
 ## 🆕 DOCUMENTACIÓN RECIENTE (Noviembre 2025)
 
-### ⚡ **SECURITY_HARDENING_REPORT.md** (450 líneas) - NUEVO
+### ⚡ **SECURITY_HARDENING_REPORT.md** (450 líneas)
 - **Propósito**: Implementación completa de hardening OWASP A01:2021
 - **Audiencia**: Security Engineers, Backend Team, DevOps
 - **Tiempo**: 15-20 minutos lectura
@@ -34,10 +34,26 @@
   - Vulnerabilidades mitigadas (OWASP A01, A02, A05, A07)
   - Deployment Readiness: 9.3/10 (+4.5%)
 
-### 🔐 **INTEGRATION-SUPABASE.md** (85 líneas) - NUEVO
-- **Propósito**: Integración con Supabase para gestión de usuarios
-- **Audiencia**: Backend Team
-- **Contenido**: Schema, RLS policies, API integration
+### �️ **SUPABASE INTEGRATION** (1,200+ líneas) - NUEVO ✨
+- **📁 docs/supabase/** - Guía completa de integración
+- **📄 schema.sql** (350+ líneas) - DDL validado contra SQLAlchemy models
+  - 6 tablas: users, user_sessions, password_history, tenants, tenant_user_identifiers, lock_audit
+  - Índices optimizados, foreign keys, triggers
+  - Validación post-deployment incluida
+- **📄 README.md** (886 líneas) - Setup guide paso a paso
+  - Arquitectura de 3 capas (Supabase + Redis + QloApps)
+  - Configuración de connection pooler (puerto 6543 con SSL)
+  - Troubleshooting de errores comunes
+  - FAQ: RLS, backups, migrations, scaling
+- **📄 EXECUTION-PLAN.md** (1,200+ líneas) - Blueprint completo ✅ NUEVO
+  - **Pre-requisitos críticos** con checklist
+  - **5 fases de ejecución** con tiempos estimados (4-6h total)
+  - **Rollback plan** completo para cada escenario
+  - **Success criteria** técnicos y de negocio
+  - **Tracking templates** para daily standups
+- **Propósito**: Migrar database de Postgres local a Supabase managed
+- **Audiencia**: DevOps, Backend Team, Infrastructure
+- **Tiempo**: 60 minutos lectura, 4-6 horas ejecución
 
 ---
 
@@ -52,9 +68,13 @@ agente-hotel-api/docs/
 ├── START-HERE.md                        ← Punto de entrada
 ├── README.md                            ← Overview del directorio docs/
 │
-├── SECURITY_HARDENING_REPORT.md        ← 🆕 Reporte seguridad OWASP
-├── INTEGRATION-SUPABASE.md             ← 🆕 Integración Supabase
+├── SECURITY_HARDENING_REPORT.md        ← Reporte seguridad OWASP
 ├── ORCHESTRATOR_INTENTS.md             ← Documentación NLP intents
+│
+├── supabase/                            ← 🆕 Supabase Integration (NUEVO)
+│   ├── schema.sql                       ← DDL para Supabase Postgres
+│   ├── README.md                        ← Setup guide completo
+│   └── EXECUTION-PLAN.md                ← Blueprint de migración ✨
 │
 ├── guides/                              ← Guías técnicas
 │   ├── P011-DEPENDENCY-SCAN-GUIDE.md
