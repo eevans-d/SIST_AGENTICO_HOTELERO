@@ -99,6 +99,7 @@ audit_logs/
 
 # Backups de base de datos
 *.sql
+!docs/supabase/schema.sql  # Excepción: schema de Supabase es documentación
 *.dump
 backups/
 
