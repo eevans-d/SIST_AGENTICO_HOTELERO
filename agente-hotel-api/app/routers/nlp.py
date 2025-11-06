@@ -13,7 +13,7 @@ import logging
 from app.core.security import get_current_user
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import redis.asyncio as redis
 
 from app.core.settings import get_settings
@@ -111,19 +111,19 @@ class MessageRequest(BaseModel):
     language: str = Field(default="es", description="Language code (es, en, fr)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional context metadata")
 
-    @validator("session_id")
+    @field_validator("session_id")
     def validate_session_id(cls, v):
         if not v.strip():
             raise ValueError("Session ID cannot be empty")
         return v.strip()
 
-    @validator("message")
+    @field_validator("message")
     def validate_message(cls, v):
         if not v.strip():
             raise ValueError("Message cannot be empty")
         return v.strip()
 
-    @validator("language")
+    @field_validator("language")
     def validate_language(cls, v):
         allowed_languages = ["es", "en", "fr"]
         if v not in allowed_languages:
@@ -424,7 +424,7 @@ async def health_check(request: Request, redis_client=Depends(get_redis_client))
         elif health_status["status"] == "unhealthy":
             status_code = 503  # Service unavailable
 
-        return JSONResponse(content=response.dict(), status_code=status_code)
+        return JSONResponse(content=response.model_dump(), status_code=status_code)
 
     except Exception as e:
         logger.error(f"Error in health check: {e}")

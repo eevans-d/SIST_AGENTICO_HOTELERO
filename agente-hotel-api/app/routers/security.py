@@ -467,7 +467,7 @@ async def update_user_profile(
         user = verification_result["user"]
 
         # Update profile
-        result = await jwt_auth.update_user_profile(user["user_id"], profile_update.dict(exclude_unset=True))
+        result = await jwt_auth.update_user_profile(user["user_id"], profile_update.model_dump(exclude_unset=True))
 
         if not result["success"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["message"])
