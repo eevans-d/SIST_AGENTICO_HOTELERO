@@ -37,3 +37,10 @@ redis_pool = redis.ConnectionPool.from_url(REDIS_URL, **pool_kwargs)
 async def get_redis() -> redis.Redis:
     """Dependency to get a Redis connection."""
     return redis.Redis(connection_pool=redis_pool)
+
+
+# Backwards-compatible alias expected by several services/tests
+# Some modules import `get_redis_client` while this module originally exposed `get_redis`.
+# Provide an async alias to avoid import errors and keep a single implementation.
+async def get_redis_client() -> redis.Redis:  # pragma: no cover
+    return await get_redis()

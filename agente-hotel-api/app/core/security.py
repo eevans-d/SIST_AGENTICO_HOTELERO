@@ -23,8 +23,16 @@ def create_access_token(data: dict) -> str:
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    credentials_exception = HTTPException(
-        status_code=401,
+    """
+    Validate JWT bearer token.
+
+    Behavior aligned with tests:
+    - Missing token: handled by OAuth2PasswordBearer → 401 Not authenticated
+    - Invalid/malformed/expired token: 403 Could not validate credentials
+    - Valid token but missing sub: 403 Could not validate credentials
+    """
+    forbidden_exception = HTTPException(
+        status_code=403,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
@@ -34,8 +42,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[jwt_alg])
         username: str | None = payload.get("sub")
         if username is None:
-            raise credentials_exception
+            raise forbidden_exception
     except JWTError:
-        raise credentials_exception
+        # Malformed or expired
+        raise forbidden_exception
 
     return {"username": username}

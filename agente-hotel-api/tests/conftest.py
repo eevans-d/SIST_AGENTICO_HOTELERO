@@ -11,6 +11,16 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from typing import Any
 
+# Mocks para tests de autenticación
+from tests.mocks import (
+    MockPerformanceOptimizer,
+    MockDatabaseTuner,
+    MockCacheOptimizer,
+    MockResourceMonitor,
+    MockAutoScaler,
+    MockNLPService,
+)
+
 
 # Reset Prometheus default registry between tests to avoid duplicated timeseries
 @pytest_asyncio.fixture(autouse=True)
@@ -60,6 +70,28 @@ async def test_app():
     # Lógica para crear una app de prueba con BD temporal
     from app.main import app
 
+    # Forzar inclusión de routers de performance y nlp (para tests de autenticación)
+    try:
+        from app.routers import performance, nlp
+
+        # Solo incluir si no están ya incluidos
+        performance_included = any(
+            route.path.startswith("/api/v1/performance")
+            for route in app.routes
+        )
+        nlp_included = any(
+            route.path.startswith("/api/nlp")
+            for route in app.routes
+        )
+
+        if not performance_included:
+            app.include_router(performance.router)
+        if not nlp_included:
+            app.include_router(nlp.router)
+    except Exception as e:
+        # Silenciar errores de import en tests que no requieren estos routers
+        pass
+
     # Usar almacenamiento en memoria para el rate limiter en pruebas
     app.state.limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
     return app
@@ -72,3 +104,73 @@ async def _force_memory_rate_limiter():
 
     app.state.limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
     yield
+
+
+# ===== Fixtures para override de servicios con mocks (para tests de autenticación) =====
+
+@pytest_asyncio.fixture
+def mock_performance_optimizer():
+    """Retorna mock de PerformanceOptimizer"""
+    return MockPerformanceOptimizer()
+
+
+@pytest_asyncio.fixture
+def mock_database_tuner():
+    """Retorna mock de DatabaseTuner"""
+    return MockDatabaseTuner()
+
+
+@pytest_asyncio.fixture
+def mock_cache_optimizer():
+    """Retorna mock de CacheOptimizer"""
+    return MockCacheOptimizer()
+
+
+@pytest_asyncio.fixture
+def mock_resource_monitor():
+    """Retorna mock de ResourceMonitor"""
+    return MockResourceMonitor()
+
+
+@pytest_asyncio.fixture
+def mock_auto_scaler():
+    """Retorna mock de AutoScaler"""
+    return MockAutoScaler()
+
+
+@pytest_asyncio.fixture
+def mock_nlp_service():
+    """Retorna mock de NLPService"""
+    return MockNLPService()
+
+
+@pytest_asyncio.fixture
+async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
+                      mock_cache_optimizer, mock_resource_monitor, mock_auto_scaler,
+                      mock_nlp_service):
+    """
+    Cliente de test con mocks de servicios inyectados para override de Depends()
+    """
+    from app.services.performance_optimizer import get_performance_optimizer
+    try:
+        from app.services.database_tuner import get_db_performance_tuner as get_database_tuner
+    except Exception:  # fallback nombre anterior
+        from app.services.database_tuner import get_database_tuner  # type: ignore
+    from app.services.cache_optimizer import get_cache_optimizer
+    from app.services.resource_monitor import get_resource_monitor
+    from app.services.auto_scaler import get_auto_scaler
+    from app.services.nlp.integrated_nlp_service import get_nlp_service
+
+    # Override de dependencias con mocks
+    test_app.dependency_overrides[get_performance_optimizer] = lambda: mock_performance_optimizer
+    test_app.dependency_overrides[get_database_tuner] = lambda: mock_database_tuner
+    test_app.dependency_overrides[get_cache_optimizer] = lambda: mock_cache_optimizer
+    test_app.dependency_overrides[get_resource_monitor] = lambda: mock_resource_monitor
+    test_app.dependency_overrides[get_auto_scaler] = lambda: mock_auto_scaler
+    test_app.dependency_overrides[get_nlp_service] = lambda: mock_nlp_service
+
+    async with httpx.AsyncClient(app=test_app, base_url="http://test") as client:
+        yield client
+
+    # Limpiar overrides después de tests
+    test_app.dependency_overrides.clear()

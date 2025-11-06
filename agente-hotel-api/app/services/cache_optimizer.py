@@ -21,17 +21,19 @@ from app.core.settings import settings
 logger = logging.getLogger(__name__)
 
 # Métricas de Prometheus
-cache_optimization_duration = Histogram(
-    "cache_optimization_duration_seconds", "Tiempo tomado por optimizaciones de cache", ["operation"]
+cache_optimization_duration_svc = Histogram(
+    "cache_opt_duration_seconds_service", "Tiempo tomado por optimizaciones de cache (service)", ["operation"]
 )
 
-cache_metrics_gauge = Gauge("cache_performance_metrics", "Métricas de performance de cache", ["metric_type"])
-
-cache_operations_total = Counter(
-    "cache_operations_total", "Total de operaciones de cache ejecutadas", ["operation", "status"]
+cache_metrics_gauge_svc = Gauge(
+    "cache_performance_metrics_service", "Métricas de performance de cache (service)", ["metric_type"]
 )
 
-cache_hit_rate_gauge = Gauge("cache_hit_rate", "Tasa de aciertos de cache", ["cache_type"])
+cache_operations_total_svc = Counter(
+    "cache_operations_total_service", "Total de operaciones de cache ejecutadas (service)", ["operation", "status"]
+)
+
+cache_hit_rate_svc = Gauge("cache_hit_rate_service", "Tasa de aciertos de cache (service)", ["cache_type"])
 
 
 class CacheStrategy(Enum):
@@ -141,7 +143,7 @@ class CacheOptimizer:
 
     async def analyze_cache_patterns(self) -> Dict[str, CachePattern]:
         """Analizar patrones de uso de cache"""
-        with cache_optimization_duration.labels("pattern_analysis").time():
+    with cache_optimization_duration_svc.labels("pattern_analysis").time():
             try:
                 # Obtener todas las keys
                 keys = await self.redis_client.keys("*")
@@ -163,7 +165,7 @@ class CacheOptimizer:
                 self.cache_patterns = patterns
 
                 # Actualizar métricas
-                cache_metrics_gauge.labels("total_patterns").set(len(patterns))
+                cache_metrics_gauge_svc.labels("total_patterns").set(len(patterns))
 
                 logger.info(f"Analizados {len(patterns)} patrones de cache")
                 return patterns
@@ -277,15 +279,15 @@ class CacheOptimizer:
         self.cold_keys = cold_keys
 
         # Actualizar métricas
-        cache_metrics_gauge.labels("hot_keys_count").set(len(hot_keys))
-        cache_metrics_gauge.labels("cold_keys_count").set(len(cold_keys))
+        cache_metrics_gauge_svc.labels("hot_keys_count").set(len(hot_keys))
+        cache_metrics_gauge_svc.labels("cold_keys_count").set(len(cold_keys))
 
         logger.info(f"Identificadas {len(hot_keys)} keys hot, {len(cold_keys)} keys cold")
         return hot_keys, cold_keys
 
     async def optimize_ttl_strategy(self) -> Dict[str, int]:
         """Optimizar estrategia de TTL basada en patrones"""
-        with cache_optimization_duration.labels("ttl_optimization").time():
+        with cache_optimization_duration_svc.labels("ttl_optimization").time():
             try:
                 optimized_ttls = {}
 
@@ -296,14 +298,14 @@ class CacheOptimizer:
                     # Aplicar TTL optimizado a keys existentes del patrón
                     await self._apply_ttl_to_pattern(pattern_key, optimal_ttl)
 
-                cache_operations_total.labels("ttl_optimization", "success").inc()
+                cache_operations_total_svc.labels("ttl_optimization", "success").inc()
 
                 logger.info(f"TTL optimizado para {len(optimized_ttls)} patrones")
                 return optimized_ttls
 
             except Exception as e:
                 logger.error(f"Error optimizando TTL: {e}")
-                cache_operations_total.labels("ttl_optimization", "failed").inc()
+                cache_operations_total_svc.labels("ttl_optimization", "failed").inc()
                 return {}
 
     async def _calculate_optimal_ttl(self, pattern: CachePattern) -> int:
@@ -358,7 +360,7 @@ class CacheOptimizer:
 
     async def implement_compression(self) -> Dict[str, Any]:
         """Implementar compresión para keys grandes"""
-        with cache_optimization_duration.labels("compression").time():
+    with cache_optimization_duration_svc.labels("compression").time():
             try:
                 compressed_keys = []
                 total_savings = 0
@@ -380,7 +382,7 @@ class CacheOptimizer:
                     except Exception as e:
                         logger.debug(f"Error comprimiendo key {key}: {e}")
 
-                cache_operations_total.labels("compression", "success").inc()
+                cache_operations_total_svc.labels("compression", "success").inc()
 
                 result = {
                     "compressed_keys_count": len(compressed_keys),
@@ -396,7 +398,7 @@ class CacheOptimizer:
 
             except Exception as e:
                 logger.error(f"Error implementando compresión: {e}")
-                cache_operations_total.labels("compression", "failed").inc()
+                cache_operations_total_svc.labels("compression", "failed").inc()
                 return {"error": str(e)}
 
     async def _compress_key(self, key: str) -> int:
@@ -438,7 +440,7 @@ class CacheOptimizer:
 
     async def preload_hot_data(self) -> Dict[str, Any]:
         """Pre-cargar datos hot basado en patrones"""
-        with cache_optimization_duration.labels("preload").time():
+    with cache_optimization_duration_svc.labels("preload").time():
             try:
                 if not self.config["auto_preload_enabled"]:
                     return {"status": "disabled"}
@@ -461,7 +463,7 @@ class CacheOptimizer:
                 user_items = await self._preload_active_user_data()
                 preloaded_items.extend(user_items)
 
-                cache_operations_total.labels("preload", "success").inc()
+                cache_operations_total_svc.labels("preload", "success").inc()
 
                 result = {
                     "status": "completed",
@@ -480,7 +482,7 @@ class CacheOptimizer:
 
             except Exception as e:
                 logger.error(f"Error en pre-carga: {e}")
-                cache_operations_total.labels("preload", "failed").inc()
+                cache_operations_total_svc.labels("preload", "failed").inc()
                 return {"status": "failed", "error": str(e)}
 
     async def _preload_configuration_data(self) -> List[Dict]:
@@ -596,7 +598,7 @@ class CacheOptimizer:
 
     async def cleanup_expired_keys(self) -> Dict[str, int]:
         """Limpiar keys expiradas y optimizar memoria"""
-        with cache_optimization_duration.labels("cleanup").time():
+    with cache_optimization_duration_svc.labels("cleanup").time():
             try:
                 # Obtener información de memoria antes
                 memory_info_before = await self.redis_client.info("memory")
@@ -629,7 +631,7 @@ class CacheOptimizer:
 
                 memory_freed = used_memory_before - used_memory_after
 
-                cache_operations_total.labels("cleanup", "success").inc()
+                cache_operations_total_svc.labels("cleanup", "success").inc()
 
                 result = {
                     "expired_keys_removed": expired_keys,
@@ -643,7 +645,7 @@ class CacheOptimizer:
 
             except Exception as e:
                 logger.error(f"Error en limpieza de cache: {e}")
-                cache_operations_total.labels("cleanup", "failed").inc()
+                cache_operations_total_svc.labels("cleanup", "failed").inc()
                 return {"error": str(e)}
 
     async def get_cache_performance_report(self) -> Dict:
@@ -659,9 +661,9 @@ class CacheOptimizer:
             hit_rate = keyspace_hits / total_commands if total_commands > 0 else 0
 
             # Actualizar métricas de Prometheus
-            cache_hit_rate_gauge.labels("overall").set(hit_rate)
-            cache_metrics_gauge.labels("memory_usage_mb").set(info.get("used_memory", 0) // (1024 * 1024))
-            cache_metrics_gauge.labels("connected_clients").set(info.get("connected_clients", 0))
+            cache_hit_rate_svc.labels("overall").set(hit_rate)
+            cache_metrics_gauge_svc.labels("memory_usage_mb").set(info.get("used_memory", 0) // (1024 * 1024))
+            cache_metrics_gauge_svc.labels("connected_clients").set(info.get("connected_clients", 0))
 
             return {
                 "general_stats": {

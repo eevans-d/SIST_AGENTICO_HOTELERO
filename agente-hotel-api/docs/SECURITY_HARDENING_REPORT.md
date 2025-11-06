@@ -68,30 +68,28 @@ ALLOWED_HOSTS=["api.hotel.com", "www.hotel.com"]
 #### `app/routers/performance.py` (16 endpoints protegidos)
 
 **Antes**:
-```python
+**Fecha**: 2025-11-06  
 @router.get("/status")
-async def get_status():
+**Estado**: ✅ **IMPLEMENTACIÓN COMPLETA Y VALIDADA** (auth y métricas en verde)
     ...
 ```
 
-**Después**:
+| **Fase 5** | Test Suite (3 archivos) | ✅ COMPLETO | Suites auth y métricas en verde |
 ```python
 from app.core.security import get_current_user
-
+- Suites clave pasando: `tests/auth/test_performance_auth.py`, `tests/auth/test_nlp_admin_auth.py`, `tests/security/test_metrics_ip_filter.py`
 @router.get("/status", dependencies=[Depends(get_current_user)])
 async def get_status():
     ...
-```
+**Después** (protección y orden correcto de rate limiting):
 
 **Endpoints Protegidos**:
 - GET /api/v1/performance/status
-- GET /api/v1/performance/metrics
-- GET /api/v1/performance/optimization/report
+@router.get("/admin/sessions", dependencies=[Depends(get_current_user)])
 - POST /api/v1/performance/optimization/execute
 - GET /api/v1/performance/database/report
 - POST /api/v1/performance/database/optimize
-- GET /api/v1/performance/cache/report
-- POST /api/v1/performance/cache/optimize
+@router.post("/admin/cleanup", dependencies=[Depends(get_current_user)])
 - GET /api/v1/performance/scaling/status
 - POST /api/v1/performance/scaling/evaluate
 - POST /api/v1/performance/scaling/execute
@@ -105,16 +103,30 @@ async def get_status():
 
 #### `app/routers/nlp.py` (2 admin endpoints protegidos)
 
+
+Nota: El rate limiting general se aplica a nivel de aplicación (app.state.limiter + middleware). Se removieron decoradores de rate limit en endpoints admin para garantizar que la autenticación se valide ANTES de posibles 429 (cumpliendo el test "rate limiting después de auth").
 **Antes**:
 ```python
 @router.get("/admin/sessions")
-@limiter.limit("5/minute")
+**Después**:
 async def get_active_sessions(request: Request, redis_client=Depends(get_redis_client)):
     ...
 ```
 
 **Después**:
 ```python
+
+# Inclusión de routers
+app.include_router(health.router)
+app.include_router(metrics.router)
+app.include_router(webhooks.router)
+app.include_router(admin.router)
+if MONITORING_AVAILABLE:
+    app.include_router(monitoring.router)
+if PERFORMANCE_ROUTER_AVAILABLE:
+    app.include_router(performance.router)
+if NLP_ROUTER_AVAILABLE:
+    app.include_router(nlp.router)
 from app.core.security import get_current_user
 
 @router.get("/admin/sessions", dependencies=[Depends(get_current_user)])

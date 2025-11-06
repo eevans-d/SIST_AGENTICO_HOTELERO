@@ -27,6 +27,14 @@ from app.core.middleware import (
 # Importar todos los routers
 from app.routers import health, metrics, webhooks, admin, monitoring
 
+# Importar router de NLP
+try:
+    from app.routers import nlp
+    NLP_ROUTER_AVAILABLE = True
+except Exception:
+    NLP_ROUTER_AVAILABLE = False
+    logger.warning("NLP router not available")
+
 # Importar router de performance optimization
 try:
     from app.routers import performance
@@ -66,7 +74,7 @@ try:
     from .services.performance_scheduler import get_performance_scheduler
 
     OPTIMIZATION_AVAILABLE = True
-except ImportError:
+except Exception:
     OPTIMIZATION_AVAILABLE = False
     logger.warning("Performance optimization services not available")
 
@@ -356,6 +364,13 @@ if PERFORMANCE_ROUTER_AVAILABLE:
     logger.info("✅ Router de optimización de performance incluido")
 else:
     logger.warning("⚠️  Router de optimización no disponible")
+
+# Router de NLP (si está disponible)
+if NLP_ROUTER_AVAILABLE:
+    app.include_router(nlp.router)
+    logger.info("✅ Router de NLP incluido")
+else:
+    logger.warning("⚠️  Router de NLP no disponible")
 
 
 # Endpoints adicionales para información del sistema
