@@ -206,7 +206,25 @@ supabase link --project-ref your-project-ref
 supabase db push
 ```
 
----
+### Método 4: Makefile (Automatizado)
+
+Desde la raíz de `agente-hotel-api`:
+
+```bash
+# 1) Probar conexión (usa DATABASE_URL de .env)
+make supabase-test-connection
+
+# 2) Aplicar el schema completo
+make supabase-apply-schema
+
+# 3) Validar tablas e índices clave
+make supabase-validate
+```
+
+Requisitos:
+- Variable `DATABASE_URL` con el connection string del pooler + `sslmode=require` en `.env` o en variables de entorno.
+- Usuario con permisos para crear tablas e índices (p.ej., `postgres.[PROJECT-REF]`).
+
 
 ## Configuración del Backend
 
@@ -274,6 +292,16 @@ docker logs agente-api --tail 50
 ---
 
 ## Validación y Testing
+
+### Smoke Test (Makefile)
+
+```bash
+# Verificar conectividad
+make supabase-test-connection
+
+# Validar existencia de tablas y listar índices por tabla
+make supabase-validate
+```
 
 ### Test 1: Crear Tenant de Prueba
 

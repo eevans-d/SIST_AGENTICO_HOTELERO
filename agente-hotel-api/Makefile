@@ -1185,4 +1185,29 @@ incident-test: ## Run incident response tests
 	@echo "✅ Incident response tests passed"
 
 
+# ==============================================================================
+# Supabase: Schema & Validación
+# ==============================================================================
+
+.PHONY: supabase-test-connection supabase-apply-schema supabase-validate
+
+supabase-test-connection: ## Prueba de conexión a Supabase (usa DATABASE_URL de .env)
+	@echo "🔌 Probando conexión a Supabase..."
+	@python3 scripts/test_supabase_connection.py || { echo "❌ Conexión fallida"; exit 1; }
+	@echo "✅ Conexión OK"
+
+supabase-apply-schema: ## Aplica docs/supabase/schema.sql a la base de datos (requiere DATABASE_URL)
+	@echo "🗃️  Aplicando schema de Supabase..."
+	@if [ ! -f docs/supabase/schema.sql ]; then \
+	  echo "❌ No se encontró docs/supabase/schema.sql"; exit 1; \
+	fi
+	@python3 scripts/apply_supabase_schema.py --schema-file docs/supabase/schema.sql || { echo "❌ Falló la aplicación del schema"; exit 1; }
+	@echo "✅ Schema aplicado"
+
+supabase-validate: ## Valida tablas e índices clave tras aplicar el schema
+	@echo "🔍 Validando schema en Supabase..."
+	@python3 scripts/validate_supabase_schema.py || { echo "❌ Validación fallida"; exit 1; }
+	@echo "✅ Validación completada"
+
+
 .DEFAULT_GOAL := help
