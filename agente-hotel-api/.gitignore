@@ -27,6 +27,8 @@ ENV/
 .env
 .env.*
 !.env.example
+.env.supabase
+!.env.supabase.template
 .python-version
 dist/
 build/
