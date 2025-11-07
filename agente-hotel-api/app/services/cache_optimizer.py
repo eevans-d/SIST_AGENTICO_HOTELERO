@@ -143,7 +143,7 @@ class CacheOptimizer:
 
     async def analyze_cache_patterns(self) -> Dict[str, CachePattern]:
         """Analizar patrones de uso de cache"""
-    with cache_optimization_duration_svc.labels("pattern_analysis").time():
+        with cache_optimization_duration_svc.labels("pattern_analysis").time():
             try:
                 # Obtener todas las keys
                 keys = await self.redis_client.keys("*")
@@ -360,7 +360,7 @@ class CacheOptimizer:
 
     async def implement_compression(self) -> Dict[str, Any]:
         """Implementar compresión para keys grandes"""
-    with cache_optimization_duration_svc.labels("compression").time():
+        with cache_optimization_duration_svc.labels("compression").time():
             try:
                 compressed_keys = []
                 total_savings = 0
@@ -440,7 +440,7 @@ class CacheOptimizer:
 
     async def preload_hot_data(self) -> Dict[str, Any]:
         """Pre-cargar datos hot basado en patrones"""
-    with cache_optimization_duration_svc.labels("preload").time():
+        with cache_optimization_duration_svc.labels("preload").time():
             try:
                 if not self.config["auto_preload_enabled"]:
                     return {"status": "disabled"}
@@ -598,7 +598,7 @@ class CacheOptimizer:
 
     async def cleanup_expired_keys(self) -> Dict[str, int]:
         """Limpiar keys expiradas y optimizar memoria"""
-    with cache_optimization_duration_svc.labels("cleanup").time():
+        with cache_optimization_duration_svc.labels("cleanup").time():
             try:
                 # Obtener información de memoria antes
                 memory_info_before = await self.redis_client.info("memory")

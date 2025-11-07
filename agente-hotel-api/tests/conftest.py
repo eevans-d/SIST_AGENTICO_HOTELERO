@@ -159,7 +159,14 @@ async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
     from app.services.cache_optimizer import get_cache_optimizer
     from app.services.resource_monitor import get_resource_monitor
     from app.services.auto_scaler import get_auto_scaler
-    from app.services.nlp.integrated_nlp_service import get_nlp_service
+    
+    # NLP service puede no estar disponible si spacy no está instalado
+    try:
+        from app.services.nlp.integrated_nlp_service import get_nlp_service
+        nlp_available = True
+    except (ImportError, ModuleNotFoundError):
+        get_nlp_service = None
+        nlp_available = False
 
     # Override de dependencias con mocks
     test_app.dependency_overrides[get_performance_optimizer] = lambda: mock_performance_optimizer
@@ -167,7 +174,8 @@ async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
     test_app.dependency_overrides[get_cache_optimizer] = lambda: mock_cache_optimizer
     test_app.dependency_overrides[get_resource_monitor] = lambda: mock_resource_monitor
     test_app.dependency_overrides[get_auto_scaler] = lambda: mock_auto_scaler
-    test_app.dependency_overrides[get_nlp_service] = lambda: mock_nlp_service
+    if nlp_available and get_nlp_service:
+        test_app.dependency_overrides[get_nlp_service] = lambda: mock_nlp_service
 
     async with httpx.AsyncClient(app=test_app, base_url="http://test") as client:
         yield client
