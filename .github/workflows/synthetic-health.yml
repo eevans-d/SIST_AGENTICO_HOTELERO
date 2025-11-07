@@ -1,8 +1,10 @@
-name: Synthetic Health
+name: Synthetic Health (paused)
 
 on:
-  schedule:
-    - cron: '*/10 * * * *' # cada 10 minutos
+  # PAUSADO: se desactiva la ejecución programada para evitar costos/reintentos
+  # schedule:
+  #   - cron: '*/10 * * * *' # cada 10 minutos
+  # Activable manualmente desde la UI si se requiere
   workflow_dispatch: {}
 
 jobs:
