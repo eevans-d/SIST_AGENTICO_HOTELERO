@@ -51,6 +51,10 @@
   - **Rollback plan** completo para cada escenario
   - **Success criteria** técnicos y de negocio
   - **Tracking templates** para daily standups
+- **📄 LLM-IMPLEMENTATION-MASTER-GUIDE.md** (este documento maestro para IA externa)
+  - DDL canónico embebido (idéntico a `schema.sql`)
+  - Pasos operativos “solo con este documento” (apply/validate/roles)
+  - Guardrails de seguridad, control de costos, criterios de aceptación
 - **Propósito**: Migrar database de Postgres local a Supabase managed
 - **Audiencia**: DevOps, Backend Team, Infrastructure
 - **Tiempo**: 60 minutos lectura, 4-6 horas ejecución
@@ -74,7 +78,8 @@ agente-hotel-api/docs/
 ├── supabase/                            ← 🆕 Supabase Integration (NUEVO)
 │   ├── schema.sql                       ← DDL para Supabase Postgres
 │   ├── README.md                        ← Setup guide completo
-│   └── EXECUTION-PLAN.md                ← Blueprint de migración ✨
+│   ├── EXECUTION-PLAN.md                ← Blueprint de migración ✨
+│   └── LLM-IMPLEMENTATION-MASTER-GUIDE.md ← Guía maestra para LLM externo
 │
 ├── guides/                              ← Guías técnicas
 │   ├── P011-DEPENDENCY-SCAN-GUIDE.md
