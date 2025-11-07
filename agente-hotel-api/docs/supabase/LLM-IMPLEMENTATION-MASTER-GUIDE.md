@@ -1,10 +1,35 @@
 # LLM Implementation Master Guide — Supabase (SIST_AGENTICO_HOTELERO)
 
-Versión: 1.0.0  
+Versión: 1.1.0 FINAL  
 Fecha: 2025-11-07  
 Estado: Listo para Ejecución Operativa (100% autosuficiente)
 
 Nota operativa: La plataforma Fly.io ha sido dada de baja. No hay dependencias activas con Fly.io. Este documento se centra exclusivamente en la plataforma de base de datos gestionada (Supabase Postgres) para el proyecto.
+
+---
+
+## Índice
+
+- 1) Propósito y Alcance
+- 2) Arquitectura de Datos (Resumen)
+- 3) Conexión a Supabase (Pooler + SSL)
+- 4) DDL Canónico (Single Source of Truth)
+- 5) Automatización disponible en el repo
+- 6) Proceso de Ejecución (para el LLM)
+- 7) Seguridad y Guardrails
+- 8) Costos y Control de Consumo
+- 9) Troubleshooting rápido
+- 10) Criterios de Aceptación (Definition of Done)
+- 11) Apéndices
+- 12) Monitoreo y Observabilidad
+- 13) Mantenimiento Periódico
+- 14) Migración de Datos
+- 15) Disaster Recovery
+- 16) Performance y Optimización
+- 17) Integración con Backend
+- 18) FAQ Avanzado
+- 19) Glosario de Términos
+- 20) Quick Reference
 
 ---
 
@@ -533,6 +558,191 @@ Consultas útiles (ya incluidas al final del DDL):
   - `users.tenant_id` (VARCHAR) es FK lógica sin constraint a `tenants.tenant_id` (slug)
   - `tenant_user_identifiers.tenant_id` (INTEGER) es FK real con constraint a `tenants.id` (PK)
   - Esta dualidad permite flexibilidad en multi-tenancy sin cascade estricto en users
+
+---
+
+## 12) Monitoreo y Observabilidad
+
+Objetivo: detectar problemas antes de que impacten al usuario y validar salud del servicio.
+
+- Conexiones activas (PgBouncer/Pooler):
+  - Dashboard Supabase → Database → Connection Pooling
+  - SQL rápido: `SELECT count(*) FROM pg_stat_activity;`
+- Métricas Prometheus (stack del proyecto):
+  - `postgres_connections_active` (uso del pool)
+  - `postgres_query_duration_seconds` (latencia)
+  - `postgres_errors_total` (errores de conexión)
+  - Dashboards en `docker/grafana/` (ver README-Infra.md)
+- Trazas (Jaeger): correlación por `X-Request-ID` desde FastAPI.
+- Alertas (Alertmanager):
+  - Umbrales sugeridos: conexiones > 80% por >5m; P95 query > 150ms por >10m.
+
+Buenas prácticas:
+- Mantener P95 de queries < 50-100ms (estas tablas son livianas).
+- Evitar cardinalidad explosiva en métricas (labels controlados).
+
+---
+
+## 13) Mantenimiento Periódico
+
+Limpieza recomendada (agregar como job diario/semanal según volumen):
+
+```sql
+-- 1) Eliminar user_sessions expiradas (ejecutar diariamente)
+DELETE FROM user_sessions 
+WHERE expires_at < NOW() - INTERVAL '7 days';
+
+-- 2) Mantener solo los últimos 10 passwords por usuario
+DELETE FROM password_history 
+WHERE id NOT IN (
+    SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+        FROM password_history
+    ) sub WHERE rn <= 10
+);
+
+-- 3) Limpiar lock_audit (mantener 30 días)
+DELETE FROM lock_audit 
+WHERE timestamp < NOW() - INTERVAL '30 days';
+```
+
+Notas:
+- Supabase usa autovacuum; no obstante, monitorear bloat si el volumen crece.
+- Programar con cron o un scheduler del backend (según políticas).
+
+---
+
+## 14) Migración de Datos
+
+Si existe una base local con datos que migrar a Supabase:
+
+- Opción A (recomendada): `pg_dump` + `psql` (data-only)
+  ```bash
+  # Export desde local
+  pg_dump -h localhost -U postgres -d postgres --schema=public --data-only > data.sql
+
+  # Import a Supabase (usar pooler + SSL)
+  psql "postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:6543/postgres?sslmode=require" < data.sql
+  ```
+
+- Opción B: Script Python dedicado (útil para transformaciones)
+  - Crear `scripts/migrate_to_supabase.py` (si se requiere) usando `asyncpg`.
+
+Validación post-migración:
+- Conteo de filas por tabla, checks básicos de integridad, y consultas de muestra.
+
+---
+
+## 15) Disaster Recovery
+
+- Backups automáticos (Supabase):
+  - Free: 7 días de retención
+  - Pro: 30 días + Point-in-Time Recovery (PITR)
+- Procedimiento (alto nivel):
+  1. Identificar backup o punto en el tiempo.
+  2. Restaurar a un proyecto base de prueba (staging) para verificar.
+  3. Validar integridad con `scripts/validate_supabase_schema.py`.
+  4. Ejecutar smoke tests del backend.
+- Objetivos operativos (sugeridos):
+  - RTO ≤ 2h, RPO ≤ 15min (ajustar según tier y negocio).
+
+---
+
+## 16) Performance y Optimización
+
+- Índices: ya definidos en DDL; añadir nuevos solo con evidencia (EXPLAIN ANALYZE).
+- Pooling: usar modo Transaction (requerido por `asyncpg`); evitar Session mode.
+- Tamaño del pool:
+  - DEV: 5/5
+  - STG: 10/10
+  - PRD: 10/5 por réplica backend (ajustar a límites del tier)
+- Prepared statements: `asyncpg` los gestiona eficientemente; evitar concatenar SQL.
+- Consultas: pedir columnas necesarias (no `SELECT *`) para minimizar I/O.
+
+---
+
+## 17) Integración con Backend
+
+Conexión y ORM:
+- `app/core/database.py` crea `engine` con `create_async_engine` y configura pool/echo/pre-ping.
+- `app/core/settings.py` convierte automáticamente `postgresql://` → `postgresql+asyncpg://`.
+- Dependencia de sesión: `get_db()` usando `AsyncSessionFactory` (SQLAlchemy 2.x).
+
+Tenancy dinámico:
+- `DynamicTenantService` precarga `Tenant` + `TenantUserIdentifier` y expone `resolve_tenant()`.
+- En bootstrap hace `Base.metadata.create_all()` para facilitar DEV; en PRD preferir migraciones controladas.
+
+Locks y auditoría:
+- `LockService` usa Redis para locks; la tabla `lock_audit` sirve para trazabilidad (inserciones opcionales vía capa de servicio cuando se considere necesario).
+
+Testing:
+- Unit tests: SQLite en memoria (rápidos, sin Postgres real).
+- Integración: pueden apuntar a Supabase si `DATABASE_URL` está presente.
+
+Ejemplos (pseudo-código):
+```python
+# Crear tenant (ORM)
+tenant = Tenant(tenant_id="hotel-demo", name="Hotel Demo")
+session.add(tenant)
+await session.commit()
+
+# Resolver tenant por identificador
+tid = dynamic_tenant_service.resolve_tenant("+5491112345678")
+
+# Registrar auditoría (si se instrumenta desde backend)
+await session.execute(
+    text("INSERT INTO lock_audit(lock_key, event_type, details) VALUES (:k, :e, :d)"),
+    {"k": "lock:room:101:2025-01-01:2025-01-05", "e": "acquired", "d": json.dumps({"ttl": 600})}
+)
+await session.commit()
+```
+
+---
+
+## 18) FAQ Avanzado
+
+- ¿Alembic o Supabase CLI?
+  - Proyecto incluye `alembic/`, pero para este scope el DDL canónico + scripts automatizados son suficientes.
+  - Si se habilitan migraciones continuas, elegir una sola vía y estandarizar (Alembic recomendado en backend Python; Supabase CLI si se desea homogeneidad infra-first).
+- ¿Por qué no RLS?
+  - Acceso solo desde backend con credenciales de servicio; permisos y multi-tenancy se controlan en la aplicación.
+- Multi-región / latencia:
+  - Elegir región cercana a usuarios y al backend; validar P95 de consultas tras desplegar.
+- Escalado:
+  - Aumentar tier en Supabase, optimizar pool, revisar índices y consultas.
+
+---
+
+## 19) Glosario de Términos
+
+- FK lógica: referencia sin constraint (p. ej., `users.tenant_id` → `tenants.tenant_id` slug).
+- FK real: constraint de base de datos (p. ej., `tenant_user_identifiers.tenant_id` → `tenants.id`).
+- Pooler: proxy PgBouncer gestionado por Supabase (puerto 6543, modo Transaction).
+- Transaction vs Session mode: en Transaction cada checkout es por statement/tx; `asyncpg` requiere Transaction.
+- Tenant slug: identificador legible único (`tenants.tenant_id`).
+
+---
+
+## 20) Quick Reference
+
+Comandos Make:
+- `make supabase-test-connection`
+- `make supabase-apply-schema`
+- `make supabase-validate`
+
+Scripts:
+- `scripts/test_supabase_connection.py`
+- `scripts/apply_supabase_schema.py`
+- `scripts/validate_supabase_schema.py`
+
+SQL útiles:
+- Tablas en public: ver sección “VALIDACIONES POST-DEPLOYMENT” del DDL.
+- Conexiones activas: `SELECT count(*) FROM pg_stat_activity;`
+- Timezone del servidor: `SHOW timezone;`
+
+Ubicaciones de dashboards/monitoreo:
+- Grafana: `docker/grafana/` (ver README-Infra.md)
+- Jaeger: puerto 16686 (tracing)
 
 ---
 
