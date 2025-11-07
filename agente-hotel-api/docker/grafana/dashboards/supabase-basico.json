@@ -1,0 +1,49 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.5.0" },
+    { "type": "panel", "id": "graph", "name": "Graph", "version": "8.0.0" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "8.0.0" }
+  ],
+  "title": "Supabase Básico - Operación",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "JWT Sessions Activas",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        { "expr": "jwt_sessions_active", "legendFormat": "sesiones" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Conexiones DB Activas",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        { "expr": "db_connections_active", "legendFormat": "conexiones" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Statement Timeouts (últimas 24h)",
+      "gridPos": { "x": 0, "y": 6, "w": 16, "h": 8 },
+      "targets": [
+        { "expr": "increase(db_statement_timeouts_total[1h])", "legendFormat": "timeouts/hora" }
+      ],
+      "lines": true
+    },
+    {
+      "type": "graph",
+      "title": "Rotaciones de Password (por resultado)",
+      "gridPos": { "x": 0, "y": 14, "w": 16, "h": 8 },
+      "targets": [
+        { "expr": "sum by (result) (increase(password_rotations_total[1h]))", "legendFormat": "{{result}}" }
+      ],
+      "lines": true
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "30s"
+}

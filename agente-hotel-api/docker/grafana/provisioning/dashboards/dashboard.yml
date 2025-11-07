@@ -9,3 +9,11 @@ providers:
     updateIntervalSeconds: 30
     options:
       path: /etc/grafana/provisioning/dashboards
+  - name: 'Operación Supabase'
+    orgId: 1
+    folder: 'Operación'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
