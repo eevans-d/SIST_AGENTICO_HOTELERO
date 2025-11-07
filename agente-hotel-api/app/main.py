@@ -49,6 +49,10 @@ from .services.dynamic_tenant_service import dynamic_tenant_service
 from .services.feature_flag_service import get_feature_flag_service
 from .core.redis_client import get_redis
 from .services.session_manager import SessionManager
+from sqlalchemy import select, func
+from app.core.database import AsyncSessionFactory, engine
+from app.models.user import UserSession
+from app.services.metrics_service import metrics_service
 
 # Importaciones opcionales (solo si existen los servicios)
 try:
@@ -207,6 +211,31 @@ async def lifespan(app: FastAPI):
             services=initialized_services,
         )
 
+        # 6. Iniciar tareas periódicas de métricas (sesiones JWT y conexiones DB)
+        async def _update_jwt_sessions_periodically():
+            while True:
+                try:
+                    async with AsyncSessionFactory() as session:
+                        count = await session.scalar(select(func.count()).select_from(UserSession).where(UserSession.is_revoked == False).where(UserSession.expires_at > func.now()))  # noqa: E712
+                        metrics_service.set_jwt_sessions_active(count or 0)
+                except Exception as e:
+                    logger.debug("metric_jwt_sessions_update_failed", error=str(e))
+                await asyncio.sleep(60)
+
+        async def _update_db_connections_periodically():
+            while True:
+                try:
+                    pool = engine.pool
+                    # checkedout() devuelve el número de conexiones actualmente prestadas
+                    active = getattr(pool, "checkedout", lambda: 0)()
+                    metrics_service.set_db_connections_active(active)
+                except Exception as e:
+                    logger.debug("metric_db_connections_update_failed", error=str(e))
+                await asyncio.sleep(30)
+
+        _task_jwt_sessions = asyncio.create_task(_update_jwt_sessions_periodically())
+        _task_db_connections = asyncio.create_task(_update_db_connections_periodically())
+
         # Aplicación lista para recibir requests
         yield
 
@@ -262,6 +291,14 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  Error cerrando conexiones: {e}")
 
         logger.info("🏁 Sistema de Agente Hotelero IA detenido correctamente")
+
+        # Cancelar tareas métricas
+        for t in [locals().get("_task_jwt_sessions"), locals().get("_task_db_connections")]:
+            if t:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
 
 
 # SECURITY: Disable documentation endpoints in production
