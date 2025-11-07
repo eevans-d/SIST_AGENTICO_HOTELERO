@@ -2,9 +2,7 @@
 
 > **⚠️ IMPORTANTE**: Este README está desactualizado. **Consultar [`MASTER_PROJECT_GUIDE.md`](./MASTER_PROJECT_GUIDE.md)** para información actual del proyecto.
 
-[![Fly.io](https://img.shields.io/badge/Fly.io-gru%20(S%C3%A3o%20Paulo)-8a2be2)](https://fly.io/apps/agente-hotel-api)
-[![Live status](https://img.shields.io/website?url=https%3A%2F%2Fagente-hotel-api.fly.dev%2Fhealth%2Flive&label=app%20health&up_message=alive&down_message=down)](https://agente-hotel-api.fly.dev/health/live)
-[![Deploy](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml/badge.svg)](https://github.com/eevans-d/SIST_AGENTICO_HOTELERO/actions/workflows/deploy-fly.yml)
+<!-- Fly.io badges removed (platform decommissioned) -->
 
 **Sistema multi-servicio de recepcionista hotelera con IA** - WhatsApp/Gmail con integración QloApps PMS.
 
@@ -111,32 +109,10 @@ SIST_AGENTICO_HOTELERO/---
 
 - Redis-backed configuration service
 
-## 🚀 Despliegue rápido en Fly.io
-
-```bash
-# 1) Autenticación (una vez)
-flyctl auth login
-
-# 2) Desplegar (usa fly.toml del repo y Dockerfile de la raíz)
-flyctl deploy --detach
-
-# 3) Ver estado y logs
-flyctl status
-flyctl logs -f
-```
-
-Notas:
-- Región actual: gru (São Paulo, BR)
-- URL: https://agente-hotel-api.fly.dev
-- Health: https://agente-hotel-api.fly.dev/health/live
-
-CI/CD (opcional): añade el secreto FLY_API_TOKEN en GitHub → Settings → Secrets and variables → Actions para habilitar el auto-deploy en push a main.
+<!-- Sección de despliegue en Fly.io eliminada (plataforma deprecada para este proyecto) -->
 
 ## 🩺 Monitoreo
 
-- Live: https://agente-hotel-api.fly.dev/health/live
-- Ready: https://agente-hotel-api.fly.dev/health/ready
-- Métricas Prometheus: https://agente-hotel-api.fly.dev/metrics (si está habilitado)
 - Local (Docker Compose):
    - Grafana: http://localhost:3000
    - Jaeger: http://localhost:16686
