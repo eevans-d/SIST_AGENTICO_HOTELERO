@@ -503,6 +503,10 @@ async def change_password(
         )
 
         if not result["success"]:
+            # Registrar métrica de rotación fallida
+            from app.services.metrics_service import metrics_service
+            metrics_service.inc_password_rotation("failed")
+
             await audit_logger.log_security_event(
                 event=SecurityEvent.PASSWORD_CHANGE_FAILED,
                 user_id=user["user_id"],
@@ -512,6 +516,10 @@ async def change_password(
             )
 
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["message"])
+
+        # Registrar métrica de rotación exitosa
+        from app.services.metrics_service import metrics_service
+        metrics_service.inc_password_rotation("success")
 
         # Log password change
         await audit_logger.log_security_event(

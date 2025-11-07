@@ -1189,7 +1189,7 @@ incident-test: ## Run incident response tests
 # Supabase: Schema & Validación
 # ==============================================================================
 
-.PHONY: supabase-test-connection supabase-apply-schema supabase-validate
+.PHONY: supabase-test-connection supabase-apply-schema supabase-validate maintenance-cleanup
 
 supabase-test-connection: ## Prueba de conexión a Supabase (usa DATABASE_URL de .env)
 	@echo "🔌 Probando conexión a Supabase..."
@@ -1208,6 +1208,11 @@ supabase-validate: ## Valida tablas e índices clave tras aplicar el schema
 	@echo "🔍 Validando schema en Supabase..."
 	@python3 scripts/validate_supabase_schema.py || { echo "❌ Validación fallida"; exit 1; }
 	@echo "✅ Validación completada"
+
+maintenance-cleanup: ## Limpia sesiones expiradas de user_sessions (requiere DATABASE_URL)
+	@echo "🧹 Limpiando sesiones expiradas..."
+	@python3 scripts/cleanup_user_sessions.py --older-than-days 0 || { echo "❌ Limpieza fallida"; exit 1; }
+	@echo "✅ Limpieza completada"
 
 
 .DEFAULT_GOAL := help
