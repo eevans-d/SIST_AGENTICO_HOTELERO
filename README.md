@@ -737,3 +737,6 @@ Proyecto desarrollado con:- **PostgreSQL 13+**: Base de datos principal
 - Rate limiting con Redis
 
 Para más detalles ver `agente-hotel-api/README-Infra.md` y `.github/copilot-instructions.md`.
+
+
+<!-- Supabase CI/CD Configuration - Actions enabled with secrets -->
