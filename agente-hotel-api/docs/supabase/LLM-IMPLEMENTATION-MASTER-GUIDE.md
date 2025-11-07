@@ -38,13 +38,22 @@ Entidades en Supabase (todas en schema `public`):
 - tenant_user_identifiers
 - lock_audit
 
-Relaciones clave:
-- user_sessions.user_id → users.id (FK)
-- password_history.user_id → users.id (FK)
-- tenant_user_identifiers.tenant_id → tenants.id (FK)
+Relaciones clave (con aclaración de FK lógicas vs reales):
+- user_sessions.user_id → users.id (FK constraint real)
+- password_history.user_id → users.id (FK constraint real)
+- tenant_user_identifiers.tenant_id → tenants.id (FK constraint real - nota: apunta a PK numérica)
+- users.tenant_id → tenants.tenant_id (FK lógica SIN constraint - apunta a slug VARCHAR)
+
+**Aclaración importante sobre tenant_id**:
+- Tabla `tenants` tiene DOS identificadores:
+  - `id`: SERIAL PRIMARY KEY (numérico autoincrementado)
+  - `tenant_id`: VARCHAR slug único (ej: "hotel-abc") - clave lógica usada en código
+- Tabla `tenant_user_identifiers` usa `tenant_id INTEGER` con FK real a `tenants.id` (PK)
+- Tabla `users` usa `tenant_id VARCHAR` sin constraint FK, referencia lógica a `tenants.tenant_id` (slug)
+- Razón: flexibilidad para tenant_id null y evitar constraint cascade en multi-tenancy flexible
 
 Motivación de diseño:
-- Multi-tenancy lógico vía `tenant_id` (slug legible) en `users` y tabla `tenants` para configuración.
+- Multi-tenancy lógico vía slug `tenant_id` legible ("hotel-abc") en `users.tenant_id` y `tenants.tenant_id`.
 - Resolución dinámica de tenant mediante identificadores normalizados (teléfono E.164, email) en `tenant_user_identifiers`.
 - Auditoría de locks de Redis en `lock_audit` para trazabilidad de concurrencia.
 - Historial de passwords para prevenir reutilización.
@@ -58,10 +67,15 @@ Requisitos de conexión:
 - Usar Connection Pooler (PgBouncer modo Transaction), puerto 6543.
 - SSL obligatorio: `?sslmode=require` en el connection string.
 
-Formato de `DATABASE_URL`:
+Formato de `DATABASE_URL` (actualizado 2025-11):
 ```
-postgresql://postgres.<PROJECT-REF>:<PASSWORD>@<REGION>.pooler.supabase.com:6543/postgres?sslmode=require
+postgresql://postgres.<PROJECT-REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:6543/postgres?sslmode=require
 ```
+
+**Nota sobre formato del pooler**: Supabase usa `aws-0-[region]` (con cero, no uno). Ejemplo para us-east-1:
+- Correcto: `aws-0-us-east-1.pooler.supabase.com:6543`
+- Incorrecto: `aws-1-us-east-1.pooler.supabase.com:6543` (formato antiguo/incorrecto)
+- Verifica el endpoint exacto en tu Dashboard → Project Settings → Database → Connection Pooling
 
 El backend convierte automáticamente a `asyncpg` si recibe `postgresql://...` (ver `app/core/settings.py`).
 
@@ -210,7 +224,8 @@ CREATE INDEX idx_tenants_tenant_id ON tenants(tenant_id);
 CREATE INDEX idx_tenants_status ON tenants(status);
 
 COMMENT ON TABLE tenants IS 'Configuración multi-tenant (por hotel/cliente)';
-COMMENT ON COLUMN tenants.tenant_id IS 'Slug legible usado en código (clave lógica principal)';
+COMMENT ON COLUMN tenants.tenant_id IS 'Slug legible usado en código como clave lógica principal (ej: "hotel-abc")';
+COMMENT ON COLUMN tenants.id IS 'PK numérica autoincrementada (usada en FKs de tenant_user_identifiers)';
 COMMENT ON COLUMN tenants.business_hours_start IS 'Hora de inicio (0-23), NULL = 24/7';
 
 -- ============================================
@@ -219,6 +234,7 @@ COMMENT ON COLUMN tenants.business_hours_start IS 'Hora de inicio (0-23), NULL =
 -- Propósito: Resolver teléfonos/emails → tenant_id automáticamente
 -- Caso de uso: WhatsApp +54911xxxx → detectar tenant "hotel-abc"
 -- Unicidad: identifier debe ser único (un phone/email → un tenant)
+-- IMPORTANTE: tenant_id aquí es INTEGER FK a tenants.id (PK numérica), NO al slug tenant_id
 
 CREATE TABLE IF NOT EXISTS tenant_user_identifiers (
     id SERIAL PRIMARY KEY,
@@ -452,7 +468,9 @@ Pasos:
   - STG: `10/10`
   - PRD: `10/5` por réplica backend
 - Opcional: role `agente_backend` para mínimo privilegio.
+- **Validación de secrets en producción**: El código valida automáticamente que secrets (API keys, JWT secret_key, etc.) no usen valores dummy en `ENVIRONMENT=production`. Ver `app/core/settings.py:validate_secrets_in_prod()`. Los secrets deben tener mínimo 8 caracteres y no estar en lista de dummy values ("dev-", "test", "changeme", etc.).
 - Secretos nunca en Git; usar `.env` local seguro y gitleaks en CI.
+- **Timezone del servidor**: El backend usa `datetime.now(UTC)` pero el DDL usa `NOW()` sin especificar timezone. Recomendación: verificar que el servidor Postgres esté configurado en UTC o ajustar explícitamente con `SET timezone = 'UTC';` en script de inicialización si es necesario.
 
 ---
 
@@ -467,16 +485,18 @@ Pasos:
 
 ## 9) Troubleshooting rápido
 
-- “password authentication failed”: revisar usuario `postgres.<PROJECT-REF>` y password.
-- “connection refused/timeout”: confirmar host del pooler y puerto 6543.
-- “SSL connection closed”: agregar `?sslmode=require`.
-- “relation 'users' does not exist”: schema no aplicado o search_path distinto de `public`.
-- “too many connections”: bajar pool sizes.
+- "password authentication failed": revisar usuario `postgres.<PROJECT-REF>` y password.
+- "connection refused/timeout": confirmar host del pooler (`aws-0-<region>.pooler.supabase.com`) y puerto 6543.
+- "SSL connection closed": agregar `?sslmode=require`.
+- "relation 'users' does not exist": schema no aplicado o search_path distinto de `public`.
+- "too many connections": bajar pool sizes.
+- "timezone mismatch warnings": verificar que servidor Postgres use UTC o ajustar con `SET timezone = 'UTC';`
 
 Consultas útiles (ya incluidas al final del DDL):
 - Listado de tablas en `public`.
 - Índices por tabla (`pg_indexes`).
 - Foreign keys (`information_schema`).
+- Verificar timezone del servidor: `SHOW timezone;`
 
 ---
 
@@ -508,7 +528,11 @@ Consultas útiles (ya incluidas al final del DDL):
 - Esquema: `public`.
 - Nombres de tablas/índices como en el DDL.
 - Campos `created_at/updated_at` con `NOW()` y triggers para actualización.
-- Codificación UTF-8; timestamps con zona según servidor (UTC recomendado).
+- Codificación UTF-8; timestamps con zona según servidor (UTC recomendado, verificar con `SHOW timezone;`).
+- **Relaciones multi-tenant**: 
+  - `users.tenant_id` (VARCHAR) es FK lógica sin constraint a `tenants.tenant_id` (slug)
+  - `tenant_user_identifiers.tenant_id` (INTEGER) es FK real con constraint a `tenants.id` (PK)
+  - Esta dualidad permite flexibilidad en multi-tenancy sin cascade estricto en users
 
 ---
 
