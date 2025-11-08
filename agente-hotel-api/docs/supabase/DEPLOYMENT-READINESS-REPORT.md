@@ -63,3 +63,13 @@ Owner: Backend AI Team
 - Dashboard JSON: `docker/grafana/dashboards/supabase-basico.json`  
 - Compose: `docker-compose.staging.yml`  
 - Preflight script: `scripts/preflight.py`  
+ - Canary diff: `make canary-diff BASELINE=main CANARY=staging`  
+
+## Canary Diff — Procedimiento
+1. Preparar baseline (main) y canary (staging) corriendo con cargas similares.
+2. Ejecutar: `make canary-diff BASELINE=main CANARY=staging`.
+3. Revisar `.playbook/canary_diff_report.json` y validar:
+   - P95 latency incremento ≤ 10%
+   - Error rate incremento ≤ 50%
+   - Circuit breaker PMS sin aperturas (0)
+4. Si falla, aplicar mitigaciones y reintentar.
