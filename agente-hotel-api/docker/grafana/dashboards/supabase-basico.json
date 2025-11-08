@@ -10,10 +10,10 @@
   "panels": [
     {
       "type": "stat",
-      "title": "JWT Sessions Activas",
+      "title": "Sesiones de Conversación Activas",
       "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
       "targets": [
-        { "expr": "jwt_sessions_active", "legendFormat": "sesiones" }
+        { "expr": "session_active_total", "legendFormat": "sesiones" }
       ]
     },
     {

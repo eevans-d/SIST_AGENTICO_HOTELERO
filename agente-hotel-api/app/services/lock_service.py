@@ -5,8 +5,29 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Any
 
 import redis.asyncio as redis
+from sqlalchemy.ext.asyncio import AsyncSession
+from prometheus_client import Counter
 
 from ..core.logging import logger
+from ..core.database import AsyncSessionFactory
+from ..models.lock_audit import LockAudit
+
+# Métricas para lock service
+lock_operations_total = Counter(
+    "lock_operations_total",
+    "Total de operaciones de lock ejecutadas",
+    ["operation", "result"]
+)
+lock_conflicts_total = Counter(
+    "lock_conflicts_total",
+    "Total de conflictos de lock detectados",
+    ["room_id"]
+)
+lock_extensions_total = Counter(
+    "lock_extensions_total",
+    "Total de extensiones de lock",
+    ["result"]
+)
 
 
 class LockService:
@@ -51,6 +72,15 @@ class LockService:
         """Adquiere un lock si no hay conflictos. Retorna la key del lock o None."""
         if await self.check_conflicts(room_id, check_in, check_out):
             logger.warning(f"Conflicto de lock detectado para habitación {room_id}")
+            lock_conflicts_total.labels(room_id=room_id).inc()
+            lock_operations_total.labels(operation="acquire", result="conflict").inc()
+
+            # Registrar evento de conflicto en audit trail
+            await self._audit_lock_event(
+                lock_key=f"lock:room:{room_id}:{check_in}:{check_out}",
+                event_type="conflict",
+                details={"session_id": session_id, "user_id": user_id, "reason": "date_overlap"}
+            )
             return None
 
         lock_key = self._get_lock_key(room_id, check_in, check_out)
@@ -71,22 +101,40 @@ class LockService:
         # NX=True solo crea la key si no existe
         if await self.redis.set(lock_key, json.dumps(lock_data), ex=ttl, nx=True):
             logger.info(f"Lock adquirido: {lock_key}")
-            # Aquí se podría registrar en la tabla de auditoría
+            lock_operations_total.labels(operation="acquire", result="success").inc()
+
+            # Registrar en audit trail
+            await self._audit_lock_event(
+                lock_key=lock_key,
+                event_type="acquired",
+                details={
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "room_id": room_id,
+                    "check_in": check_in,
+                    "check_out": check_out,
+                    "ttl": ttl,
+                }
+            )
             return lock_key
 
         logger.warning(f"Fallo al adquirir lock (ya existe): {lock_key}")
+        lock_operations_total.labels(operation="acquire", result="already_exists").inc()
         return None
 
     async def extend_lock(self, lock_key: str, extra_ttl: int = 600, max_extensions: int = 2) -> bool:
         """Extiende la expiración de un lock existente."""
         lock_data_str = await self.redis.get(lock_key)
         if not lock_data_str:
+            lock_operations_total.labels(operation="extend", result="not_found").inc()
             return False
 
         lock_data = json.loads(lock_data_str)
 
         if lock_data["extensions"] >= max_extensions:
             logger.warning(f"Máximo de extensiones alcanzado para el lock: {lock_key}")
+            lock_operations_total.labels(operation="extend", result="max_reached").inc()
+            lock_extensions_total.labels(result="max_reached").inc()
             return False
 
         lock_data["extensions"] += 1
@@ -95,16 +143,54 @@ class LockService:
 
         if await self.redis.set(lock_key, json.dumps(lock_data), ex=new_ttl):
             logger.info(f"Lock extendido: {lock_key}")
+            lock_operations_total.labels(operation="extend", result="success").inc()
+            lock_extensions_total.labels(result="success").inc()
+
+            # Registrar extensión en audit trail
+            await self._audit_lock_event(
+                lock_key=lock_key,
+                event_type="extended",
+                details={
+                    "extension_count": lock_data["extensions"],
+                    "new_ttl": new_ttl,
+                    "extra_ttl": extra_ttl,
+                }
+            )
             return True
 
+        lock_operations_total.labels(operation="extend", result="set_failed").inc()
+        lock_extensions_total.labels(result="failed").inc()
         return False
 
     async def release_lock(self, lock_key: str) -> bool:
         """Libera un lock."""
+        # Obtener datos del lock antes de eliminar para audit trail
+        lock_data_str = await self.redis.get(lock_key)
+
         deleted_count = await self.redis.delete(lock_key)
         if deleted_count > 0:
             logger.info(f"Lock liberado: {lock_key}")
+            lock_operations_total.labels(operation="release", result="success").inc()
+
+            # Registrar liberación en audit trail
+            if lock_data_str:
+                try:
+                    lock_data = json.loads(lock_data_str)
+                    await self._audit_lock_event(
+                        lock_key=lock_key,
+                        event_type="released",
+                        details={
+                            "session_id": lock_data.get("session_id"),
+                            "user_id": lock_data.get("user_id"),
+                            "extensions": lock_data.get("extensions", 0),
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Error auditing lock release: {e}")
+
             return True
+
+        lock_operations_total.labels(operation="release", result="not_found").inc()
         return False
 
     async def check_conflicts(self, room_id: str, check_in: str, check_out: str) -> bool:
@@ -205,3 +291,38 @@ class LockService:
             if lock_data_str:
                 locks.append(json.loads(lock_data_str))
         return locks
+
+    async def _audit_lock_event(self, lock_key: str, event_type: str, details: dict):
+        """
+        Registra un evento de lock en la tabla de auditoría.
+
+        Args:
+            lock_key: Clave del lock (ej: "lock:room:101:2025-01-01:2025-01-03")
+            event_type: Tipo de evento - "acquired", "extended", "released", "conflict"
+            details: Metadata adicional del evento (session_id, user_id, ttl, etc.)
+        """
+        try:
+            async with AsyncSessionFactory() as session:
+                audit_entry = LockAudit(
+                    lock_key=lock_key,
+                    event_type=event_type,
+                    details=details,
+                )
+                session.add(audit_entry)
+                await session.commit()
+
+                logger.debug(
+                    "lock_service.audit_recorded",
+                    lock_key=lock_key,
+                    event_type=event_type
+                )
+        except Exception as e:
+            logger.error(
+                "lock_service.audit_failed",
+                lock_key=lock_key,
+                event_type=event_type,
+                error=str(e),
+                exc_info=True
+            )
+            # No re-lanzar - la auditoría no debería romper operaciones críticas
+

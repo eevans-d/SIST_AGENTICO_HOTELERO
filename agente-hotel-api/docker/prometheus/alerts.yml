@@ -290,6 +290,96 @@ groups:
           runbook_url: "https://grafana.local/runbooks#higherrorrate5xx"
           dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=10"
 
+      # Session Management Alerts
+      - alert: SessionsHighWarning
+        expr: session_active_total > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alto número de sesiones activas (>100)"
+          description: "Se detectan {{ $value }} sesiones activas sostenidas por más de 10m. Revisar patrones de uso y configurar limpieza si es necesario."
+          runbook_url: "https://grafana.local/runbooks#sessionshigh"
+          dashboard: "grafana:/d/supabase-basico/Supabase%20B%C3%A1sico%20-%20Operaci%C3%B3n"
+
+      - alert: SessionsHighCritical
+        expr: session_active_total > 200
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Número crítico de sesiones activas (>200)"
+          description: "Se detectan {{ $value }} sesiones activas. Posible memory leak o fallo en cleanup task. Revisar inmediatamente."
+          runbook_url: "https://grafana.local/runbooks#sessionshigh"
+          dashboard: "grafana:/d/supabase-basico/Supabase%20B%C3%A1sico%20-%20Operaci%C3%B3n"
+
+      - alert: SessionLeakDetected
+        expr: deriv(session_active_total[30m]) > 0.5
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Posible memory leak en sesiones"
+          description: "Crecimiento sostenido de sesiones activas (>0.5/min en 30m, sostenido 1h). Indicativo de fallo en limpieza o expiración. Revisar cleanup task y TTL."
+          runbook_url: "https://grafana.local/runbooks#sessionleak"
+          dashboard: "grafana:/d/supabase-basico/Supabase%20B%C3%A1sico%20-%20Operaci%C3%B3n"
+
+      - alert: SessionCleanupFailures
+        expr: increase(session_cleanup_total{result="error"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fallos frecuentes en cleanup de sesiones"
+          description: "{{ $value }} errores de cleanup en última hora. Revisar logs de session_manager y conectividad a Redis."
+          runbook_url: "https://grafana.local/runbooks#sessioncleanup"
+          dashboard: "grafana:/d/supabase-basico/Supabase%20B%C3%A1sico%20-%20Operaci%C3%B3n"
+
+      # Lock Service Alerts
+      - alert: LockConflictsHigh
+        expr: sum(rate(lock_conflicts_total[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta tasa de conflictos de lock (>0.5 rps)"
+          description: "{{ $value }} conflictos/seg en últimos 5m. Posible contención de recursos (double-booking attempts) o problema en date range validation. Revisar logs de lock_service."
+          runbook_url: "https://grafana.local/runbooks#lockconflicts"
+          dashboard: "grafana:/d/resilience-dashboard/Resilience%20Dashboard"
+
+      - alert: LockConflictsCritical
+        expr: sum(rate(lock_conflicts_total[5m])) > 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tasa crítica de conflictos de lock (>2 rps)"
+          description: "{{ $value }} conflictos/seg sostenidos. Impacto severo en disponibilidad de reservas. Escalar investigación inmediatamente."
+          runbook_url: "https://grafana.local/runbooks#lockconflicts"
+          dashboard: "grafana:/d/resilience-dashboard/Resilience%20Dashboard"
+
+      - alert: LockExtensionsExceeded
+        expr: sum(rate(lock_extensions_total{result="max_reached"}[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Locks alcanzando máximo de extensiones frecuentemente"
+          description: "{{ $value }} locks/seg alcanzaron max_extensions. Indicativo de transacciones lentas o procesos estancados. Revisar lógica de reserva y aumentar TTL inicial si es necesario."
+          runbook_url: "https://grafana.local/runbooks#lockextensions"
+          dashboard: "grafana:/d/resilience-dashboard/Resilience%20Dashboard"
+
+      - alert: LockOperationsFailureRate
+        expr: (sum(rate(lock_operations_total{result!="success"}[5m])) / sum(rate(lock_operations_total[5m]))) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta tasa de fallos en operaciones de lock (>10%)"
+          description: "{{ $value | humanizePercentage }} de operaciones de lock fallando. Revisar conectividad a Redis y lógica de acquire/extend/release."
+          runbook_url: "https://grafana.local/runbooks#lockfailures"
+          dashboard: "grafana:/d/resilience-dashboard/Resilience%20Dashboard"
+
       # ----------------------------------------------------------------------
       # Prueba rápida (comentada por defecto)
       # Descomentar para probar pipeline de alertas; recuerda volver a comentar.
