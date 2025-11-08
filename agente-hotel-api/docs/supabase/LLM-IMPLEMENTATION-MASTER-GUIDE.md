@@ -108,6 +108,11 @@ Variables relevantes en `.env` (raíz `agente-hotel-api/`):
 - `DATABASE_URL` (recomendada, con `sslmode=require`)
 - Opcionalmente: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (el settings construye la URL)
 
+Nota sobre desarrollo local y diagnósticos: existe un modo de conexión “inseguro” para facilitar pruebas puntuales sin verificación SSL. Este modo está bloqueado en CI/producción y requiere confirmación interactiva.
+- Script que soporta el modo inseguro: `scripts/test_supabase_connection.py --insecure`
+- Efecto: elimina `sslmode=require` del DSN y conecta con `ssl=False` (solo para diagnóstico local)
+- Protección: pide escribir exactamente `YES` antes de continuar; aborta si `CI=true` o `ENVIRONMENT=production`.
+
 ---
 
 ## 4) DDL Canónico (Single Source of Truth)
@@ -434,14 +439,16 @@ ORDER BY tc.table_name;
 Ubicación: `agente-hotel-api/`
 
 - Scripts:
-  - `scripts/test_supabase_connection.py`: prueba de conectividad con `SELECT version()` usando asyncpg.
+  - `scripts/test_supabase_connection.py`: prueba de conectividad con `SELECT version()` usando asyncpg. Flags: `--insecure` (solo DEV; requiere confirmación; bloqueado en CI/PRD).
   - `scripts/apply_supabase_schema.py`: aplica `docs/supabase/schema.sql` de forma transaccional; parser seguro que respeta strings/comentarios/dollar-quoted; genera log en `logs/`.
-  - `scripts/validate_supabase_schema.py`: verifica tablas esperadas e índices por tabla.
+  - `scripts/validate_supabase_schema.py`: verifica tablas esperadas e índices por tabla. Normaliza SSL para Supabase automáticamente (quita `sslmode` y usa `ssl=True`).
+  - `scripts/seed_supabase_minimal.py`: seed idempotente para crear/actualizar un tenant y (opcional) un usuario admin. Flags: `--skip-admin`, `--force-password`, `--update-if-exists`.
 
 - Makefile targets:
   - `make supabase-test-connection`
   - `make supabase-apply-schema`
   - `make supabase-validate`
+  - (opcional) seed: usar el workflow `Supabase Schema Ops` con `confirm_seed=true` y el secreto `SUPABASE_ADMIN_PASSWORD` configurado.
 
 Requisito común: `DATABASE_URL` definido (pooler 6543 + `sslmode=require`).
 
@@ -459,7 +466,9 @@ Checklist previo:
 Pasos:
 1) Probar conexión
    - Ejecutar: `make supabase-test-connection`
-   - Éxito: imprime versión de Postgres. Error: revisar host/puerto/SSL.
+  - Éxito: imprime versión de Postgres. Error: revisar host/puerto/SSL.
+  - Solo si falla por SSL en un entorno de desarrollo y necesitas diagnosticar: puedes ejecutar el script directamente con `--insecure` (te pedirá confirmar escribiendo `YES`; bloqueado en CI/PRD):
+    - `python scripts/test_supabase_connection.py --insecure`
 
 2) Aplicar schema
    - Ejecutar: `make supabase-apply-schema`
@@ -469,13 +478,18 @@ Pasos:
    - Ejecutar: `make supabase-validate`
    - Resultado: lista de tablas encontradas y sus índices; comparar contra el set esperado de 6 tablas.
 
-4) (Opcional) Crear rol dedicado mínimo
+4) (Opcional) Seed mínimo (tenant + admin)
+  - Ejecutar el workflow "Supabase Schema Ops" con `confirm_seed=true`.
+  - Requisitos: definir en GitHub Secrets `SUPABASE_ADMIN_PASSWORD` (no usar inputs).
+  - El seed es idempotente y permite `--update-if-exists` para actualizar el nombre del tenant si ya existe.
+
+5) (Opcional) Crear rol dedicado mínimo
    - Evaluar sección “ROLES Y PERMISOS” en el DDL (bloque comentado) y ejecutarlo si se desea endurecer permisos.
 
-5) (Opcional) Datos de ejemplo para DEV/STG
+6) (Opcional) Datos de ejemplo para DEV/STG
    - Bloque “DATOS DE EJEMPLO” (comentado). No usar en producción.
 
-6) Entregar evidencia
+7) Entregar evidencia
    - Adjuntar logs de `apply_supabase_schema.py` y salida de `supabase-validate`.
 
 Éxito = todas las tablas creadas/validadas, sin errores; conexión y validaciones OK.
@@ -513,6 +527,7 @@ Pasos:
 - "password authentication failed": revisar usuario `postgres.<PROJECT-REF>` y password.
 - "connection refused/timeout": confirmar host del pooler (`aws-0-<region>.pooler.supabase.com`) y puerto 6543.
 - "SSL connection closed": agregar `?sslmode=require`.
+  - En DEV, si necesitas confirmar que el problema es únicamente SSL, usa temporalmente `python scripts/test_supabase_connection.py --insecure` (confirmación requerida; no disponible en CI/PRD) y corrige tu `DATABASE_URL` después.
 - "relation 'users' does not exist": schema no aplicado o search_path distinto de `public`.
 - "too many connections": bajar pool sizes.
 - "timezone mismatch warnings": verificar que servidor Postgres use UTC o ajustar con `SET timezone = 'UTC';`
@@ -735,6 +750,10 @@ Scripts:
 - `scripts/apply_supabase_schema.py`
 - `scripts/validate_supabase_schema.py`
 
+Ejemplos rápidos:
+- Test estándar: `python scripts/test_supabase_connection.py`
+- Test (solo diagnóstico local) sin verificación SSL: `python scripts/test_supabase_connection.py --insecure`
+
 SQL útiles:
 - Tablas en public: ver sección “VALIDACIONES POST-DEPLOYMENT” del DDL.
 - Conexiones activas: `SELECT count(*) FROM pg_stat_activity;`
@@ -747,3 +766,97 @@ Ubicaciones de dashboards/monitoreo:
 ---
 
 Fin del documento.
+
+---
+
+## Anexo: Correcciones, Simplificación y Recomendaciones (Añadido 2025-11-07)
+
+Este anexo sintetiza hallazgos tras revisar un plan externo más extenso. Objetivo: mantener experiencia sencilla para administrador/dueño del hotel, evitando complejidad innecesaria y reduciendo riesgo operativo.
+
+### 1. Ajustes de Exactitud Técnica
+
+- Función `ssl_is_used()` mencionada en algunos planes externos NO es estándar de PostgreSQL. Para verificar SSL usar:
+  ```sql
+  SELECT ssl, ssl_version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();
+  ```
+- Scripts de creación de rol externo usaban `:'app_password'` sin previo `\set app_password`; reemplazar por interpolación shell segura. Ejemplo:
+  ```bash
+  APP_USER_PASSWORD=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+  psql "$DATABASE_URL" -v app_password="$APP_USER_PASSWORD" -c "CREATE ROLE agente_hotel_app WITH LOGIN PASSWORD :'app_password';"
+  ```
+- Rollback total que hace `DROP SCHEMA public CASCADE` es demasiado destructivo para PRD. Recomendación: restaurar a base temporal y hacer cut‑over (renombrar DB o actualizar `DATABASE_URL`) tras validación.
+- RLS: El plan externo propone múltiples políticas. Actualmente el backend aplica multi-tenancy lógico en código (slug). Activar RLS solo si se requiere defensa en profundidad; caso contrario mantiene simplicidad operativa. Si se habilita, documentar claramente los GUC: `SET LOCAL app.current_tenant_id = 'hotel-demo';`.
+- Métrica de sesiones activas ya integrada (`jwt_sessions_active`). Evitar duplicar contadores en nuevos scripts ad-hoc.
+- Alerta de sesiones expiradas masivas >1000 no aplica (volumen actual bajo). Ajustar umbral tras obtener base line real (observación primero, alerta después).
+
+### 2. Reducción de Complejidad (Mantenerlo Simple)
+
+- Mantener solo tres comandos para operación diaria:
+  1. `make supabase-test-connection`
+  2. `make supabase-validate`
+  3. `make maintenance-cleanup` (cuando el volumen de sesiones crezca)
+- Postergar implementación de plan de RLS completo hasta que exista necesidad regulatoria o auditoría externa.
+- Unificar scripts de mantenimiento: usar el ya existente de limpieza de sesiones y evitar múltiples variantes.
+- Evitar crear nuevos dashboards si los paneles actuales cubren: conexiones, latencia, timeouts y sesiones.
+
+### 3. Seguridad Pragmatista
+
+- Priorizar rotación del `JWT_SECRET_KEY` y verificación de longitud > 64 antes de crear usuario dedicado.
+- Si se crea rol dedicado, aplicar principio de menor privilegio pero validar primero que todas operaciones del backend (migraciones internas, seeds) funcionen bajo el rol.
+- Añadir chequeo opcional (no bloqueante) para detectar passwords débiles en `DATABASE_URL` (< 20 chars) durante arranque en DEV para educación del usuario.
+
+### 4. Costos y Pool de Conexiones
+
+- Mantener configuración actual de timeouts (`statement_timeout=15s`) y no reducir más (evita falsa sensación de velocidad y aumenta riesgo de abortar operaciones legítimas).
+- Re-evaluar `POSTGRES_POOL_SIZE` una vez que concurrency real > 30 req/min sostenidos. Hasta entonces no escalar.
+
+### 5. Observabilidad Ajustada
+
+- Ya existe contador `db_statement_timeouts_total` y alerta `StatementTimeoutsPresent`. No añadir segunda alerta para mismo evento.
+- Incorporar en dashboard ratio simple: `increase(db_statement_timeouts_total[1h])` vs total queries para ver tendencia sin saturar Alertmanager.
+
+### 6. Rollback Seguro (Recomendación Actualizada)
+
+Procedimiento sugerido en caso de corrupción severa:
+1. Crear nueva base temporal en Supabase (proyecto clon o restauración PITR aislada).
+2. Aplicar `schema.sql` y validar con `make supabase-validate`.
+3. Importar datos críticos (usuarios y tenants) con script selectivo.
+4. Cambiar variables de entorno / secretos apuntando a nueva DB y hacer smoke tests.
+5. Decommission de la base anterior solo tras verificación de 24h.
+
+Evitar borrado directo de `public` en producción.
+
+### 7. Próximos Pasos Propuestos (Orden Prioritario)
+
+1. Aumentar cobertura de tests críticos (orchestrator, pms_adapter, session_manager, lock_service) → objetivo intermedio 55%.
+2. Pequeño dashboard “Operación Rápida” (sesiones activas, conexiones, timeouts) para usuario no técnico (panel único Grafana).
+3. Script de export consolidado (`scripts/maintenance/export_core_tables.py`) opcional para auditoría manual.
+4. Revisar índices redundantes (documentados) sólo si tamaño tablas > 1M filas.
+5. Evaluar RLS mínima (solo lectura tenants) si se planea exponer endpoints multi-tenant públicos.
+
+### 8. Flujo Operativo Simplificado para Admin (Resumen)
+
+| Acción | Comando | Resultado | Frecuencia |
+|--------|---------|-----------|------------|
+| Verificar conexión | `make supabase-test-connection` | Versión y acceso OK | Diario |
+| Validar schema | `make supabase-validate` | Tabla/índices integridad | Semanal / Post-deploy |
+| Revisar métricas | Grafana Panel “Supabase Básico” | Conexiones / Timeouts / Sesiones | Diario |
+| Limpieza sesiones | `make maintenance-cleanup` | Sesiones expiradas eliminadas | Semanal (o volumen) |
+| Revisión seguridad | Manual (secrets, roles) | Sin secretos débiles | Mensual |
+
+### 9. Decisiones NO Adoptadas (y por qué)
+
+- RLS completo multi-tabla: deferido (incrementa complejidad y soporte).
+- Rollback destructivo (DROP SCHEMA): descartado por riesgo operativo alto.
+- Alertas de “ExpiredSessionsAccumulating” con SQL embebido en Prometheus: no compatible directamente y baja prioridad actual.
+- Doble instrumentación de métricas de sesiones (evitamos duplicar `active_sessions_total` y `jwt_sessions_active` en panel básico; se usarán ambas para distintos niveles de detalle si fuese necesario).
+
+### 10. Indicadores de Revisión Futura
+
+- Si `db_statement_timeouts_total` > 10 por hora → revisar queries y posibles missing indexes.
+- Si `db_connections_active` sostenido > 70% del máximo → evaluar ajustar pool o optimizar sesiones.
+- Si `jwt_sessions_active` crece > 50 y limpiezas semanales eliminan < 5% → revisar política de expiración.
+
+---
+
+Fin del anexo.

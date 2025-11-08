@@ -8,6 +8,7 @@
 .PHONY: validate-slo-compliance check-error-budget check-burn-rates create-incident-report validate-runbooks
 .PHONY: test-incident-response generate-slo-report open-governance-docs compliance-dashboard pre-deploy-check
 .PHONY: test-unit test-integration test-e2e test-business-metrics load-test chaos-test
+.PHONY: coverage-report
 .PHONY: security-deps security-deps-json security-deps-html install-security-tools
 .PHONY: secret-scan secret-scan-json secret-scan-strict fix-permissions
 .PHONY: owasp-scan owasp-scan-json owasp-scan-category owasp-report owasp-report-json
@@ -90,6 +91,26 @@ lint: ## Ejecutar linters y static analysis
 	else \
 		command -v gitleaks >/dev/null 2>&1 && gitleaks detect -v || echo "(gitleaks no instalado)"; \
 	fi
+
+coverage-report: ## Ejecuta pytest con cobertura y genera reporte HTML (htmlcov)
+ifeq ($(HAS_POETRY),1)
+	poetry run pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=term-missing --cov-report=html
+	@echo "✅ Reporte HTML en htmlcov/index.html"
+	@echo "Ejecuta cobertura solo sobre un subconjunto seguro de tests unitarios (sin deps externas)"
+coverage-focused:
+	poetry run pytest -q \
+	 tests/unit/test_circuit_breaker.py \
+	 tests/unit/test_lock_service.py \
+	 tests/unit/test_session_manager_ttl.py \
+	 --disable-warnings --cov=app --cov-report=term-missing --cov-report=html --no-header --no-summary || true
+
+.PHONY: alertmanager-render
+alertmanager-render: ## Renderiza config Alertmanager con envsubst (usa docker/alertmanager/config.tmpl.yml)
+	bash scripts/render-alertmanager-config.sh
+else
+	pytest -q --maxfail=1 --disable-warnings --cov=app --cov-report=term-missing --cov-report=html
+endif
+	@echo "✅ Reporte HTML en htmlcov/index.html"
 
 security-fast: ## Escaneo rápido (solo HIGH/CRITICAL) con trivy fs (vuln + secrets)
 	@echo "Security fast scan (HIGH/CRITICAL, vuln+secret)..."

@@ -1,0 +1,34 @@
+name: Synthetic Health (paused)
+
+on:
+  # PAUSADO: se desactiva la ejecución programada para evitar costos/reintentos
+  # schedule:
+  #   - cron: '*/10 * * * *' # cada 10 minutos
+  # Activable manualmente desde la UI si se requiere
+  workflow_dispatch: {}
+
+jobs:
+  health:
+    name: External health checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check liveness
+        env:
+          URL: https://agente-hotel-api.fly.dev/health/live
+        run: |
+          for i in {1..5}; do
+            if curl -fsSL "$URL" >/dev/null; then echo "live ok"; exit 0; fi
+            echo "retry $i/5"; sleep 5
+          done
+          echo "liveness failed"; exit 1
+
+      - name: Check readiness (tolerant)
+        continue-on-error: true
+        env:
+          URL: https://agente-hotel-api.fly.dev/health/ready
+        run: |
+          for i in {1..5}; do
+            if curl -fsSL "$URL" >/dev/null; then echo "ready ok"; exit 0; fi
+            echo "retry $i/5"; sleep 5
+          done
+          echo "readiness failed (non-fatal)"; exit 1

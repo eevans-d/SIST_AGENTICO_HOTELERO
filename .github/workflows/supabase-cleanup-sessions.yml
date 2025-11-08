@@ -1,0 +1,76 @@
+name: Supabase Cleanup User Sessions
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_cleanup:
+        description: "Escribe YES para permitir el borrado de sesiones expiradas"
+        required: true
+        default: "NO"
+      older_than_days:
+        description: "Borrar expiradas hace más de N días (0 = todas expiradas)"
+        required: false
+        default: "0"
+      batch_size:
+        description: "Tamaño de lote para DELETE"
+        required: false
+        default: "500"
+
+concurrency:
+  group: supabase-cleanup-sessions
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    if: ${{ github.event.inputs.confirm_cleanup == 'YES' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validar inputs
+        run: |
+          echo "Confirm: ${{ github.event.inputs.confirm_cleanup }}" | sed 's/./& /g'
+          if [ "${{ github.event.inputs.confirm_cleanup }}" != "YES" ]; then
+            echo "Debe confirmar con YES" >&2; exit 1; fi
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias mínimas
+        run: |
+          python -m pip install --upgrade pip
+          pip install asyncpg
+
+      - name: Validar DATABASE_URL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL no definido en Secrets" >&2; exit 1; fi
+          echo "$DATABASE_URL" | grep -E ":6543/.+sslmode=require" >/dev/null || {
+            echo "DATABASE_URL debe apuntar al pooler :6543 y contener sslmode=require" >&2; exit 1; }
+
+      - name: Ejecutar cleanup (batches)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          export PYTHONPATH=agente-hotel-api
+          python agente-hotel-api/scripts/cleanup_user_sessions.py \
+            --older-than-days "${{ github.event.inputs.older_than_days }}" \
+            --batch-size "${{ github.event.inputs.batch_size }}"
+
+      - name: Resultado OK
+        run: echo "Cleanup finalizado"
+
+  guard-noop:
+    if: ${{ github.event.inputs.confirm_cleanup != 'YES' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: |
+          echo "No se ejecuta limpieza: falta confirmacion YES"

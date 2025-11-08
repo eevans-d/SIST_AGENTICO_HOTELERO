@@ -159,7 +159,7 @@ async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
     from app.services.cache_optimizer import get_cache_optimizer
     from app.services.resource_monitor import get_resource_monitor
     from app.services.auto_scaler import get_auto_scaler
-    
+
     # NLP service puede no estar disponible si spacy no está instalado
     try:
         from app.services.nlp.integrated_nlp_service import get_nlp_service

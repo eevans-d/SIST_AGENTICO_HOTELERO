@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     postgres_password: Optional[SecretStr] = None
     postgres_pool_size: int = 10
     postgres_max_overflow: int = 10
+    # Modo Supabase (reduce conexiones para ahorrar costes). Si true y la URL apunta a supabase se aplican límites.
+    use_supabase: bool = Field(default=False, validation_alias=AliasChoices("USE_SUPABASE", "use_supabase"))
+    supabase_min_pool_size: int = Field(default=2, description="Pool base mínimo al usar Supabase para entornos dev/staging")
+    supabase_max_overflow: int = Field(default=2, description="Overflow mínimo al usar Supabase para entornos dev/staging")
     # Acepta REDIS_URL además de redis_url
     redis_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("REDIS_URL", "redis_url"))
     redis_host: str = "localhost"
@@ -273,6 +277,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Ajustes dinámicos de coste Supabase: si USE_SUPABASE=true y la URL contiene 'supabase.co'
+if settings.use_supabase and "supabase.co" in settings.postgres_url:
+    # Reducir tamaño de pool sólo si valores actuales son mayores que mínimos definidos
+    if settings.postgres_pool_size > settings.supabase_min_pool_size:
+        settings.postgres_pool_size = settings.supabase_min_pool_size  # type: ignore
+    if settings.postgres_max_overflow > settings.supabase_max_overflow:
+        settings.postgres_max_overflow = settings.supabase_max_overflow  # type: ignore
+    # Desactivar debug SQL para no generar logs excesivos en remoto
+    settings.debug = False  # type: ignore
+
 
 
 # FastAPI dependency injection function

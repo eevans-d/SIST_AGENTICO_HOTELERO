@@ -256,6 +256,29 @@ groups:
           runbook_url: "https://grafana.local/runbooks#databasepooloverflow"
           dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=9"
 
+      # --- Nuevas alertas básicas solicitadas ---
+      - alert: DBConnectionsHigh
+        expr: db_connections_active > 4
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Número de conexiones DB activo > 4"
+          description: "Se detectan >4 conexiones activas sostenidas por más de 2m (umbral básico). Revisar picos de carga o fugas de conexiones."
+          runbook_url: "https://grafana.local/runbooks#dbconnectionshigh"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=2"
+
+      - alert: StatementTimeoutsPresent
+        expr: increase(db_statement_timeouts_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Se detectan statement_timeouts"
+          description: "Una o más sentencias alcanzaron statement_timeout en los últimos 5m. Revisar queries lentas / índices."
+          runbook_url: "https://grafana.local/runbooks#statementtimeout"
+          dashboard: "grafana:/d/database-pms-performance/Database%20%26%20PMS%20Performance?viewPanel=3"
+
       - alert: HighErrorRate5xx
         expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
         for: 5m

@@ -167,7 +167,20 @@ async def apply_schema(database_url: str, schema_file: Path, dry_run: bool = Fal
 
     # Conexión y transacción
     start = time.time()
-    conn = await asyncpg.connect(database_url)
+    connect_kwargs = {}
+    sanitized_url = database_url
+    if "supabase" in database_url and "sslmode=" in database_url:
+        # Eliminar sslmode para evitar TypeError y activar SSL explícito
+        base, _sep, query = database_url.partition('?')
+        parts = [p for p in query.split('&') if not p.startswith('sslmode=') and p]
+        sanitized_url = base + (('?' + '&'.join(parts)) if parts else '')
+        connect_kwargs["ssl"] = True
+        print(f"🔐 Normalizando URL Supabase (quitando sslmode): {sanitized_url}")
+    elif "supabase" in database_url:
+        connect_kwargs["ssl"] = True
+        print("🔐 Activando SSL explícito para Supabase")
+
+    conn = await asyncpg.connect(sanitized_url, **connect_kwargs)
     try:
         async with conn.transaction():
             for idx, st in enumerate(statements, 1):
@@ -198,6 +211,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Aplica schema.sql a Supabase/Postgres")
     parser.add_argument("--schema-file", default="docs/supabase/schema.sql", help="Ruta al archivo schema.sql")
     parser.add_argument("--dry-run", action="store_true", help="No ejecuta; imprime statements parseados")
+    parser.add_argument("--yes", action="store_true", help="Confirmación explícita para aplicar cambios")
     args = parser.parse_args()
 
     # Cargar .env si existe (sin dependencia extra)
@@ -214,6 +228,11 @@ def main() -> None:
         print("⚠️  Recomendado incluir sslmode=require en DATABASE_URL para Supabase")
 
     schema_path = Path(args.schema_file)
+    # Confirmación obligatoria si no es dry-run
+    if not args.dry_run and not args.yes:
+        print("❌ Falta confirmación --yes. Ejecuta con --dry-run para previsualizar o añade --yes para aplicar.")
+        sys.exit(2)
+
     try:
         asyncio.run(apply_schema(database_url, schema_path, dry_run=args.dry_run))
     except KeyboardInterrupt:

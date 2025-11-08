@@ -62,6 +62,36 @@ class MetricsService:
             "nlp_fallback_total", "Total de fallbacks NLP activados por razón", ["reason"], registry=registry
         )
 
+        # ---- Seguridad / Sesiones / Base de Datos ----
+        # Gauge de sesiones JWT activas (en BD): recuento de sesiones no expiradas y no revocadas
+        self.jwt_sessions_active = Gauge(
+            "jwt_sessions_active",
+            "Número de sesiones JWT activas (no expiradas, no revocadas) registradas en BD",
+            registry=registry,
+        )
+
+        # Gauge de conexiones activas a la base de datos (vista desde la app)
+        self.db_connections_active = Gauge(
+            "db_connections_active",
+            "Número de conexiones activas a la base de datos (pg_stat_activity)",
+            registry=registry,
+        )
+
+        # Contador de rotaciones de password
+        self.password_rotations_total = Counter(
+            "password_rotations_total",
+            "Total de rotaciones de password por resultado",
+            ["result"],
+            registry=registry,
+        )
+
+        # Contador de timeouts de sentencias (statement_timeout)
+        self.db_statement_timeouts_total = Counter(
+            "db_statement_timeouts_total",
+            "Total de ocurrencias de statement_timeout detectadas en la aplicación",
+            registry=registry,
+        )
+
     def record_request_latency(self, method: str, endpoint: str, latency: float, status_code: int):
         # Histograma no incluye status_code; el contador sí
         self.request_latency.labels(method=method, endpoint=endpoint).observe(latency)
@@ -118,6 +148,36 @@ class MetricsService:
 
     def time_message_normalization(self, canal: str):
         return MESSAGE_NORMALIZATION_LATENCY_SECONDS.labels(canal=canal).time()
+
+    # ---- Seguridad / Sesiones / BD (helpers públicos) ----
+    def set_jwt_sessions_active(self, count: int):
+        try:
+            self.jwt_sessions_active.set(max(0, int(count)))
+        except Exception:
+            pass
+
+    def set_db_connections_active(self, count: int):
+        try:
+            self.db_connections_active.set(max(0, int(count)))
+            # Mantener compatibilidad con gauge genérico si alguien lo usa
+            try:
+                self.active_connections.set(max(0, int(count)))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def inc_password_rotation(self, result: str = "success"):
+        try:
+            self.password_rotations_total.labels(result=result).inc()
+        except Exception:
+            pass
+
+    def inc_statement_timeout(self):
+        try:
+            self.db_statement_timeouts_total.inc()
+        except Exception:
+            pass
 
 
 metrics_service = MetricsService()

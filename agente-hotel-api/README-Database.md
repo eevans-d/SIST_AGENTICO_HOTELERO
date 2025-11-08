@@ -13,6 +13,7 @@ This document provides comprehensive guidance on database optimization for the A
 5. [Monitoring & Analysis](#monitoring--analysis)
 6. [Best Practices](#best-practices)
 7. [Troubleshooting](#troubleshooting)
+8. [Supabase Cost Control](#supabase-cost-control)
 
 ---
 
@@ -654,3 +655,100 @@ python scripts/analyze_redis_cache.py
 ## Changelog
 
 - **2025-10-14:** Initial version with index validation, connection pooling, and monitoring scripts
+- **2025-11-07:** Added Supabase cost control section (pool downsizing, compose profile, workflow concurrency)
+
+---
+
+## Supabase Cost Control
+
+Cuando se utiliza Supabase en lugar de Postgres local, el objetivo es minimizar conexiones y operaciones que generan consumo innecesario. Este sistema incluye ya varios guardarraíles; se describen aquí junto con pasos recomendados.
+
+### 1. Activación explícita
+
+Por defecto en desarrollo se usa Postgres local (perfil `local-db` del `docker-compose.dev.yml`). Para usar Supabase:
+
+```bash
+export USE_SUPABASE=true
+export DATABASE_URL="postgresql+asyncpg://USER:PASS@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+# Levanta sólo lo necesario (sin Postgres local):
+docker compose -f docker-compose.dev.yml up agente-api redis
+```
+
+Si olvidas el perfil, no se arranca Postgres local porque tiene `profiles: [local-db]`.
+
+### 2. Pool reducido automático
+
+Al detectar `USE_SUPABASE=true` y dominio `supabase.co`, el sistema fuerza:
+
+| Ajuste | Valor reducido |
+|--------|----------------|
+| `postgres_pool_size` | 2 |
+| `postgres_max_overflow` | 2 |
+| `debug` (SQL echo) | desactivado |
+
+Esto evita mantener docenas de conexiones abiertas que sumarían a límites de la plataforma.
+
+### 3. Timeouts preventivos
+
+El motor SQLAlchemy aplica `statement_timeout=15s` y `idle_in_transaction_session_timeout=10s` para:
+
+- Cortar consultas largas accidentales.
+- Prevenir sesiones abiertas o transacciones olvidadas que consuman recursos.
+
+### 4. Evitar ejecución repetitiva de schema
+
+El workflow `Supabase Schema Ops` sólo se ejecuta manualmente (`workflow_dispatch`). Además:
+
+- Configuración `concurrency` cancela ejecuciones previas si lanzas otra.
+- `timeout-minutes: 20` evita jobs colgados.
+- Añade confirmación explícita: exige flag `--yes` (ver script si se implementa) antes de aplicar el schema.
+
+### 5. Prácticas recomendadas
+
+| Situación | Recomendación |
+|-----------|---------------|
+| Alta frecuencia de pruebas | Usa Postgres local para tests de carga, no Supabase. |
+| Scripts de migraciones masivas | Ejecuta en ventana única y monitorea conexiones (no lo dejes en loop). |
+| Jobs de background | Unifica operaciones batch en una sola transacción corta. |
+| Debug de SQL | Mantén `DEBUG=false` en Supabase para evitar spam de logs. |
+| Reintentos de API | Limita reintentos de DB a 2 con backoff (no loops agresivos). |
+
+### 6. Checklist antes de usar Supabase
+
+```text
+☐ USE_SUPABASE=true exportado
+☐ DATABASE_URL incluye sslmode=require
+☐ Pool reducido aplicado (2/2) en logs de arranque
+☐ Sin procesos en loop que ejecuten consultas cada <1s
+☐ Sin verbose SQL echo
+☐ Concurrency activa en workflow schema
+```
+
+### 7. Monitoreo ligero
+
+Para controlar conexiones activas sin overhead:
+
+```sql
+SELECT state, COUNT(*)
+FROM pg_stat_activity
+WHERE application_name LIKE 'hotel_agent_%'
+GROUP BY state;
+```
+
+Objetivo en Supabase (dev/staging): <= 4 conexiones totales (incluyendo proceso principal + overflow breve).
+
+### 8. Qué NO hacer
+
+- No ejecutar migraciones en loop cron cada pocos minutos.
+- No mantener workers vacíos conectados permanentemente si no procesan cola.
+- No activar profiling continuo (p.ej. logs de todas las consultas) en Supabase.
+
+### 9. Próximos pasos sugeridos
+
+Para más ahorro futuro:
+
+1. Implementar auto-cierre de sesiones inactivas > 5min (middleware opcional).
+2. Cachear lecturas meta (tenants, flags) con TTL más largo (actual 300s → 900s).
+3. Agrupar operaciones de escritura en lotes pequeños (bulk insert con COPY si aplica).
+
+---

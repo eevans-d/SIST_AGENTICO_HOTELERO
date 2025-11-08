@@ -12,8 +12,10 @@ services:
   # ============================================================================
   # SERVICIOS CORE - Siempre activos en desarrollo
   # ============================================================================
-  
+
   postgres:
+    # Perfil opcional: sólo se levanta si se especifica --profile local-db
+    profiles: ["local-db"]
     image: postgres:14-alpine
     container_name: agente_db_dev
     environment:
@@ -45,7 +47,7 @@ services:
     image: redis:7-alpine
     container_name: agente_redis_dev
     command: >
-      redis-server 
+      redis-server
       --requirepass ${REDIS_PASSWORD:-dev_redis_password}
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
@@ -73,7 +75,7 @@ services:
   # ============================================================================
   # AGENTE API - Con hot-reload y debug enabled
   # ============================================================================
-  
+
   agente-api:
     build:
       context: .
@@ -89,6 +91,15 @@ services:
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       - WATCHFILES_FORCE_POLLING=true  # Para hot-reload en algunos sistemas
+      # --- MODO SUPABASE ---
+      # Para ahorrar costes, por defecto usa Postgres local (profile local-db).
+      # Si quieres conectar a Supabase: export USE_SUPABASE=true y proporciona DATABASE_URL con sslmode=require.
+      # Ejemplo:
+      #   export USE_SUPABASE=true
+      #   export DATABASE_URL=postgresql+asyncpg://user:pass@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
+      # Ejecuta luego sólo el servicio agente-api sin el profile local-db para no crear un Postgres local:
+      #   docker compose -f docker-compose.dev.yml up agente-api redis
+      - USE_SUPABASE=${USE_SUPABASE:-false}
     env_file:
       - .env
     depends_on:
@@ -106,10 +117,10 @@ services:
       - /app/.venv  # Excluir venv del volumen
       - /app/__pycache__  # Excluir cache
     command: >
-      uvicorn app.main:app 
-      --host 0.0.0.0 
-      --port 8000 
-      --reload 
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
       --reload-dir /app/app
       --log-level debug
     healthcheck:
@@ -128,7 +139,7 @@ services:
   # ============================================================================
   # MONITORING STACK - Perfil "monitoring"
   # ============================================================================
-  
+
   prometheus:
     image: prom/prometheus:latest
     container_name: agente_prometheus_dev
@@ -193,7 +204,7 @@ services:
   # ============================================================================
   # MAILHOG - Email testing local (Perfil "mail")
   # ============================================================================
-  
+
   mailhog:
     image: mailhog/mailhog:latest
     container_name: agente_mailhog_dev
@@ -212,7 +223,7 @@ services:
   # ============================================================================
   # ADMINER - Database GUI (Perfil "db-admin")
   # ============================================================================
-  
+
   adminer:
     image: adminer:latest
     container_name: agente_adminer_dev
@@ -236,7 +247,7 @@ services:
   # ============================================================================
   # REDIS COMMANDER - Redis GUI (Perfil "db-admin")
   # ============================================================================
-  
+
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: agente_redis_commander_dev

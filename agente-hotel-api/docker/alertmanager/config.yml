@@ -3,21 +3,21 @@
 
 global:
   resolve_timeout: 5m
-  
+
 route:
   receiver: 'default'
   group_by: ['alertname', 'severity', 'component']
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  
+
   routes:
     - match:
         severity: critical
       receiver: 'critical-alerts'
       group_wait: 10s
       repeat_interval: 1h
-    
+
     - match:
         severity: warning
       receiver: 'warning-alerts'
@@ -34,7 +34,7 @@ receivers:
     #     smarthost: 'smtp.example.com:587'
     #     auth_username: 'alert_smtp_user'
     #     auth_password: '${ALERT_SMTP_PASSWORD}'
-  
+
   - name: 'critical-alerts'
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'
@@ -50,7 +50,7 @@ receivers:
     #     smarthost: 'smtp.example.com:587'
     #     auth_username: 'alert_smtp_user'
     #     auth_password: '${ALERT_SMTP_PASSWORD}'
-  
+
   - name: 'warning-alerts'
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'

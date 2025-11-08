@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
+import argparse
 from pathlib import Path
 from typing import Iterable
 
@@ -87,7 +89,7 @@ def print_set_diff(title: str, expected: Iterable[str], actual: Iterable[str]) -
         print(f"  ℹ️  Extras: {sorted(extra)}")
 
 
-async def main() -> int:
+async def main(insecure: bool = False) -> int:
     load_env_file_if_present(Path(".env"))
     load_env_file_if_present(Path(".env.supabase"))
     dsn = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DATABASE_URL")
@@ -95,7 +97,45 @@ async def main() -> int:
         print("❌ Falta DATABASE_URL en el entorno/.env")
         return 1
 
-    conn = await asyncpg.connect(dsn)
+    connect_kwargs: dict = {}
+    sanitized_dsn = dsn
+
+    if "supabase" in dsn and "sslmode=" in dsn and not insecure:
+        base, _sep, query = dsn.partition('?')
+        parts = [p for p in query.split('&') if not p.startswith('sslmode=') and p]
+        sanitized_dsn = base + (('?' + '&'.join(parts)) if parts else '')
+        connect_kwargs["ssl"] = True
+        print(f"[INFO] Normalizando DSN Supabase (quitando sslmode): {sanitized_dsn}")
+    elif "supabase" in dsn and not insecure:
+        connect_kwargs["ssl"] = True
+        print("[INFO] Activando SSL explícito para Supabase")
+
+    if insecure:
+        if os.getenv("CI") == "true" or os.getenv("ENVIRONMENT") == "production":
+            print("❌ --insecure no permitido en CI o producción", file=sys.stderr)
+            return 1
+        confirmation = input("Type YES to continue with --insecure (SSL verification skipped): ").strip()
+        if confirmation != "YES":
+            print("Abortado (confirmación no recibida)")
+            return 1
+        base, _sep, query = dsn.partition('?')
+        if query:
+            parts = [p for p in query.split('&') if p and not p.startswith('sslmode=')]
+            sanitized_dsn = base + (("?" + "&".join(parts)) if parts else '')
+        connect_kwargs["ssl"] = False
+        print(f"[WARN] SSL verification DISABLED (insecure mode). DSN: {sanitized_dsn}")
+    else:
+        if "supabase" in dsn and "sslmode=" in dsn:
+            base, _sep, query = dsn.partition('?')
+            parts = [p for p in query.split('&') if not p.startswith('sslmode=') and p]
+            sanitized_dsn = base + (("?" + "&".join(parts)) if parts else '')
+            connect_kwargs["ssl"] = True
+            print(f"[INFO] Normalizando DSN Supabase (quitando sslmode): {sanitized_dsn}")
+        elif "supabase" in dsn:
+            connect_kwargs["ssl"] = True
+            print("[INFO] Activando SSL explícito para Supabase")
+
+    conn = await asyncpg.connect(sanitized_dsn, **connect_kwargs)
     try:
         existing = await fetch_existing_tables(conn)
         print_set_diff("Tablas en esquema 'public':", EXPECTED_TABLES, existing)
@@ -110,4 +150,7 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    parser = argparse.ArgumentParser(description="Valida tablas e índices del schema en Supabase")
+    parser.add_argument("--insecure", action="store_true", help="Desactivar verificación SSL (solo desarrollo, requiere confirmación)")
+    args = parser.parse_args()
+    raise SystemExit(asyncio.run(main(insecure=args.insecure)))
