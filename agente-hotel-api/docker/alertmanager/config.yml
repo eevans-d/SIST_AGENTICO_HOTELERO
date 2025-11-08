@@ -27,6 +27,13 @@ receivers:
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'
         send_resolved: true
+    # Email (placeholder) - configurar para avisos generales
+    # email_configs:
+    #   - to: 'ops@example.com'
+    #     from: 'alertmanager@example.com'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'alert_smtp_user'
+    #     auth_password: '${ALERT_SMTP_PASSWORD}'
   
   - name: 'critical-alerts'
     webhook_configs:
@@ -36,11 +43,29 @@ receivers:
     # slack_configs:
     #   - api_url: '${SLACK_WEBHOOK_URL}'
     #     channel: '#alerts-critical'
+    # Email crítico - asegurar redundancia
+    # email_configs:
+    #   - to: 'oncall-critical@example.com'
+    #     from: 'alertmanager@example.com'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'alert_smtp_user'
+    #     auth_password: '${ALERT_SMTP_PASSWORD}'
   
   - name: 'warning-alerts'
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'
         send_resolved: true
+    # Slack canal warnings
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#alerts-warning'
+    # Email warnings
+    # email_configs:
+    #   - to: 'ops-warning@example.com'
+    #     from: 'alertmanager@example.com'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'alert_smtp_user'
+    #     auth_password: '${ALERT_SMTP_PASSWORD}'
 
 inhibit_rules:
   - source_match:
