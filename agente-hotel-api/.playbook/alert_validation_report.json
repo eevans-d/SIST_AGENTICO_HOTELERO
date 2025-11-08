@@ -1,0 +1,73 @@
+{
+  "timestamp": "2025-11-08T07:04:22.281743",
+  "prometheus_url": "http://localhost:9090",
+  "total_alerts_tested": 8,
+  "alerts": {
+    "SessionsHighWarning": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "FAIL"
+    },
+    "SessionsHighCritical": {
+      "tested": true,
+      "threshold_exceeded": false,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "SKIP",
+      "reason": "Production-only test (requires 200+ concurrent sessions)"
+    },
+    "SessionLeakDetected": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "SKIP",
+      "reason": "Long-running test (requires 1h sustained growth)"
+    },
+    "SessionCleanupFailures": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "PASS"
+    },
+    "LockConflictsHigh": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "PASS"
+    },
+    "LockConflictsCritical": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "PASS"
+    },
+    "LockExtensionsExceeded": {
+      "tested": true,
+      "threshold_exceeded": null,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "PASS"
+    },
+    "LockOperationsFailureRate": {
+      "tested": true,
+      "threshold_exceeded": false,
+      "alert_firing": false,
+      "current_value": null,
+      "status": "SKIP",
+      "reason": "No lock operations in last 5m"
+    }
+  },
+  "summary": {
+    "passed": 4,
+    "failed": 1,
+    "pending": 0,
+    "skipped": 3,
+    "simulated": 0
+  }
+}
