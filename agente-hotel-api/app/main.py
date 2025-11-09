@@ -191,6 +191,11 @@ async def lifespan(app: FastAPI):
             redis_client = await get_redis()
             _session_manager_cleanup = SessionManager(redis_client)
             _session_manager_cleanup.start_cleanup_task()
+            # Inicializar inmediatamente la métrica de sesiones activas (evita NO_DATA en Prometheus)
+            try:
+                await _session_manager_cleanup.refresh_active_sessions_metric()
+            except Exception as e:
+                logger.debug("metric_active_sessions_initialization_failed", error=str(e))
             initialized_services.append("session_manager")
             logger.info("✅ Gestor de sesiones inicializado")
         except Exception as e:
@@ -199,7 +204,21 @@ async def lifespan(app: FastAPI):
         # 4. Verificar conexiones críticas
         try:
             redis_client = await get_redis()
-            await redis_client.ping()
+            # Algunos type-checkers/entornos exponen ping() como síncrono; normalizamos
+            try:
+                import inspect
+                _ping = redis_client.ping()
+                if inspect.isawaitable(_ping):
+                    await _ping
+                else:
+                    _ = _ping
+            except Exception:
+                # Fallback directo a await si el stub/tipo es correcto en runtime
+                try:
+                    await redis_client.ping()  # type: ignore[misc]
+                except Exception:
+                    # último intento en modo síncrono
+                    _ = redis_client.ping()
             logger.info("✅ Conexión Redis verificada")
         except Exception as e:
             logger.error(f"❌ Error conectando a Redis: {e}")

@@ -1,3 +1,18 @@
+# -------------------------------------------------------------
+# Alert Validation
+# -------------------------------------------------------------
+validate-alerts:
+	@echo "[alert-validation] Running enhanced alert validation script";
+	python scripts/validate-alerts-staging.py --prometheus-url http://localhost:9090 --prometheus-url-alt http://localhost:9091 --api-url http://localhost:8002 --output .playbook/alert_validation_report.json || exit 1
+	@echo "[alert-validation] Report written to .playbook/alert_validation_report.json"
+	@echo "[alert-validation] Summary:"; jq '.summary' .playbook/alert_validation_report.json || echo "jq not installed; open .playbook/alert_validation_report.json manually"
+
+validate-alerts-real:
+	@echo "[alert-validation-real] Running REAL load alert validation (webhook)";
+	python scripts/validate-alerts-staging.py --prometheus-url http://localhost:9090 --prometheus-url-alt http://localhost:9091 --api-url http://localhost:8002 --load-mode real --session-count 60 --output .playbook/alert_validation_report_real.json || exit 1
+	@echo "[alert-validation-real] Report written to .playbook/alert_validation_report_real.json"
+	@echo "[alert-validation-real] Summary:"; jq '.summary' .playbook/alert_validation_report_real.json || echo "jq not installed; open .playbook/alert_validation_report_real.json manually"
+
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
 .PHONY: security-scan security-fast performance-test stress-test chaos-db chaos-redis resilience-test
 .PHONY: analyze-performance analyze-chaos open-resilience-dashboard install-k6

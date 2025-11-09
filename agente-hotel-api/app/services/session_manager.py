@@ -379,7 +379,7 @@ class SessionManager:
     async def set_session_data(self, user_id: str, data_key: str, data_value: Any, tenant_id: Optional[str] = None):
         """
         Wrapper para actualizar un campo específico en el contexto de sesión.
-        
+
         Útil para tests y APIs que necesitan modificar solo un campo sin
         obtener primero toda la sesión.
 
@@ -402,12 +402,12 @@ class SessionManager:
         """
         # Obtener sesión actual (crea si no existe)
         session = await self.get_or_create_session(user_id, canal="whatsapp", tenant_id=tenant_id)
-        
+
         # Actualizar campo en contexto
         if "context" not in session:
             session["context"] = {}
         session["context"][data_key] = data_value
-        
+
         # Guardar sesión actualizada
         await self.update_session(user_id, session, tenant_id=tenant_id)
 
@@ -425,6 +425,14 @@ class SessionManager:
             active_sessions.set(count)
         except Exception as e:
             logger.warning(f"Failed to update active sessions metric: {e}")
+
+    async def refresh_active_sessions_metric(self) -> None:
+        """Expone públicamente el refresco de la métrica de sesiones activas.
+
+        Útil para inicializar la métrica en 0 al arranque (evitar NO_DATA en Prometheus)
+        y para forzar una actualización inmediata fuera del ciclo del cleanup.
+        """
+        await self._update_active_sessions_metric()
 
     async def get_session_data(self, user_id: str, tenant_id: Optional[str] = None) -> dict:
         """

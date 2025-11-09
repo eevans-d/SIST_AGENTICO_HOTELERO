@@ -31,12 +31,37 @@ Este documento describe el proceso de validación de las 8 nuevas alertas añadi
 
 **Script**: `scripts/validate-alerts-staging.py`
 
-**Basic execution**:
+**Basic execution (synthetic)**:
 ```bash
 python scripts/validate-alerts-staging.py \
   --prometheus-url http://localhost:9090 \
   --api-url http://localhost:8002
 ```
+**Real execution (webhook)**:
+```bash
+python scripts/validate-alerts-staging.py \
+  --prometheus-url http://localhost:9090 \
+  --prometheus-url-alt http://localhost:9091 \
+  --api-url http://localhost:8002 \
+  --load-mode real \
+  --session-count 60
+```
+
+**Makefile shortcuts**:
+```bash
+make validate-alerts        # synthetic
+make validate-alerts-real   # real load via webhook
+```
+
+**Estados del validador**:
+- `PASS`: prueba exitosa; condición o ausencia de alerta según lo esperado
+- `FAIL`: condición debía cumplirse y no ocurrió
+- `PENDING`: umbral superado pero alerta aún no en firing (ventana for)
+- `SKIP`: prueba no aplicable (producción o larga duración)
+- `SIMULATED`: carga sintética superó umbral sin esperar ventana
+- `NO_DATA`: Prometheus inalcanzable o sin serie disponible
+- `BELOW_THRESHOLD`: métrica disponible y por debajo del umbral
+
 
 **Output**: `.playbook/alert_validation_report.json`
 

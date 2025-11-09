@@ -1,7 +1,7 @@
 {
-  "timestamp": "2025-11-09T08:31:25.561026",
+  "timestamp": "2025-11-09T08:31:54.014585",
   "prometheus_url": "http://localhost:9090",
-  "mode": "synthetic",
+  "mode": "real",
   "total_alerts_tested": 8,
   "alerts": {
     "SessionsHighWarning": {
