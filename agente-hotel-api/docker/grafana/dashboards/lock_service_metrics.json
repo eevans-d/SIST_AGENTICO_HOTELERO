@@ -1,0 +1,68 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.5.0"}
+  ],
+  "annotations": {"list": [{"builtIn": 1, "datasource": "-- Grafana --", "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Lock Conflicts Rate (5m)",
+      "targets": [
+        {"expr": "sum(rate(lock_conflicts_total[5m]))", "legendFormat": "conflicts/sec"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops/s"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Lock Extensions by Result (5m)",
+      "targets": [
+        {"expr": "sum by (result) (rate(lock_extensions_total[5m]))", "legendFormat": "{{result}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops/s"}},
+      "options": {"legend": {"showLegend": true}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "piechart",
+      "title": "Lock Operations by Result (5m)",
+      "targets": [
+        {"expr": "sum by (result) (rate(lock_operations_total[5m]))", "legendFormat": "{{result}}"}
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Failure Rate of Lock Operations (5m)",
+      "targets": [
+        {"expr": "(sum(rate(lock_operations_total{result!=\"success\"}[5m])) / sum(rate(lock_operations_total[5m]))) * 100", "legendFormat": "failure %"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent"}},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+    },
+    {
+      "type": "table",
+      "title": "Recent Lock Audit Events",
+      "targets": [
+        {"expr": "sum by (event_type) (rate(lock_operations_total[5m]))", "legendFormat": "{{event_type}}"}
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+    }
+  ],
+  "refresh": "30s",
+  "style": "dark",
+  "tags": ["locks", "redis", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Lock Service Metrics",
+  "uid": null,
+  "version": 1
+}
