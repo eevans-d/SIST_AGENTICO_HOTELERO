@@ -138,8 +138,8 @@ services:
     user: "nobody"
     networks:
       - backend_network
-ports:
-- "9090:9090"
+    ports:
+      - "9090:9090"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro

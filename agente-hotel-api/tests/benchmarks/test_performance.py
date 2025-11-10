@@ -1,7 +1,14 @@
 """Performance benchmarks for critical paths."""
 
+# Skip completo si el plugin de benchmark no está disponible en el entorno
+try:  # pragma: no cover
+    import pytest_benchmark  # type: ignore  # noqa: F401
+except Exception:  # pragma: no cover
+    import pytest
+    pytest.skip("pytest-benchmark no instalado", allow_module_level=True)
+
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 
 @pytest.mark.benchmark(group="api")
@@ -11,7 +18,8 @@ def test_health_endpoint_performance(benchmark):
     from app.main import app
 
     async def health_check():
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/health/live")
             assert response.status_code == 200
             return response
@@ -27,7 +35,8 @@ def test_metrics_endpoint_performance(benchmark):
     from app.main import app
 
     async def get_metrics():
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/metrics")
             assert response.status_code == 200
             return response
