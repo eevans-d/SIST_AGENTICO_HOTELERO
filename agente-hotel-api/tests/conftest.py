@@ -1,15 +1,13 @@
 # [PROMPT 2.10] tests/conftest.py
 
 import warnings
+from typing import Any
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-# Silenciar DeprecationWarning específico de passlib (crypt será removido en Python 3.13)
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="passlib.utils")
-
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from typing import Any
 
 # Mocks para tests de autenticación
 from tests.mocks import (
@@ -20,6 +18,9 @@ from tests.mocks import (
     MockAutoScaler,
     MockNLPService,
 )
+
+# Silenciar DeprecationWarning específico de passlib (crypt será removido en Python 3.13)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="passlib.utils")
 
 
 # Reset Prometheus default registry between tests to avoid duplicated timeseries
@@ -76,11 +77,11 @@ async def test_app():
 
         # Solo incluir si no están ya incluidos
         performance_included = any(
-            route.path.startswith("/api/v1/performance")
+            getattr(route, "path", "").startswith("/api/v1/performance")
             for route in app.routes
         )
         nlp_included = any(
-            route.path.startswith("/api/nlp")
+            getattr(route, "path", "").startswith("/api/nlp")
             for route in app.routes
         )
 
@@ -88,7 +89,7 @@ async def test_app():
             app.include_router(performance.router)
         if not nlp_included:
             app.include_router(nlp.router)
-    except Exception as e:
+    except Exception:
         # Silenciar errores de import en tests que no requieren estos routers
         pass
 
@@ -108,37 +109,37 @@ async def _force_memory_rate_limiter():
 
 # ===== Fixtures para override de servicios con mocks (para tests de autenticación) =====
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_performance_optimizer():
     """Retorna mock de PerformanceOptimizer"""
     return MockPerformanceOptimizer()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_database_tuner():
     """Retorna mock de DatabaseTuner"""
     return MockDatabaseTuner()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_cache_optimizer():
     """Retorna mock de CacheOptimizer"""
     return MockCacheOptimizer()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_resource_monitor():
     """Retorna mock de ResourceMonitor"""
     return MockResourceMonitor()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_auto_scaler():
     """Retorna mock de AutoScaler"""
     return MockAutoScaler()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def mock_nlp_service():
     """Retorna mock de NLPService"""
     return MockNLPService()
@@ -177,7 +178,7 @@ async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
     if nlp_available and get_nlp_service:
         test_app.dependency_overrides[get_nlp_service] = lambda: mock_nlp_service
 
-    async with httpx.AsyncClient(app=test_app, base_url="http://test") as client:
+    async with httpx.AsyncClient(app=test_app, base_url="http://test") as client:  # type: ignore
         yield client
 
     # Limpiar overrides después de tests

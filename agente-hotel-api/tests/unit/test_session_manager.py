@@ -125,9 +125,9 @@ async def test_save_with_retry_on_transient_errors(fake_redis):
     # Make first set() call fail with a connection error, then succeed
     fake_redis.fail_next_set_with(RedisConnectionError("conn down"))
 
-    session = await sm.get_or_create_session(user_id="u3", canal="whatsapp")
+    await sm.get_or_create_session(user_id="u3", canal="whatsapp")
 
-    # Should eventually succeed and record a retry
+    # Should eventually succeed and record a retry (no uso de variable local innecesaria)
     # Check labeled counters directly
     retry_counter = session_save_retries.labels(operation="create", result="retry")._value.get()
     success_counter = session_save_retries.labels(operation="create", result="success")._value.get()
