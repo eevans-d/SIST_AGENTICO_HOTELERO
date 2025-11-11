@@ -11,7 +11,7 @@ Date: 2025-11-03
 from datetime import datetime
 
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text
-from sqlalchemy.orm import relationship, foreign
+from sqlalchemy.orm import relationship
 
 from app.models.lock_audit import Base
 

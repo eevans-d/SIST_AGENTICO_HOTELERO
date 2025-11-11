@@ -16,7 +16,23 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from locust import HttpUser, between, task
+try:
+    from locust import HttpUser as LocustHttpUser, between, task  # type: ignore
+    _LOCUST_AVAILABLE = True
+except Exception:  # Locust no instalado
+    import pytest
+    pytestmark = pytest.mark.skip(reason="Locust no instalado: load test se ejecuta solo en entorno performance")
+    _LOCUST_AVAILABLE = False
+    class LocustHttpUser(object):  # Fallback base vacío
+        pass
+
+    def between(*args, **kwargs):  # type: ignore
+        return None
+
+    def task(*args, **kwargs):  # type: ignore
+        def _decorator(fn):
+            return fn
+        return _decorator
 
 # Configuración global
 DEFAULT_HEADERS = {
@@ -70,298 +86,258 @@ TEST_PHONE_NUMBERS = [
 ]
 
 
-class WhatsAppUser(HttpUser):
-    """
-    Simula usuarios interactuando a través de WhatsApp.
+if _LOCUST_AVAILABLE:
+    class WhatsAppUser(LocustHttpUser):  # type: ignore[misc]
+        """Simula usuarios interactuando a través de WhatsApp."""
 
-    Esta clase envía mensajes al webhook de WhatsApp en formato similar
-    al de la API de WhatsApp, probando la capacidad del sistema para
-    procesar mensajes entrantes.
-    """
+        wait_time = between(5, 30)
 
-    # Tiempo de espera entre solicitudes (entre 5 y 30 segundos)
-    wait_time = between(5, 30)
+        def on_start(self):
+            self.phone_number = random.choice(TEST_PHONE_NUMBERS)
+            self.session_id = f"test_session_{self.phone_number}"
 
-    def on_start(self):
-        """Inicialización por usuario."""
-        self.phone_number = random.choice(TEST_PHONE_NUMBERS)
-        self.session_id = f"test_session_{self.phone_number}"
+        @task(2)
+        def send_text_message(self):
+            message = random.choice(WHATSAPP_TEST_MESSAGES)
 
-    @task(2)
-    def send_text_message(self):
-        """Envía un mensaje de texto aleatorio."""
-        message = random.choice(WHATSAPP_TEST_MESSAGES)
-
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "TEST_ACCOUNT_ID",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {
-                                    "display_phone_number": self.phone_number,
-                                    "phone_number_id": "PHONE_NUMBER_ID",
+            payload = {
+                "object": "whatsapp_business_account",
+                "entry": [
+                    {
+                        "id": "TEST_ACCOUNT_ID",
+                        "changes": [
+                            {
+                                "value": {
+                                    "messaging_product": "whatsapp",
+                                    "metadata": {
+                                        "display_phone_number": self.phone_number,
+                                        "phone_number_id": "PHONE_NUMBER_ID",
+                                    },
+                                    "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
+                                    "messages": [
+                                        {
+                                            "from": self.phone_number,
+                                            "id": f"test_msg_{time.time()}",
+                                            "timestamp": str(int(time.time())),
+                                            "text": {"body": message},
+                                            "type": "text",
+                                        }
+                                    ],
                                 },
-                                "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
-                                "messages": [
-                                    {
-                                        "from": self.phone_number,
-                                        "id": f"test_msg_{time.time()}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": message},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+                                "field": "messages",
+                            }
+                        ],
+                    }
+                ],
+            }
 
-        # Enviar webhook
-        with self.client.post(
-            "/webhooks/whatsapp", json=payload, headers=DEFAULT_HEADERS, catch_response=True
-        ) as response:
-            if response.status_code != 200:
-                response.failure(f"Error al enviar mensaje: {response.text}")
+            with self.client.post(
+                "/webhooks/whatsapp", json=payload, headers=DEFAULT_HEADERS, catch_response=True
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error al enviar mensaje: {response.text}")
 
-    @task(1)
-    def ask_availability(self):
-        """Consulta disponibilidad con fechas aleatorias."""
-        date_range = random.choice(TEST_DATES)
-        message = f"¿Tienen disponibilidad desde el {date_range['check_in']} hasta el {date_range['check_out']}?"
+        @task(1)
+        def ask_availability(self):
+            date_range = random.choice(TEST_DATES)
+            message = f"¿Tienen disponibilidad desde el {date_range['check_in']} hasta el {date_range['check_out']}?"
 
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "TEST_ACCOUNT_ID",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {
-                                    "display_phone_number": self.phone_number,
-                                    "phone_number_id": "PHONE_NUMBER_ID",
+            payload = {
+                "object": "whatsapp_business_account",
+                "entry": [
+                    {
+                        "id": "TEST_ACCOUNT_ID",
+                        "changes": [
+                            {
+                                "value": {
+                                    "messaging_product": "whatsapp",
+                                    "metadata": {
+                                        "display_phone_number": self.phone_number,
+                                        "phone_number_id": "PHONE_NUMBER_ID",
+                                    },
+                                    "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
+                                    "messages": [
+                                        {
+                                            "from": self.phone_number,
+                                            "id": f"test_msg_{time.time()}",
+                                            "timestamp": str(int(time.time())),
+                                            "text": {"body": message},
+                                            "type": "text",
+                                        }
+                                    ],
                                 },
-                                "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
-                                "messages": [
-                                    {
-                                        "from": self.phone_number,
-                                        "id": f"test_msg_{time.time()}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": message},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+                                "field": "messages",
+                            }
+                        ],
+                    }
+                ],
+            }
 
-        # Enviar webhook
-        with self.client.post(
-            "/webhooks/whatsapp", json=payload, headers=DEFAULT_HEADERS, catch_response=True
-        ) as response:
-            if response.status_code != 200:
-                response.failure(f"Error al enviar mensaje: {response.text}")
+            with self.client.post(
+                "/webhooks/whatsapp", json=payload, headers=DEFAULT_HEADERS, catch_response=True
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error al enviar mensaje: {response.text}")
 
+    class ApiUser(LocustHttpUser):  # type: ignore[misc]
+        """Simula usuarios utilizando la API directamente."""
 
-class ApiUser(HttpUser):
-    """
-    Simula usuarios utilizando la API directamente.
+        wait_time = between(5, 15)
 
-    Esta clase prueba los endpoints de la API, como los endpoints de salud,
-    métricas y administrativos.
-    """
+        @task(10)
+        def check_health(self):
+            with self.client.get("/health/live", catch_response=True) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error en health/live: {response.text}")
+            with self.client.get("/health/ready", catch_response=True) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error en health/ready: {response.text}")
 
-    # Tiempo de espera entre solicitudes (entre 5 y 15 segundos)
-    wait_time = between(5, 15)
+        @task(2)
+        def get_metrics(self):
+            with self.client.get("/metrics", catch_response=True) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error en metrics: {response.text}")
 
-    @task(10)
-    def check_health(self):
-        """Verifica el endpoint de salud."""
-        with self.client.get("/health/live", catch_response=True) as response:
-            if response.status_code != 200:
-                response.failure(f"Error en health/live: {response.text}")
+        @task(1)
+        def check_feature_flags(self):
+            with self.client.get("/admin/feature-flags", catch_response=True) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error en feature-flags: {response.text}")
 
-        with self.client.get("/health/ready", catch_response=True) as response:
-            if response.status_code != 200:
-                response.failure(f"Error en health/ready: {response.text}")
+    class ReservationUser(LocustHttpUser):  # type: ignore[misc]
+        """Simula usuarios realizando reservas."""
 
-    @task(2)
-    def get_metrics(self):
-        """Obtiene métricas de Prometheus."""
-        with self.client.get("/metrics", catch_response=True) as response:
-            if response.status_code != 200:
-                response.failure(f"Error en metrics: {response.text}")
+        wait_time = between(30, 60)
 
-    @task(1)
-    def check_feature_flags(self):
-        """Consulta los feature flags activos."""
-        with self.client.get("/admin/feature-flags", catch_response=True) as response:
-            if response.status_code != 200:
-                response.failure(f"Error en feature-flags: {response.text}")
+        def on_start(self):
+            self.phone_number = random.choice(TEST_PHONE_NUMBERS)
+            self.session_id = f"test_session_{self.phone_number}"
 
+        def get_random_date_range(self) -> Dict[str, str]:
+            return random.choice(TEST_DATES)
 
-class ReservationUser(HttpUser):
-    """
-    Simula usuarios realizando reservas.
+        @task
+        def reservation_flow(self):
+            date_range = self.get_random_date_range()
+            message = f"¿Tienen disponibilidad desde el {date_range['check_in']} hasta el {date_range['check_out']}?"
 
-    Esta clase prueba el flujo completo de reservas, desde la consulta
-    de disponibilidad hasta la creación de reservas.
-    """
-
-    # Tiempo de espera entre solicitudes (entre 30 y 60 segundos)
-    wait_time = between(30, 60)
-
-    def on_start(self):
-        """Inicialización por usuario."""
-        self.phone_number = random.choice(TEST_PHONE_NUMBERS)
-        self.session_id = f"test_session_{self.phone_number}"
-
-    def get_random_date_range(self) -> Dict[str, str]:
-        """Obtiene un rango de fechas aleatorio."""
-        return random.choice(TEST_DATES)
-
-    @task
-    def reservation_flow(self):
-        """Simula un flujo completo de reserva."""
-        # 1. Consultar disponibilidad
-        date_range = self.get_random_date_range()
-        message = f"¿Tienen disponibilidad desde el {date_range['check_in']} hasta el {date_range['check_out']}?"
-
-        availability_payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "TEST_ACCOUNT_ID",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {
-                                    "display_phone_number": self.phone_number,
-                                    "phone_number_id": "PHONE_NUMBER_ID",
+            availability_payload = {
+                "object": "whatsapp_business_account",
+                "entry": [
+                    {
+                        "id": "TEST_ACCOUNT_ID",
+                        "changes": [
+                            {
+                                "value": {
+                                    "messaging_product": "whatsapp",
+                                    "metadata": {
+                                        "display_phone_number": self.phone_number,
+                                        "phone_number_id": "PHONE_NUMBER_ID",
+                                    },
+                                    "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
+                                    "messages": [
+                                        {
+                                            "from": self.phone_number,
+                                            "id": f"test_msg_{time.time()}",
+                                            "timestamp": str(int(time.time())),
+                                            "text": {"body": message},
+                                            "type": "text",
+                                        }
+                                    ],
                                 },
-                                "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
-                                "messages": [
-                                    {
-                                        "from": self.phone_number,
-                                        "id": f"test_msg_{time.time()}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": message},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+                                "field": "messages",
+                            }
+                        ],
+                    }
+                ],
+            }
 
-        # Enviar mensaje de disponibilidad
-        with self.client.post(
-            "/webhooks/whatsapp", json=availability_payload, headers=DEFAULT_HEADERS, catch_response=True
-        ) as response:
-            if response.status_code != 200:
-                response.failure(f"Error al consultar disponibilidad: {response.text}")
-                return
+            with self.client.post(
+                "/webhooks/whatsapp", json=availability_payload, headers=DEFAULT_HEADERS, catch_response=True
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error al consultar disponibilidad: {response.text}")
+                    return
 
-        # Esperar para simular tiempo de respuesta del usuario
-        time.sleep(random.uniform(5, 10))
+            time.sleep(random.uniform(5, 10))
 
-        # 2. Confirmar reserva
-        confirm_payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "TEST_ACCOUNT_ID",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {
-                                    "display_phone_number": self.phone_number,
-                                    "phone_number_id": "PHONE_NUMBER_ID",
+            confirm_payload = {
+                "object": "whatsapp_business_account",
+                "entry": [
+                    {
+                        "id": "TEST_ACCOUNT_ID",
+                        "changes": [
+                            {
+                                "value": {
+                                    "messaging_product": "whatsapp",
+                                    "metadata": {
+                                        "display_phone_number": self.phone_number,
+                                        "phone_number_id": "PHONE_NUMBER_ID",
+                                    },
+                                    "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
+                                    "messages": [
+                                        {
+                                            "from": self.phone_number,
+                                            "id": f"test_msg_{time.time()}",
+                                            "timestamp": str(int(time.time())),
+                                            "text": {"body": "Sí, quiero reservar una habitación doble"},
+                                            "type": "text",
+                                        }
+                                    ],
                                 },
-                                "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
-                                "messages": [
-                                    {
-                                        "from": self.phone_number,
-                                        "id": f"test_msg_{time.time()}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": "Sí, quiero reservar una habitación doble"},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+                                "field": "messages",
+                            }
+                        ],
+                    }
+                ],
+            }
 
-        # Enviar mensaje de confirmación
-        with self.client.post(
-            "/webhooks/whatsapp", json=confirm_payload, headers=DEFAULT_HEADERS, catch_response=True
-        ) as response:
-            if response.status_code != 200:
-                response.failure(f"Error al confirmar reserva: {response.text}")
-                return
+            with self.client.post(
+                "/webhooks/whatsapp", json=confirm_payload, headers=DEFAULT_HEADERS, catch_response=True
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error al confirmar reserva: {response.text}")
+                    return
 
-        # Esperar para simular tiempo de respuesta del usuario
-        time.sleep(random.uniform(5, 10))
+            time.sleep(random.uniform(5, 10))
 
-        # 3. Proporcionar información de contacto
-        contact_payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "TEST_ACCOUNT_ID",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {
-                                    "display_phone_number": self.phone_number,
-                                    "phone_number_id": "PHONE_NUMBER_ID",
+            contact_payload = {
+                "object": "whatsapp_business_account",
+                "entry": [
+                    {
+                        "id": "TEST_ACCOUNT_ID",
+                        "changes": [
+                            {
+                                "value": {
+                                    "messaging_product": "whatsapp",
+                                    "metadata": {
+                                        "display_phone_number": self.phone_number,
+                                        "phone_number_id": "PHONE_NUMBER_ID",
+                                    },
+                                    "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
+                                    "messages": [
+                                        {
+                                            "from": self.phone_number,
+                                            "id": f"test_msg_{time.time()}",
+                                            "timestamp": str(int(time.time())),
+                                            "text": {"body": "Mi nombre es Usuario Prueba, mi email es test@example.com"},
+                                            "type": "text",
+                                        }
+                                    ],
                                 },
-                                "contacts": [{"profile": {"name": "Test User"}, "wa_id": self.phone_number}],
-                                "messages": [
-                                    {
-                                        "from": self.phone_number,
-                                        "id": f"test_msg_{time.time()}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": "Mi nombre es Usuario Prueba, mi email es test@example.com"},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+                                "field": "messages",
+                            }
+                        ],
+                    }
+                ],
+            }
 
-        # Enviar información de contacto
-        with self.client.post(
-            "/webhooks/whatsapp", json=contact_payload, headers=DEFAULT_HEADERS, catch_response=True
-        ) as response:
-            if response.status_code != 200:
-                response.failure(f"Error al enviar información de contacto: {response.text}")
+            with self.client.post(
+                "/webhooks/whatsapp", json=contact_payload, headers=DEFAULT_HEADERS, catch_response=True
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Error al enviar información de contacto: {response.text}")
 
 
 if __name__ == "__main__":

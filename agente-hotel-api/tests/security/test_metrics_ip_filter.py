@@ -27,7 +27,6 @@ async def test_allowed_ip_can_access_metrics(test_client):
     NOTA: TestClient no usa IPs reales, por lo que mockeamos get_real_client_ip()
     para simular diferentes IPs
     """
-    from app.routers.metrics import get_real_client_ip
 
     # Mockear get_real_client_ip para retornar IP permitida
     with patch("app.routers.metrics.get_real_client_ip", return_value="127.0.0.1"):
@@ -48,7 +47,6 @@ async def test_unauthorized_ip_gets_403(test_client):
     """
     Verifica que IP no en allowlist recibe 403 Forbidden
     """
-    from app.routers.metrics import get_real_client_ip
 
     # Mockear IP no autorizada
     with patch("app.routers.metrics.get_real_client_ip", return_value="192.168.100.50"):
@@ -75,7 +73,6 @@ async def test_x_forwarded_for_parsing(test_client):
     Verifica que X-Forwarded-For se parsea correctamente (primera IP de la lista)
     """
     from app.routers.metrics import get_real_client_ip
-    from fastapi import Request
 
     # Simular request con X-Forwarded-For
     # Formato: "client, proxy1, proxy2" → debe tomar "client"
@@ -139,7 +136,6 @@ async def test_ipv6_localhost_allowed(test_client):
     """
     Verifica que IPv6 localhost (::1) puede acceder /metrics
     """
-    from app.routers.metrics import get_real_client_ip
 
     # Mockear IPv6 localhost
     with patch("app.routers.metrics.get_real_client_ip", return_value="::1"):
@@ -156,7 +152,6 @@ async def test_multiple_allowed_ips(test_client, monkeypatch):
     """
     Verifica que múltiples IPs en allowlist funcionan correctamente
     """
-    from app.routers.metrics import get_real_client_ip
 
     # Configurar múltiples IPs permitidas
     settings = get_settings()
@@ -192,7 +187,6 @@ async def test_denied_access_logging(test_client, caplog):
     """
     Verifica que accesos denegados se loguean correctamente
     """
-    from app.routers.metrics import get_real_client_ip
     import logging
 
     # Capturar logs
@@ -218,7 +212,6 @@ async def test_granted_access_logging(test_client, caplog):
     """
     Verifica que accesos autorizados se loguean correctamente
     """
-    from app.routers.metrics import get_real_client_ip
     import logging
 
     # Capturar logs
@@ -308,7 +301,6 @@ async def test_403_response_format(test_client):
     """
     Verifica que respuesta 403 tiene formato JSON correcto con hint
     """
-    from app.routers.metrics import get_real_client_ip
 
     # Mockear IP no autorizada
     with patch("app.routers.metrics.get_real_client_ip", return_value="192.168.100.50"):

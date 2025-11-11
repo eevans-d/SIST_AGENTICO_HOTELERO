@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, UTC
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship, foreign
+from sqlalchemy.orm import relationship
 
 from .lock_audit import Base
 

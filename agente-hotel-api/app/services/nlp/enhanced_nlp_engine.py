@@ -11,9 +11,24 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-import spacy
-from spacy.matcher import Matcher
-from transformers import pipeline
+
+# Optional heavy dependencies (spaCy, Transformers) are imported lazily.
+# Tests should not fail to import this module if these packages are missing.
+try:  # spaCy may not be installed in minimal test environments
+    import spacy  # type: ignore
+    from spacy.matcher import Matcher  # type: ignore
+    HAS_SPACY = True
+except Exception:  # pragma: no cover - optional dependency
+    spacy = None  # type: ignore
+    Matcher = None  # type: ignore
+    HAS_SPACY = False
+
+try:  # Transformers is also optional here
+    from transformers import pipeline as hf_pipeline  # type: ignore
+    HAS_TRANSFORMERS = True
+except Exception:  # pragma: no cover - optional dependency
+    hf_pipeline = None  # type: ignore
+    HAS_TRANSFORMERS = False
 import redis.asyncio as redis
 from prometheus_client import Counter, Histogram, Gauge
 
@@ -21,21 +36,36 @@ from prometheus_client import Counter, Histogram, Gauge
 logger = logging.getLogger(__name__)
 
 # Prometheus metrics
+# NOTE: These metric names are prefixed with "enhanced_" to avoid clashes with the
+# base engine metrics defined in app/services/nlp_engine.py which use the original
+# names without language label. Previous duplicate registration caused ValueError
+# during pytest collection (same metric name, different label schema). Renaming
+# here keeps both engines loadable in the same test session.
 nlp_intent_predictions_total = Counter(
-    "nlp_intent_predictions_total", "Total NLP intent predictions", ["intent", "confidence_level", "language"]
+    "enhanced_nlp_intent_predictions_total",
+    "Total NLP intent predictions (enhanced engine)",
+    ["intent", "confidence_level", "language"],
 )
 
 nlp_processing_latency = Histogram(
-    "nlp_processing_latency_seconds", "NLP processing latency", ["operation", "model_type"]
+    "enhanced_nlp_processing_latency_seconds",
+    "NLP processing latency (enhanced engine)",
+    ["operation", "model_type"],
 )
 
 nlp_entity_extractions_total = Counter(
-    "nlp_entity_extractions_total", "Total entity extractions", ["entity_type", "extraction_method"]
+    "enhanced_nlp_entity_extractions_total",
+    "Total entity extractions (enhanced engine)",
+    ["entity_type", "extraction_method"],
 )
 
-nlp_cache_hit_rate = Gauge("nlp_cache_hit_rate", "NLP cache hit rate")
+nlp_cache_hit_rate = Gauge(
+    "enhanced_nlp_cache_hit_rate", "NLP cache hit rate (enhanced engine)"
+)
 
-nlp_model_confidence = Gauge("nlp_model_confidence", "Average model confidence score")
+nlp_model_confidence = Gauge(
+    "enhanced_nlp_model_confidence", "Average model confidence score (enhanced engine)"
+)
 
 
 class IntentType(Enum):
@@ -229,22 +259,35 @@ class HotelNLPEngine:
         logger.info("🧠 Initializing NLP Engine components...")
 
         try:
-            # Load spaCy model for Spanish
-            self.nlp_model = spacy.load("es_core_news_sm")
+            # Load spaCy model for Spanish (optional)
+            if HAS_SPACY:
+                try:
+                    self.nlp_model = spacy.load("es_core_news_sm")  # type: ignore[attr-defined]
+                    self.matcher = Matcher(self.nlp_model.vocab)  # type: ignore[operator]
+                    self._setup_entity_patterns()
+                except Exception as e:
+                    logger.warning(f"spaCy not fully available or model missing, running degraded: {e}")
+                    self.nlp_model = None
+                    self.matcher = None
+            else:
+                logger.info("spaCy not installed; NLP engine will run in rule-based degraded mode")
 
-            # Initialize intent classifier (using multilingual model)
-            self.intent_classifier = pipeline(
-                "text-classification",
-                model="microsoft/DialoGPT-medium",
-                tokenizer="microsoft/DialoGPT-medium",
-                device=-1,  # CPU
-            )
+            # Initialize intent classifier (optional Transformers pipeline)
+            if HAS_TRANSFORMERS and hf_pipeline is not None:
+                try:
+                    self.intent_classifier = hf_pipeline(
+                        "text-classification",
+                        model="microsoft/DialoGPT-medium",
+                        tokenizer="microsoft/DialoGPT-medium",
+                        device=-1,  # CPU
+                    )
+                except Exception as e:
+                    logger.warning(f"Transformers pipeline unavailable, skipping ML classifier: {e}")
+                    self.intent_classifier = None
+            else:
+                logger.info("Transformers not installed; using rule-based/heuristic intent classification")
 
-            # Initialize custom matcher for hotel entities
-            self.matcher = Matcher(self.nlp_model.vocab)
-            self._setup_entity_patterns()
-
-            logger.info("✅ NLP Engine components initialized successfully")
+            logger.info("✅ NLP Engine components initialized (degraded mode if dependencies missing)")
 
         except Exception as e:
             logger.error(f"❌ Failed to initialize NLP Engine: {e}")
@@ -252,6 +295,10 @@ class HotelNLPEngine:
 
     def _setup_entity_patterns(self):
         """Setup entity matching patterns"""
+        if not self.matcher:
+            logger.info("Matcher not available; skipping entity pattern setup")
+            return
+
         # Room type patterns
         room_patterns = []
         for room_type in self.room_types:
@@ -412,18 +459,23 @@ class HotelNLPEngine:
             # For now, use a simple heuristic approach
             # In production, this would use a fine-tuned transformer model
 
-            # Analyze text features
-            doc = self.nlp_model(text)
+            # Analyze text features (fallback if spaCy model is not available)
+            if self.nlp_model is not None:
+                doc = self.nlp_model(text)
+                sentence_length = len(doc)
+                has_numbers = any(token.like_num for token in doc)
+            else:
+                sentence_length = len(text.split())
+                has_numbers = bool(re.search(r"\d", text))
 
-            # Feature extraction
             features = {
                 "has_question": "?" in text,
                 "has_reservation_words": any(word in text for word in ["reserva", "book", "disponible"]),
                 "has_service_words": any(word in text for word in ["servicio", "room service", "comida"]),
                 "has_complaint_words": any(word in text for word in ["problema", "queja", "no funciona"]),
                 "has_greeting_words": any(word in text for word in ["hola", "buenos", "buenas"]),
-                "sentence_length": len(doc),
-                "has_numbers": any(token.like_num for token in doc),
+                "sentence_length": sentence_length,
+                "has_numbers": has_numbers,
             }
 
             # Simple decision tree logic
@@ -450,6 +502,10 @@ class HotelNLPEngine:
         entities = []
 
         try:
+            # If spaCy/matcher are not available, skip entity extraction gracefully
+            if not self.nlp_model or not self.matcher:
+                return entities
+
             # Process with spaCy
             doc = self.nlp_model(text)
 
@@ -670,7 +726,18 @@ class HotelNLPEngine:
 
             # Check cache connection
             if self.redis_client:
-                await self.redis_client.ping()
+                # Some redis clients/stubs may return a bool or a coroutine; handle both
+                try:
+                    ping_result = self.redis_client.ping()
+                    if asyncio.iscoroutine(ping_result):
+                        await ping_result
+                except Exception:
+                    # Fallback to awaited call for asyncio client signature
+                    try:
+                        await self.redis_client.ping()  # type: ignore[misc]
+                    except Exception:
+                        health_status["components"]["redis_cache"] = "error"
+                        raise
                 health_status["components"]["redis_cache"] = "ok"
             else:
                 health_status["components"]["redis_cache"] = "not_configured"

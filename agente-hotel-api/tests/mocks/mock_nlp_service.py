@@ -2,7 +2,7 @@
 Mock de NLP Service para tests de autenticación de endpoints admin
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime
 
 

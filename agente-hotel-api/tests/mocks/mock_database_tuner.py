@@ -2,7 +2,7 @@
 Mock de DatabasePerformanceTuner para tests de autenticación
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime
 
 

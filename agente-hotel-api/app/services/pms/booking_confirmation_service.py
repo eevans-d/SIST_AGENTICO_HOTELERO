@@ -10,13 +10,22 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 import uuid
-import qrcode
+try:  # Optional dependency; not required for basic test runs
+    import qrcode  # type: ignore
+    HAS_QRCODE = True
+except Exception:  # pragma: no cover - optional dependency
+    qrcode = None  # type: ignore
+    HAS_QRCODE = False
 import io
 
 from .enhanced_pms_service import Reservation
 from app.services.template_service import TemplateService
 from app.services.whatsapp_client import WhatsAppClient
-from app.services.gmail_client import GmailClient
+try:
+    # Use GmailIMAPClient as a stand-in for GmailClient (class was renamed)
+    from app.services.gmail_client import GmailIMAPClient as GmailClient  # type: ignore
+except Exception:  # pragma: no cover
+    GmailClient = None  # type: ignore
 from app.core.retry import retry_with_backoff
 from prometheus_client import Counter, Histogram, Gauge
 
@@ -298,12 +307,12 @@ class BookingConfirmationService:
                 <h1>{self.hotel_info["name"]}</h1>
                 <h2>{template["subject"].format(hotel_name=self.hotel_info["name"])}</h2>
             </div>
-            
+
             <div class="content">
                 <p>{template["greeting"].format(guest_name=reservation.guest.first_name + " " + reservation.guest.last_name)}</p>
-                
+
                 <p>{template["confirmation_message"].format(hotel_name=self.hotel_info["name"])}</p>
-                
+
                 <div class="details">
                     <h3>{template["details_header"]}</h3>
                     <p><strong>Confirmation Number:</strong> {reservation.confirmation_number}</p>
@@ -315,7 +324,7 @@ class BookingConfirmationService:
                     <p><strong>Guests:</strong> {reservation.adults} adults{", " + str(reservation.children) + " children" if reservation.children > 0 else ""}</p>
                     <p><strong>Total Amount:</strong> {reservation.currency} {reservation.total_amount:.2f}</p>
                 </div>
-                
+
                 <div class="details">
                     <h3>{template["checkin_instructions"]}</h3>
                     <p><strong>Check-in Time:</strong> {self.hotel_info["checkin_time"]}</p>
@@ -323,23 +332,23 @@ class BookingConfirmationService:
                     <p><strong>Address:</strong> {self.hotel_info["address"]}</p>
                     <p><strong>WiFi Password:</strong> {self.hotel_info["wifi_password"]}</p>
                 </div>
-                
+
                 <div class="details">
                     <h3>{template["contact_info"]}</h3>
                     <p><strong>Phone:</strong> {self.hotel_info["phone"]}</p>
                     <p><strong>Email:</strong> {self.hotel_info["email"]}</p>
                     <p><strong>Website:</strong> {self.hotel_info["website"]}</p>
                 </div>
-                
+
                 {self._format_special_requests(reservation.special_requests, language) if reservation.special_requests else ""}
-                
+
                 <div class="qr-section">
                     <p><strong>Mobile Check-in QR Code</strong></p>
                     <p>Scan this code with your phone for quick check-in</p>
                     <!-- QR code will be embedded separately -->
                 </div>
             </div>
-            
+
             <div class="footer">
                 <p>{template["footer"]}</p>
                 <p><small>This is an automated confirmation. Please retain for your records.</small></p>
@@ -358,7 +367,26 @@ class BookingConfirmationService:
         )
 
     async def _generate_qr_code(self, reservation: Reservation) -> ConfirmationDocument:
-        """Generate QR code for mobile check-in"""
+        """Generate QR code for mobile check-in.
+
+        If the optional 'qrcode' dependency is not available, returns a small
+        text placeholder indicating unavailability (useful for minimal CI/test envs).
+        """
+
+        if not HAS_QRCODE:
+            placeholder = (
+                f"QR code generation unavailable in this environment for reservation "
+                f"{reservation.confirmation_number}."
+            )
+            data_bytes = placeholder.encode("utf-8")
+            return ConfirmationDocument(
+                document_id=str(uuid.uuid4()),
+                document_type=DocumentType.QR_CODE,
+                content=data_bytes,
+                content_type="text/plain",
+                filename=f"qr_checkin_{reservation.confirmation_number}.txt",
+                size_bytes=len(data_bytes),
+            )
 
         # QR code data
         qr_data = {
@@ -371,15 +399,14 @@ class BookingConfirmationService:
         }
 
         # Generate QR code
+        import json
+
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
             box_size=10,
             border=4,
         )
-
-        import json
-
         qr.add_data(json.dumps(qr_data))
         qr.make(fit=True)
 
@@ -410,45 +437,45 @@ class BookingConfirmationService:
         instructions = f"""
         CHECK-IN INSTRUCTIONS
         {self.hotel_info["name"]}
-        
+
         Confirmation Number: {reservation.confirmation_number}
         Guest: {reservation.guest.first_name} {reservation.guest.last_name}
-        
+
         ARRIVAL INFORMATION:
         • Check-in time: {self.hotel_info["checkin_time"]} onwards
         • Address: {self.hotel_info["address"]}
         • Phone: {self.hotel_info["phone"]}
-        
+
         WHAT TO BRING:
         • Government-issued photo ID
         • Credit card for incidentals
         • This confirmation
-        
+
         MOBILE CHECK-IN:
         • Scan the QR code sent with your confirmation
         • Complete mobile check-in 2 hours before arrival
         • Go directly to your room using mobile key
-        
+
         PARKING:
         • Complimentary self-parking available
         • Valet parking: $25/night
-        
+
         AMENITIES:
         • WiFi Password: {self.hotel_info["wifi_password"]}
         • Fitness center: 24/7 access
         • Pool: 6:00 AM - 10:00 PM
         • Room service: 6:00 AM - 11:00 PM
-        
+
         POLICIES:
         • {self.hotel_info["policies"]["cancellation"]}
         • {self.hotel_info["policies"]["pets"]}
         • {self.hotel_info["policies"]["smoking"]}
-        
+
         NEED HELP?
         • Call/Text: {self.hotel_info["phone"]}
         • Email: {self.hotel_info["email"]}
         • Website: {self.hotel_info["website"]}
-        
+
         We look forward to welcoming you!
         """
 
@@ -467,13 +494,13 @@ class BookingConfirmationService:
         hotel_info_text = f"""
         {self.hotel_info["name"].upper()}
         Your Home Away From Home
-        
+
         LOCATION & CONTACT:
         {self.hotel_info["address"]}
         Phone: {self.hotel_info["phone"]}
         Email: {self.hotel_info["email"]}
         Website: {self.hotel_info["website"]}
-        
+
         HOTEL AMENITIES:
         • Free WiFi throughout the property
         • 24/7 front desk service
@@ -485,7 +512,7 @@ class BookingConfirmationService:
         • Laundry service
         • Concierge service
         • Airport shuttle (on request)
-        
+
         ROOM FEATURES:
         • Air conditioning
         • Flat-screen TV with cable
@@ -495,40 +522,40 @@ class BookingConfirmationService:
         • Iron and ironing board
         • Safe deposit box
         • Complimentary toiletries
-        
+
         LOCAL ATTRACTIONS:
         • Downtown area: 5 minutes walk
         • Museum district: 10 minutes drive
         • Shopping center: 15 minutes drive
         • Beach: 20 minutes drive
         • Airport: 30 minutes drive
-        
+
         DINING OPTIONS:
         • Azure Restaurant: Fine dining (6:00 PM - 11:00 PM)
         • Casual Café: Light meals (6:00 AM - 2:00 PM)
         • Rooftop Bar: Cocktails and views (5:00 PM - 12:00 AM)
         • Room Service: Available 24/7
-        
+
         BUSINESS SERVICES:
         • Meeting rooms (up to 100 people)
         • Audio/visual equipment
         • High-speed internet
         • Printing and copying
         • Administrative support
-        
+
         POLICIES:
         Check-in: {self.hotel_info["checkin_time"]}
         Check-out: {self.hotel_info["checkout_time"]}
         Cancellation: {self.hotel_info["policies"]["cancellation"]}
         Pets: {self.hotel_info["policies"]["pets"]}
         Smoking: {self.hotel_info["policies"]["smoking"]}
-        
+
         EMERGENCY INFORMATION:
         • Hotel Security: Ext. 911
         • Medical Emergency: Call 911
         • Fire Department: Call 911
         • Police: Call 911
-        
+
         Thank you for choosing {self.hotel_info["name"]}!
         """
 

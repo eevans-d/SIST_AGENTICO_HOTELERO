@@ -26,6 +26,7 @@ validate-alerts-real:
 .PHONY: coverage-report
 .PHONY: security-deps security-deps-json security-deps-html install-security-tools
 .PHONY: secret-scan secret-scan-json secret-scan-strict fix-permissions
+.PHONY: trufflehog-scan mcp-verify ui-test
 .PHONY: owasp-scan owasp-scan-json owasp-scan-category owasp-report owasp-report-json
 .PHONY: compliance-report compliance-report-json compliance-show
 .PHONY: perf-smoke perf-load perf-stress perf-spike perf-soak perf-validate perf-baseline perf-clean
@@ -180,6 +181,20 @@ secret-scan-strict: ## Escaneo estricto de secretos (falla en cualquier hallazgo
 	@echo "✅ Escaneo estricto completado sin hallazgos críticos"
 
 # ------------------------------------------------------------------------------
+# Trufflehog (Secret Scan alternativo)
+# ------------------------------------------------------------------------------
+
+trufflehog-scan: ## Escaneo de secretos con trufflehog (salida JSON)
+	@echo "🔎 Ejecutando trufflehog filesystem..."
+	@mkdir -p .security
+	@if ! command -v trufflehog >/dev/null 2>&1; then \
+		echo "❌ trufflehog no instalado. Instala con: pipx install trufflehog (o ver docs)"; \
+		exit 1; \
+	fi
+	@trufflehog filesystem --only-verified . --json > .security/trufflehog-report.json || true
+	@echo "✅ Reporte generado: .security/trufflehog-report.json"
+
+# ------------------------------------------------------------------------------
 # P013: OWASP Top 10 2021 Validation
 # ------------------------------------------------------------------------------
 
@@ -272,6 +287,18 @@ else
 	pytest -q
 endif
 
+# UI smoke test con Playwright (Python). Requiere entorno: poetry + playwright instalado.
+ui-test: ## Ejecuta smoke test UI con Playwright (Python). Usa PLAYWRIGHT_SMOKE_URL si está seteado.
+ifeq ($(HAS_POETRY),1)
+	@if ! poetry run python -c "import importlib; importlib.import_module('playwright')" >/dev/null 2>&1; then \
+		echo "❌ playwright (Python) no instalado. Instala con: poetry add --group dev playwright && poetry run playwright install"; \
+		exit 1; \
+	fi
+	poetry run pytest -q tests/ui/test_smoke_playwright.py -q
+else
+	@echo "❌ poetry no disponible. Instala playwright y ejecuta: pytest tests/ui/test_smoke_playwright.py"; exit 1
+endif
+
 # test-unit duplicado eliminado - ver línea 694 para versión actual
 # test-integration duplicado eliminado - ver línea 703 para versión actual
 # test-e2e duplicado eliminado - ver línea 711 para versión actual
@@ -339,6 +366,22 @@ logs: ## Muestra los logs de todos los servicios en tiempo real
 health: ## Ejecuta el script de health-check
 	@echo "Verificando salud de los servicios..."
 	bash scripts/health-check.sh
+
+# ------------------------------------------------------------------------------
+# Verificación MCPs: Trufflehog, PostgreSQL, Playwright
+# ------------------------------------------------------------------------------
+mcp-verify: ## Verifica estado operativo de Trufflehog, Postgres (docker) y Playwright
+	@echo "🔧 Verificando Trufflehog...";
+	@if command -v trufflehog >/dev/null 2>&1; then echo "✅ trufflehog instalado: $$(trufflehog --version 2>/dev/null | head -n1)"; else echo "⚠️ trufflehog no encontrado"; fi
+	@echo "🗄️  Verificando PostgreSQL (docker compose)...";
+	@if command -v docker >/dev/null 2>&1; then \
+		(docker compose ps postgres >/dev/null 2>&1 && echo "(docker compose detectado)") || echo "⚠️ docker compose no listo"; \
+		true; \
+	else echo "⚠️ docker no instalado"; fi
+	@echo "🌐 Verificando Playwright (Python)...";
+	@if command -v poetry >/dev/null 2>&1; then \
+		(poetry run python -c "import importlib; import sys; importlib.import_module('playwright'); import playwright; print('Playwright PY OK')" >/dev/null 2>&1 && echo "✅ playwright (Python) disponible") || echo "⚠️ playwright (Python) no disponible"; \
+	else echo "⚠️ poetry no disponible"; fi
 
 # ==============================================================================
 # Utilidades de Monitorización

@@ -1,0 +1,90 @@
+tests/deployment/test_deployment_validation.py::test_full_health_check_cycle
+tests/deployment/test_deployment_validation.py::test_concurrent_health_checks
+tests/deployment/test_deployment_validation.py::test_api_availability_after_deployment
+tests/integration/test_audio_cache_integration.py::TestAudioCacheMetrics::test_cache_hit_metrics
+tests/integration/test_audio_cache_integration.py::TestAudioCacheMetrics::test_cache_miss_metrics
+tests/integration/test_audio_processor_integration.py::test_espeak_tts_real_implementation
+tests/integration/test_audio_processor_integration.py::test_whisper_stt_real_implementation
+tests/integration/test_audio_processor_integration.py::test_full_audio_workflow
+tests/integration/test_handle_intent_integration.py::TestBusinessHoursFeature::test_business_hours_check_during_hours
+tests/integration/test_handle_intent_integration.py::TestBusinessHoursFeature::test_business_hours_check_after_hours
+tests/integration/test_handle_intent_integration.py::TestAvailabilityFeature::test_availability_with_dates
+tests/integration/test_handle_intent_integration.py::TestAvailabilityFeature::test_availability_no_rooms_available
+tests/integration/test_handle_intent_integration.py::TestReservationCreationFeature::test_create_reservation_complete_data
+tests/integration/test_handle_intent_integration.py::TestReservationCreationFeature::test_create_reservation_missing_data
+tests/integration/test_handle_intent_integration.py::TestLateCheckoutFeature::test_late_checkout_request
+tests/integration/test_handle_intent_integration.py::TestRoomImagesFeature::test_room_images_request
+tests/integration/test_handle_intent_integration.py::TestReviewRequestFeature::test_review_request_after_checkout
+tests/integration/test_handle_intent_integration.py::TestQRCodeFeature::test_qr_code_generation
+tests/integration/test_handle_intent_integration.py::TestErrorHandling::test_pms_error_triggers_escalation
+tests/integration/test_handle_intent_integration.py::TestErrorHandling::test_low_confidence_fallback
+tests/integration/test_handle_intent_integration.py::TestIntentRouting::test_unknown_intent_handling
+tests/integration/test_orchestrator_circuit_breaker.py::test_orchestrator_uses_fallback_when_cb_open
+tests/integration/test_orchestrator_circuit_breaker.py::test_orchestrator_fallback_varies_by_intent
+tests/integration/test_orchestrator_circuit_breaker.py::test_orchestrator_skips_pms_calls_when_cb_open
+tests/integration/test_orchestrator_circuit_breaker.py::test_orchestrator_increments_degraded_metric_when_cb_open
+tests/integration/test_orchestrator_circuit_breaker.py::test_orchestrator_logs_circuit_breaker_error
+tests/unit/test_audio_cache_service.py::TestAudioCacheIntegration::test_full_cache_workflow
+tests/unit/test_audit_logger.py::TestAuditLogIntegration::test_audit_log_full_cycle
+tests/unit/test_circuit_breaker.py::test_circuit_breaker_opens_and_blocks_calls
+tests/unit/test_circuit_breaker.py::test_circuit_breaker_half_open_and_recovers_on_success
+tests/unit/test_lock_audit_trail.py::test_acquire_lock_creates_audit_entry
+tests/unit/test_lock_audit_trail.py::test_conflict_records_audit_event
+tests/unit/test_lock_audit_trail.py::test_audit_failure_does_not_break_lock
+tests/unit/test_lock_service.py::test_lock_acquire_and_conflict_detection
+tests/unit/test_lock_service.py::test_lock_extension_and_release
+tests/unit/test_session_cleanup.py::test_cleanup_task_lifecycle
+tests/unit/test_session_cleanup.py::test_cleanup_removes_corrupted_sessions
+tests/unit/test_session_cleanup.py::test_cleanup_updates_active_sessions_metric
+tests/unit/test_session_cleanup.py::test_cleanup_increments_success_counter
+tests/unit/test_session_cleanup.py::test_cleanup_handles_empty_redis_gracefully
+tests/unit/test_session_cleanup.py::test_cleanup_handles_session_with_missing_fields
+tests/unit/test_session_manager_ttl.py::test_session_create_updates_active_sessions_metric
+tests/unit/test_session_manager_ttl.py::test_session_update_preserves_core_fields_and_refreshes_last_activity
+
+==================================== ERRORS ====================================
+____________ ERROR collecting tests/benchmarks/test_performance.py _____________
+'benchmark' not found in `markers` configuration option
+__________ ERROR collecting tests/incident/test_incident_response.py ___________
+ImportError while importing test module '/home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api/tests/incident/test_incident_response.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/incident/test_incident_response.py:16: in <module>
+    from incident_detector import (
+E   ModuleNotFoundError: No module named 'incident_detector'
+_______ ERROR collecting tests/integration/test_audio_processing_flow.py _______
+ImportError while importing test module '/home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api/tests/integration/test_audio_processing_flow.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_audio_processing_flow.py:13: in <module>
+    from app.services.audio_processor import AudioProcessor, WhisperSTT, ESpeakTTS
+E   ImportError: cannot import name 'WhisperSTT' from 'app.services.audio_processor' (/home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api/app/services/audio_processor.py)
+_______________ ERROR collecting tests/performance/load_test.py ________________
+ImportError while importing test module '/home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api/tests/performance/load_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/performance/load_test.py:19: in <module>
+    from locust import HttpUser, between, task
+E   ModuleNotFoundError: No module named 'locust'
+=============================== warnings summary ===============================
+app/models/audit_log.py:13
+  /home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api/app/models/audit_log.py:13: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/benchmarks/test_performance.py - Failed: 'benchmark' not found in...
+ERROR tests/incident/test_incident_response.py
+ERROR tests/integration/test_audio_processing_flow.py
+ERROR tests/performance/load_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!!
+43/1275 tests collected (1232 deselected), 4 errors in 3.37s

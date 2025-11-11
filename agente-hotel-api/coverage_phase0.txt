@@ -1,0 +1,15 @@
+......................E
+==================================== ERRORS ====================================
+_ ERROR at setup of TestResponseDeterminism.test_identical_greeting_produces_same_response _
+
+    @pytest_asyncio.fixture
+    async def orchestrator():
+        """Orchestrator instance"""
+>       orch = Orchestrator()
+               ^^^^^^^^^^^^^^
+E       TypeError: Orchestrator.__init__() missing 3 required positional arguments: 'pms_adapter', 'session_manager', and 'lock_service'
+
+tests/agent/test_agent_consistency_concrete.py:32: TypeError
+=========================== short test summary info ============================
+ERROR tests/agent/test_agent_consistency_concrete.py::TestResponseDeterminism::test_identical_greeting_produces_same_response
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!

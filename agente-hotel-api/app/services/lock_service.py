@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Any
 
 import redis.asyncio as redis
-from sqlalchemy.ext.asyncio import AsyncSession
 from prometheus_client import Counter
 
 from ..core.logging import logger

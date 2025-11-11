@@ -19,7 +19,7 @@ import base64
 
 from app.core.settings import get_settings
 from app.core.redis_client import get_redis
-from app.security.password_policy import get_password_policy, PasswordPolicyViolation
+from app.security.password_policy import get_password_policy
 from prometheus_client import Counter, Histogram, Gauge
 
 logger = logging.getLogger(__name__)

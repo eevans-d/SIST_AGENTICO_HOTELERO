@@ -8,7 +8,7 @@ operaciones críticas en el sistema hotelero.
 
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Index
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
@@ -131,7 +131,7 @@ class AuditLog(Base):
         """
         return {
             "id": self.id,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": self.timestamp.isoformat() if self.timestamp is not None else None,
             "event_type": self.event_type,
             "user_id": self.user_id,
             "ip_address": self.ip_address,
@@ -139,5 +139,5 @@ class AuditLog(Base):
             "details": self.details,
             "tenant_id": self.tenant_id,
             "severity": self.severity,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at is not None else None,
         }
