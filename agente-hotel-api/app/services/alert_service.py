@@ -1,8 +1,8 @@
 # [PROMPT 3.5] app/services/alert_manager.py (Refinado + Robustez)
 
 import asyncio
-from datetime import datetime
-from typing import Dict, Optional
+import time
+from typing import Dict, Optional, Union
 from ..core.logging import logger
 from ..core.constants import (
     HTTP_TIMEOUT_DEFAULT,
@@ -34,7 +34,10 @@ class AlertManager:
             cooldown_seconds: Tiempo mínimo entre alertas duplicadas (default: 1800s)
             timeout_seconds: Timeout para operaciones de alerta (default: 30s)
         """
-        self.alert_cooldown: Dict[str, datetime] = {}
+        # Usamos time.monotonic() (float) para evitar problemas si el reloj del sistema
+        # cambia (NTP adjustments, leap seconds) y reducir flakiness en tests de cooldown.
+        # El dict guarda timestamps monotónicos (float seconds).
+        self.alert_cooldown: Dict[str, float] = {}
         self.cooldown_seconds = cooldown_seconds
         self.timeout_seconds = timeout_seconds
         logger.info("alert_manager.initialized", cooldown_seconds=cooldown_seconds, timeout_seconds=timeout_seconds)
@@ -80,7 +83,7 @@ class AlertManager:
 
                 # Update cooldown cache only if send was successful
                 if result:
-                    self.alert_cooldown[alert_key] = datetime.now()
+                    self.alert_cooldown[alert_key] = time.monotonic()
 
                 logger.info(
                     "alert_manager.alert_sent",
@@ -165,11 +168,10 @@ class AlertManager:
         Returns:
             bool: True si está en cooldown, False si puede enviarse
         """
-        if alert_key not in self.alert_cooldown:
+        last_sent = self.alert_cooldown.get(alert_key)
+        if last_sent is None:
             return False
-
-        last_sent = self.alert_cooldown[alert_key]
-        elapsed = (datetime.now() - last_sent).total_seconds()
+        elapsed = time.monotonic() - last_sent
         return elapsed < self.cooldown_seconds
 
     def _get_cooldown_remaining(self, alert_key: str) -> float:
@@ -182,13 +184,11 @@ class AlertManager:
         Returns:
             float: Segundos restantes de cooldown (0.0 si no hay cooldown activo)
         """
-        if alert_key not in self.alert_cooldown:
+        last_sent = self.alert_cooldown.get(alert_key)
+        if last_sent is None:
             return 0.0
-
-        last_sent = self.alert_cooldown[alert_key]
-        elapsed = (datetime.now() - last_sent).total_seconds()
-        remaining = max(0.0, self.cooldown_seconds - elapsed)
-        return remaining
+        elapsed = time.monotonic() - last_sent
+        return max(0.0, self.cooldown_seconds - elapsed)
 
     def clear_cooldown(self, alert_key: Optional[str] = None):
         """

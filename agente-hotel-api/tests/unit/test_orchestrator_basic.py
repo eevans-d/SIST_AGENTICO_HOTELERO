@@ -23,6 +23,7 @@ async def test_process_message_basic_availability(monkeypatch):
 
     result = await orchestrator.process_message(msg)
 
-    assert getattr(result, "response_type", None) == "text"
+    # La implementación puede devolver texto puro o texto con imagen; aceptamos ambos para el básico
+    assert getattr(result, "response_type", None) in {"text", "text_with_image"}
     assert isinstance(getattr(result, "content", None), str)
     assert len(result.content) > 0

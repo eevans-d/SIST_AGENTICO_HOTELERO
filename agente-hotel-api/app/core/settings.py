@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Optional
 
 from pydantic import SecretStr, field_validator, Field, AliasChoices
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -261,12 +262,43 @@ class Settings(BaseSettings):
             elif v.startswith("postgresql://") and "+asyncpg" not in v:
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        # Si no hay suficientes datos por campos separados, devolvemos v (que puede venir del entorno)
-        if not (host and port and db and user and pwd_val):
-            return v
+        # En validación 'before' no siempre están disponibles los otros campos,
+        # así que aquí solo normalizamos el esquema si viene como string.
+        # La construcción desde componentes se hará en un validador 'after'.
+        return v
 
-        # Construir desde componentes si están todos presentes
-        return f"postgresql+asyncpg://{user}:{pwd_val}@{host}:{port}/{db}"
+    @model_validator(mode="after")
+    def finalize_postgres_url(self) -> "Settings":
+        """Construye postgres_url desde componentes si están presentes.
+
+        Se ejecuta después de que todos los campos hayan sido validados, lo que permite
+        combinar postgres_host/port/db/user/password de forma confiable. No sobreescribe
+        una URL explícita distinta al valor por defecto.
+        """
+        try:
+            if (
+                self.postgres_host
+                and self.postgres_port
+                and self.postgres_db
+                and self.postgres_user
+                and self.postgres_password
+            ):
+                # Solo sobreescribir si la URL actual es el valor por defecto
+                DEFAULT_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+                if not self.postgres_url or self.postgres_url == DEFAULT_URL:
+                    pwd_val = (
+                        self.postgres_password.get_secret_value()
+                        if isinstance(self.postgres_password, SecretStr)
+                        else str(self.postgres_password)
+                    )
+                    self.postgres_url = (
+                        f"postgresql+asyncpg://{self.postgres_user}:{pwd_val}@"
+                        f"{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+                    )
+        except Exception:
+            # No romper inicio por errores de composición; se mantendrá la URL existente
+            pass
+        return self
 
     # Build redis_url dynamically after all fields are set
     def __init__(self, **data):

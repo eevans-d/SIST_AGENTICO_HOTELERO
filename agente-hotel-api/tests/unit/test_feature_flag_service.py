@@ -42,10 +42,11 @@ async def test_flag_cache_ttl():
     svc = FeatureFlagService(DummyRedis(), ttl_seconds=1)
     await svc.set_flag("multi_tenant.experimental", True)
     assert await svc.is_enabled("multi_tenant.experimental") is True
-    # Cambiamos valor debajo sin invalidar cache
+    # Cambiamos valor debajo sin invalidar cache (valor real cambia a false)
     await svc.redis.hset("feature_flags", "multi_tenant.experimental", 0)
-    # Debe seguir true por caché
+    # Caché aún vigente => sigue True
     assert await svc.is_enabled("multi_tenant.experimental") is True
-    await asyncio.sleep(1.1)
-    # Expira caché => recoge false
+    # Esperar algo más de TTL para asegurar expiración estable (1.3s)
+    await asyncio.sleep(1.3)
+    # Tras expirar cache, debe reflejar False
     assert await svc.is_enabled("multi_tenant.experimental") is False

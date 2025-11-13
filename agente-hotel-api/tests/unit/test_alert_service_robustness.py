@@ -69,7 +69,7 @@ async def test_send_alert_respects_cooldown():
     assert result2 is False, "Segunda llamada debe ser bloqueada por cooldown"
 
     # Esperar cooldown y reintentar
-    await asyncio.sleep(1.1)  # Esperar > 1s cooldown
+    await asyncio.sleep(1.4)  # Esperar > 1s cooldown con margen
     result3 = await alert_manager.send_alert(violation)
     assert result3 is True, "Después de cooldown debe enviarse"
 

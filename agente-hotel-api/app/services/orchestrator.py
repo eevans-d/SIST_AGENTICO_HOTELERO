@@ -145,20 +145,8 @@ class Orchestrator:
         Returns:
             Response dict with escalation acknowledgment
         """
-        # Record escalation metric
-        child = escalations_total.labels(reason=reason, channel=message.canal)
-        # En entorno de pruebas, reiniciar el valor para evitar acumulación entre tests
-        try:
-            from ..core.settings import settings as _settings
-
-            if getattr(_settings, "debug", False) or getattr(_settings, "DEBUG", False):
-                try:
-                    child._value.set(0)  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        child.inc()
+        # Métrica de escalamiento (evitar reset manual que causaba inconsistencia en tests de acumulación)
+        escalations_total.labels(reason=reason, channel=message.canal).inc()
 
         # Prepare escalation context
         escalation_context = {
