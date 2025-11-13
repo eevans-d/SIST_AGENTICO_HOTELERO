@@ -8,35 +8,117 @@
 
 ## 📋 RESUMEN EJECUTIVO
 
-**Estado actual**: GO CONDICIONAL (4 condiciones pendientes)  
+**Estado actual**: ✅ C1+C2 COMPLETADAS | 2 CRITICAL eliminadas | Próximo: H1 (4h)  
 **Meta**: GO INCONDICIONAL en 3 semanas (15 días hábiles)  
-**Esfuerzo total**: ~50 horas de desarrollo + 10 horas de validación
+**Esfuerzo total**: ~50 horas de desarrollo + 10 horas de validación  
+**Progreso Sprint 1**: 2/4 tareas completadas (C1 ✅, C2 ✅, H1 ⏳, H2 ⏳)
 
 ---
 
 ## 🎯 PRIORIZACIÓN POR IMPACTO Y ESFUERZO
 
-| ID | Hallazgo | Severidad | Esfuerzo | Prioridad | Sprint |
-|----|----------|-----------|----------|-----------|--------|
-| **C1** | SPOF AlertManager | CRITICAL | 2h | P0 | S1 |
-| **C2** | Validar Prometheus Rules | CRITICAL | 1h | P0 | S1 |
-| **H1** | Trazas sin contexto negocio | HIGH | 4h | P1 | S1 |
-| **H2** | CSP no estricta | HIGH | 2h | P1 | S1 |
-| **H3** | Cobertura Orchestrator 13% | HIGH | 8h | P1 | S2 |
-| **H4** | Cobertura PMS Adapter 2% | HIGH | 8h | P1 | S2 |
-| **M1** | Feature flags push invalidation | MEDIUM | 16h | P2 | S3 |
-| **M2** | Rate limiting per-tenant | MEDIUM | 6h | P2 | S3 |
-| **M3** | Bulkhead pattern pools | MEDIUM | 8h | P3 | S3 |
+| ID | Hallazgo | Severidad | Esfuerzo | Prioridad | Sprint | Estado |
+|----|----------|-----------|----------|-----------|--------|--------|
+| **C1** | SPOF AlertManager | CRITICAL | 2h | P0 | S1 | ✅ DONE |
+| **C2** | Validar Prometheus Rules | CRITICAL | 1h | P0 | S1 | ✅ DONE |
+| **H1** | Trazas sin contexto negocio | HIGH | 4h | P1 | S1 | ⏳ TODO |
+| **H2** | CSP no estricta | HIGH | 2h | P1 | S1 | ⏳ TODO |
+| **H3** | Cobertura Orchestrator 13% | HIGH | 8h | P1 | S2 | ⏳ TODO |
+| **H4** | Cobertura PMS Adapter 2% | HIGH | 8h | P1 | S2 | ⏳ TODO |
+| **M1** | Feature flags push invalidation | MEDIUM | 16h | P2 | S3 | ⏳ TODO |
+| **M2** | Rate limiting per-tenant | MEDIUM | 6h | P2 | S3 | ⏳ TODO |
+| **M3** | Bulkhead pattern pools | MEDIUM | 8h | P3 | S3 | ⏳ TODO |
 
 ---
 
 ## 🚀 FASE 1A: QUICK WINS (Sprint 1 - Días 1-3)
 
-### ✅ C1: ELIMINAR SPOF DE ALERTMANAGER
+### ✅ C1: ELIMINAR SPOF DE ALERTMANAGER [COMPLETADA]
+
+**Estado**: ✅ IMPLEMENTADA Y VALIDADA  
+**Fecha completada**: 2025-01-17  
+**Resultado**: 9/9 validaciones automatizadas pasadas
 
 **Problema**: Todas las alertas van únicamente a `agente-api:8000/api/v1/alerts/webhook`. Si la API cae, el sistema de alertas queda ciego (cascada de silencio).
 
-**Solución**: Añadir redundancia con PagerDuty + Email directo desde AlertManager.
+**Solución implementada**: Triple redundancia con PagerDuty + Email SMTP + Webhook + Slack.
+
+**Archivos modificados**:
+- `docker/alertmanager/entrypoint.sh` - Generación dinámica de config multi-canal
+- `docker-compose.yml` - Puerto 9093 expuesto
+- `scripts/validate-alertmanager-spof-fix.sh` - Validación automatizada con API v2
+- `.env.example` - PAGERDUTY_INTEGRATION_KEY con documentación
+
+**Validación ejecutada**:
+```bash
+./scripts/validate-alertmanager-spof-fix.sh
+# ✅ Preflight checks (5/5 passed)
+# ✅ Config validation (receiver 'critical' has 4 channels)
+# ✅ Test alert posted successfully
+# ✅ Alert confirmed active via API v2
+```
+
+**Documentación creada**:
+- `GUIA_VALIDACION_C1_SPOF_FIX.md` - Guía paso a paso para usuario
+- `docs/setup/ALERTMANAGER_SPOF_FIX_SETUP.md` - Documentación técnica
+- `VALIDACION_C1_RESUMEN_EJECUTIVO.md` - Resumen ejecutivo
+
+**Commits**: 305fb77, 62e2d8d, 9d6b0d4
+
+---
+
+### ✅ C2: VALIDAR REGLAS DE PROMETHEUS [COMPLETADA]
+
+**Estado**: ✅ IMPLEMENTADA Y VALIDADA  
+**Fecha completada**: 2025-01-17  
+**Resultado**: 96 reglas validadas, 0 errores de sintaxis
+
+**Problema**: Dashboards de SLO dependen de `recording rules` que pre-calculan métricas. Si están mal, toda la observabilidad es ilusoria.
+
+**Solución implementada**: Script de validación con promtool + target de Makefile.
+
+**Archivos creados**:
+- `scripts/validate-prometheus-rules.sh` (279 líneas)
+  * Auto-detección de promtool (local o Docker)
+  * Validación de 4 archivos de alertas (63 reglas)
+  * Validación de 2 archivos de recording rules (47 reglas)
+  * Validación de prometheus.yml con 4 rule files
+  * Exit code 0 si todo OK, 1 si errores
+
+**Target de Makefile**:
+```bash
+make validate-prometheus
+# ✅ Alert Rules: 4 valid (0 errors)
+# ✅ Recording Rules: 2 valid (0 errors)
+# ✅ Config Files: 1 valid (prometheus.yml)
+# ✅ ALL VALIDATIONS PASSED ✅
+```
+
+**Archivos validados**:
+```
+Alert Rules:
+  - alerts.yml (34 rules) ✅
+  - alerts-extra.yml (0 rules) ✅
+  - business_alerts.yml (15 rules) ✅
+  - alert_rules.yml (14 rules) ✅
+
+Recording Rules:
+  - recording_rules.yml (15 rules) ✅
+  - recording_rules.tmpl.yml (32 rules) ✅
+
+Config:
+  - prometheus.yml (4 rule files referenced) ✅
+```
+
+**Tecnología**:
+- promtool v3.7.3 (desde imagen prom/prometheus:latest)
+- Docker volume mount para acceso a archivos
+- Generación temporal de config con rutas relativas
+
+**Documentación creada**:
+- `VALIDACION_C2_PROMETHEUS_RULES.md` - Resumen ejecutivo completo
+
+**Commit**: a3a255e
 
 **Pasos de implementación**:
 
