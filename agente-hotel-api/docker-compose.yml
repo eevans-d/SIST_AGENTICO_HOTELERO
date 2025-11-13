@@ -188,6 +188,8 @@ services:
     user: "1000:1000"
     env_file:
       - .env
+    ports:
+      - "9093:9093"
     networks:
       - backend_network
     volumes:

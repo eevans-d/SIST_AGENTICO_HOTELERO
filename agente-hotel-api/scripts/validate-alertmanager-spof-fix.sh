@@ -94,22 +94,22 @@ fi
 # ============================================================================
 log_info "Checking AlertManager configuration..."
 
-ALERTMANAGER_CONFIG=$(curl -sf "${ALERTMANAGER_URL}/api/v1/status" | jq -r '.data.config.original' 2>/dev/null || echo "")
+ALERTMANAGER_CONFIG=$(curl -sf "${ALERTMANAGER_URL}/api/v2/status" | jq -r '.config.original' 2>/dev/null || echo "")
 
 if [ -z "$ALERTMANAGER_CONFIG" ]; then
-    log_error "Could not retrieve AlertManager config"
+    log_error "Could not retrieve AlertManager config (tried API v2)"
     exit 1
 fi
 
-# Check for multiple receivers in critical-alerts route
+# Check for multiple receivers in critical receiver
 if echo "$ALERTMANAGER_CONFIG" | grep -q "pagerduty_configs:" && \
    echo "$ALERTMANAGER_CONFIG" | grep -q "email_configs:" && \
    echo "$ALERTMANAGER_CONFIG" | grep -q "webhook_configs:"; then
-    log_success "SPOF fix confirmed: critical-alerts has 3 channels (PagerDuty + Email + Webhook)"
+    log_success "SPOF fix confirmed: critical receiver has 3 channels (PagerDuty + Email + Webhook)"
 else
-    log_error "SPOF fix NOT applied: critical-alerts missing redundant channels"
+    log_error "SPOF fix NOT applied: critical receiver missing redundant channels"
     log_warn "Expected: pagerduty_configs, email_configs, webhook_configs"
-    log_warn "Check: docker/alertmanager/config.yml"
+    log_warn "Check: docker/alertmanager/entrypoint.sh or config.yml"
     exit 1
 fi
 
@@ -117,6 +117,9 @@ fi
 # Send Test Alert
 # ============================================================================
 log_info "Sending test alert to AlertManager..."
+
+START_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+END_TIME=$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+5M +%Y-%m-%dT%H:%M:%SZ)
 
 TEST_PAYLOAD=$(cat <<EOF
 [
@@ -131,8 +134,8 @@ TEST_PAYLOAD=$(cat <<EOF
       "summary": "SPOF Fix Validation Test Alert",
       "description": "This is a test alert to verify redundant notification channels (PagerDuty + Email + Webhook). If you receive this in multiple channels, the SPOF fix is working correctly."
     },
-    "startsAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "endsAt": "$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+    "startsAt": "${START_TIME}",
+    "endsAt": "${END_TIME}"
   }
 ]
 EOF
@@ -141,10 +144,10 @@ EOF
 RESPONSE=$(curl -sf -X POST \
     -H "Content-Type: application/json" \
     -d "$TEST_PAYLOAD" \
-    "${ALERTMANAGER_URL}/api/v1/alerts" || echo "FAILED")
+    "${ALERTMANAGER_URL}/api/v2/alerts" || echo "FAILED")
 
 if [ "$RESPONSE" = "FAILED" ]; then
-    log_error "Failed to send test alert to AlertManager"
+    log_error "Failed to send test alert to AlertManager (API v2)"
     exit 1
 fi
 
@@ -156,10 +159,10 @@ log_success "Test alert sent successfully"
 log_info "Waiting 5 seconds for alert processing..."
 sleep 5
 
-# Check if alert appears in AlertManager
-ACTIVE_ALERTS=$(curl -sf "${ALERTMANAGER_URL}/api/v1/alerts" | \
+# Check if alert appears in AlertManager (API v2)
+ACTIVE_ALERTS=$(curl -sf "${ALERTMANAGER_URL}/api/v2/alerts" | \
     jq -r --arg test_id "$TEST_ALERT_LABEL" \
-    '.data[] | select(.labels.test_id == $test_id) | .status.state' || echo "")
+    '.[] | select(.labels.test_id == $test_id) | .status.state' || echo "")
 
 if [ "$ACTIVE_ALERTS" = "active" ]; then
     log_success "Test alert is active in AlertManager"
