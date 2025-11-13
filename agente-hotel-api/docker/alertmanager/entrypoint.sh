@@ -11,8 +11,24 @@ if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
 fi
 
 HAS_EMAIL=0
-if [ -n "${ALERT_EMAIL_TO:-}" ] && [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_PORT:-}" ] && [ -n "${SMTP_USER:-}" ] && [ -n "${SMTP_PASSWORD:-}" ]; then
+if [ -n "${ALERT_EMAIL_TO:-}" ] && [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_PORT:-}" ] && { [ -n "${SMTP_USER:-}" ] || [ -n "${SMTP_USERNAME:-}" ]; } && [ -n "${SMTP_PASSWORD:-}" ]; then
   HAS_EMAIL=1
+fi
+
+# Backward compat: prefer SMTP_USERNAME, fallback to SMTP_USER
+SMTP_AUTH_USER="${SMTP_USERNAME:-${SMTP_USER:-}}"
+
+# PagerDuty support (SPOF fix)
+HAS_PD=0
+if [ -n "${PAGERDUTY_INTEGRATION_KEY:-}" ]; then
+  HAS_PD=1
+fi
+
+# Webhook fallback (agente-api)
+ALERT_WEBHOOK_URL="${ALERT_WEBHOOK_URL:-http://agente-api:8000/api/v1/alerts/webhook}"
+HAS_WEBHOOK=0
+if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
+  HAS_WEBHOOK=1
 fi
 
 SLACK_CHANNEL="${SLACK_CHANNEL:-#alertas-agente}"
@@ -41,25 +57,27 @@ route:
 EOF
 
 # Conditional routes
-if [ "$HAS_SLACK" -eq 1 ] || [ "$HAS_EMAIL" -eq 1 ]; then
+if [ "$HAS_SLACK" -eq 1 ] || [ "$HAS_EMAIL" -eq 1 ] || [ "$HAS_PD" -eq 1 ] || [ "$HAS_WEBHOOK" -eq 1 ]; then
   cat >> "$CFG" <<'EOF'
   routes:
 EOF
 fi
 
-if [ "$HAS_SLACK" -eq 1 ]; then
+# Critical severity → receiver 'critical' (may include PD + Email + Slack + Webhook)
+if [ "$HAS_SLACK" -eq 1 ] || [ "$HAS_EMAIL" -eq 1 ] || [ "$HAS_PD" -eq 1 ] || [ "$HAS_WEBHOOK" -eq 1 ]; then
   cat >> "$CFG" <<'EOF'
     - matchers:
         - severity = critical
-      receiver: slack
+      receiver: critical
 EOF
 fi
 
-if [ "$HAS_EMAIL" -eq 1 ]; then
+# Warning severity → receiver 'warning' (Email + Webhook if available)
+if [ "$HAS_EMAIL" -eq 1 ] || [ "$HAS_WEBHOOK" -eq 1 ] || [ "$HAS_SLACK" -eq 1 ]; then
   cat >> "$CFG" <<'EOF'
     - matchers:
         - severity = warning
-      receiver: email
+      receiver: warning
 EOF
 fi
 
@@ -69,32 +87,101 @@ receivers:
   - name: "null"
 EOF
 
-if [ "$HAS_SLACK" -eq 1 ]; then
-  cat >> "$CFG" <<EOF
-  - name: slack
+# Receiver: critical (multi-channel)
+if [ "$HAS_SLACK" -eq 1 ] || [ "$HAS_EMAIL" -eq 1 ] || [ "$HAS_PD" -eq 1 ] || [ "$HAS_WEBHOOK" -eq 1 ]; then
+  cat >> "$CFG" <<'EOF'
+  - name: critical
+EOF
+
+  if [ "$HAS_PD" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
+    pagerduty_configs:
+      - service_key: ${PAGERDUTY_INTEGRATION_KEY}
+        severity: critical
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        client: 'AlertManager - Agente Hotelero'
+        client_url: '{{ .ExternalURL }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+EOF
+  fi
+
+  if [ "$HAS_EMAIL" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
+    email_configs:
+      - to: ${ALERT_EMAIL_TO}
+        from: ${EMAIL_FROM}
+        smarthost: ${SMTP_HOST}:${SMTP_PORT}
+        auth_username: ${SMTP_AUTH_USER}
+        auth_password: ${SMTP_PASSWORD}
+        require_tls: true
+        headers:
+          Subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+EOF
+  fi
+
+  if [ "$HAS_SLACK" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
     slack_configs:
       - api_url: ${SLACK_WEBHOOK_URL}
         channel: "${SLACK_CHANNEL}"
         send_resolved: true
-        title: "[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}"
+        title: "[CRITICAL] {{ .CommonLabels.alertname }}"
         text: >-
           {{ range .Alerts }}• {{ .Annotations.summary }}
           {{ .Annotations.description }}
           {{ end }}
 EOF
+  fi
+
+  if [ "$HAS_WEBHOOK" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL}
+        send_resolved: true
+EOF
+  fi
 fi
 
-if [ "$HAS_EMAIL" -eq 1 ]; then
-  cat >> "$CFG" <<EOF
-  - name: email
+# Receiver: warning (email + slack + webhook as available)
+if [ "$HAS_EMAIL" -eq 1 ] || [ "$HAS_SLACK" -eq 1 ] || [ "$HAS_WEBHOOK" -eq 1 ]; then
+  cat >> "$CFG" <<'EOF'
+  - name: warning
+EOF
+  if [ "$HAS_EMAIL" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
     email_configs:
       - to: ${ALERT_EMAIL_TO}
         from: ${EMAIL_FROM}
         smarthost: ${SMTP_HOST}:${SMTP_PORT}
-        auth_username: ${SMTP_USER}
+        auth_username: ${SMTP_AUTH_USER}
         auth_password: ${SMTP_PASSWORD}
         require_tls: true
+        headers:
+          Subject: '⚠️  WARNING: {{ .GroupLabels.alertname }}'
 EOF
+  fi
+  if [ "$HAS_SLACK" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL}
+        channel: "${SLACK_CHANNEL}"
+        send_resolved: true
+        title: "[WARNING] {{ .CommonLabels.alertname }}"
+        text: >-
+          {{ range .Alerts }}• {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+EOF
+  fi
+  if [ "$HAS_WEBHOOK" -eq 1 ]; then
+    cat >> "$CFG" <<EOF
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL}
+        send_resolved: true
+EOF
+  fi
 fi
 
 # Inhibit rules to reduce noise: critical inhibits warning of same alertname
