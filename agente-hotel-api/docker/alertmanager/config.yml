@@ -36,36 +36,61 @@ receivers:
     #     auth_password: '${ALERT_SMTP_PASSWORD}'
 
   - name: 'critical-alerts'
+    # ✅ REDUNDANCIA 1: PagerDuty (externo, SPOF fix)
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_INTEGRATION_KEY}'
+        severity: 'critical'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        client: 'AlertManager - Agente Hotelero'
+        client_url: '{{ .ExternalURL }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+          dashboard: '{{ .CommonAnnotations.dashboard }}'
+    
+    # ✅ REDUNDANCIA 2: Email directo (no depende de agente-api)
+    email_configs:
+      - to: 'oncall-critical@example.com'
+        from: 'alertmanager@agente-hotel.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: '${SMTP_USERNAME}'
+        auth_password: '${SMTP_PASSWORD}'
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        text: |
+          Alerta crítica detectada:
+          
+          Nombre: {{ .GroupLabels.alertname }}
+          Severidad: {{ .GroupLabels.severity }}
+          Descripción: {{ .CommonAnnotations.summary }}
+          
+          Detalles completos: {{ .CommonAnnotations.runbook_url }}
+          Dashboard: {{ .CommonAnnotations.dashboard }}
+          
+          Alertas activas: {{ .Alerts.Firing | len }}
+          Alertas resueltas: {{ .Alerts.Resolved | len }}
+    
+    # FALLBACK: Webhook interno (mantener para integración existente)
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'
         send_resolved: true
-    # Slack: Uncomment and configure
-    # slack_configs:
-    #   - api_url: '${SLACK_WEBHOOK_URL}'
-    #     channel: '#alerts-critical'
-    # Email crítico - asegurar redundancia
-    # email_configs:
-    #   - to: 'oncall-critical@example.com'
-    #     from: 'alertmanager@example.com'
-    #     smarthost: 'smtp.example.com:587'
-    #     auth_username: 'alert_smtp_user'
-    #     auth_password: '${ALERT_SMTP_PASSWORD}'
 
   - name: 'warning-alerts'
+    # Email para warnings (menos crítico, no necesita PagerDuty)
+    email_configs:
+      - to: 'ops-warnings@example.com'
+        from: 'alertmanager@agente-hotel.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: '${SMTP_USERNAME}'
+        auth_password: '${SMTP_PASSWORD}'
+        headers:
+          Subject: '[WARNING] {{ .GroupLabels.alertname }}'
+    
+    # Webhook interno (fallback)
     webhook_configs:
       - url: 'http://agente-api:8000/api/v1/alerts/webhook'
         send_resolved: true
-    # Slack canal warnings
-    # slack_configs:
-    #   - api_url: '${SLACK_WEBHOOK_URL}'
-    #     channel: '#alerts-warning'
-    # Email warnings
-    # email_configs:
-    #   - to: 'ops-warning@example.com'
-    #     from: 'alertmanager@example.com'
-    #     smarthost: 'smtp.example.com:587'
-    #     auth_username: 'alert_smtp_user'
-    #     auth_password: '${ALERT_SMTP_PASSWORD}'
 
 inhibit_rules:
   - source_match:
