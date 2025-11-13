@@ -13,6 +13,15 @@ validate-alerts-real:
 	@echo "[alert-validation-real] Report written to .playbook/alert_validation_report_real.json"
 	@echo "[alert-validation-real] Summary:"; jq '.summary' .playbook/alert_validation_report_real.json || echo "jq not installed; open .playbook/alert_validation_report_real.json manually"
 
+# -------------------------------------------------------------
+# Prometheus Rules Validation (C2)
+# -------------------------------------------------------------
+validate-prometheus:
+	@echo "[C2] Validating Prometheus alert rules, recording rules, and config"
+	@./scripts/validate-prometheus-rules.sh
+
+validate-prometheus-rules: validate-prometheus  ## Alias for validate-prometheus
+
 .PHONY: install fmt lint test run build clean help dev-setup docker-up docker-down backup restore logs health
 .PHONY: security-scan security-fast performance-test stress-test chaos-db chaos-redis resilience-test
 .PHONY: analyze-performance analyze-chaos open-resilience-dashboard install-k6
@@ -35,6 +44,7 @@ validate-alerts-real:
 .PHONY: deploy-staging deploy-production deploy-canary rollback validate-deployment migration-safe
 .PHONY: deploy-status deploy-logs deploy-test
 .PHONY: incident-detect incident-simulate incident-report on-call-schedule post-mortem incident-test
+.PHONY: validate-prometheus validate-prometheus-rules validate-alerts validate-alerts-real
 
 # ==============================================================================
 # Alembic (Migraciones)
