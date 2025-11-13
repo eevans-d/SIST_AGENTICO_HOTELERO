@@ -190,6 +190,21 @@ class QloAppsAdapter:
         Returns:
             List of available rooms with pricing
         """
+        # H1: Enrich trace with PMS query context
+        from opentelemetry import trace
+        from ..core.tracing import enrich_span_with_business_context
+        
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            enrich_span_with_business_context(
+                span,
+                operation="pms_check_availability",
+                check_in=str(check_in),
+                check_out=str(check_out),
+                guests=guests,
+                room_type=room_type or "any",
+            )
+        
         cache_key = f"availability:{check_in}:{check_out}:{guests}:{room_type or 'any'}"
         stale_cache_key = f"{cache_key}:stale"
 

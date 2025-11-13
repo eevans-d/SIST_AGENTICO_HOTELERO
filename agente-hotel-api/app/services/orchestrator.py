@@ -748,6 +748,23 @@ class Orchestrator:
         Raises:
             Exception: Si falla la generación de respuesta (se captura internamente)
         """
+        
+        # H1: Enrich trace with availability query context
+        from opentelemetry import trace
+        from ..core.tracing import enrich_span_with_business_context
+        
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            # Extract entities from NLP result
+            entities = nlp_result.get("entities", {})
+            enrich_span_with_business_context(
+                span,
+                operation="check_availability",
+                checkin_date=entities.get("checkin_date"),
+                checkout_date=entities.get("checkout_date"),
+                room_type=entities.get("room_type"),
+                guests=entities.get("guests"),
+            )
 
         getattr(message, "tenant_id", None)
 
@@ -874,6 +891,22 @@ class Orchestrator:
             Dict con response_type ('text' o 'audio') y content con instrucciones
         """
         tenant_id = getattr(message, "tenant_id", None)
+        
+        # H1: Enrich trace with reservation context
+        from opentelemetry import trace
+        from ..core.tracing import enrich_span_with_business_context
+        
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            entities = nlp_result.get("entities", {})
+            enrich_span_with_business_context(
+                span,
+                operation="make_reservation",
+                deposit_amount=RESERVATION_DEPOSIT_AMOUNT,
+                session_state="reservation_pending",
+                checkin_date=entities.get("checkin_date"),
+                checkout_date=entities.get("checkout_date"),
+            )
 
         # Datos de reserva (simulados)
         reservation_data = {"deposit": RESERVATION_DEPOSIT_AMOUNT, "bank_info": MOCK_BANK_INFO}
@@ -1185,6 +1218,22 @@ class Orchestrator:
         intent_name = "unknown"
         status = "ok"
         tenant_id = getattr(message, "tenant_id", None)
+        
+        # H1: Enrich trace with business context
+        from opentelemetry import trace
+        from ..core.tracing import enrich_span_with_business_context
+        
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            # Initial context (before NLP)
+            enrich_span_with_business_context(
+                span,
+                operation="process_message",
+                tenant_id=str(tenant_id) if tenant_id else None,
+                user_id=str(getattr(message, "user_id", None)),
+                channel=message.canal,
+                message_type=message.tipo,
+            )
 
         # Métrica de negocio: contar mensaje por canal
         messages_by_channel.labels(channel=message.canal).inc()
@@ -1232,6 +1281,16 @@ class Orchestrator:
                 # Process message with detected/specified language
                 nlp_result = await self.nlp_engine.process_text(text, language=detected_language)
                 intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+                confidence = nlp_result.get("intent", {}).get("confidence", 0.0)
+                
+                # H1: Enrich trace with NLP results
+                if span and span.is_recording():
+                    enrich_span_with_business_context(
+                        span,
+                        intent=intent_name,
+                        confidence=confidence,
+                        language=detected_language,
+                    )
 
                 # Store language info in session for continuity
                 message.metadata["detected_language"] = detected_language

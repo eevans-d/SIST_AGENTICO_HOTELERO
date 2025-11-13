@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from opentelemetry import trace
 
 from .logging import logger
 from ..services.metrics_service import metrics_service
@@ -144,3 +145,67 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     )
 
         return await call_next(request)
+
+
+async def tracing_enrichment_middleware(request: Request, call_next):
+    """
+    Middleware to enrich OpenTelemetry spans with business context.
+    
+    Automatically adds tenant_id, user_id, channel, correlation_id to all spans
+    from request.state. This enables better observability and debugging in production.
+    
+    Part of H1: Trace Enrichment implementation.
+    """
+    # Get current span (created by OpenTelemetry FastAPI instrumentation or manually)
+    span = trace.get_current_span()
+    
+    if span and span.is_recording():
+        from .tracing import enrich_span_from_request
+        
+        try:
+            # Enrich with business context from request
+            enrich_span_from_request(span, request)
+            
+            # Add HTTP-specific attributes if not already set
+            if not span.attributes or "http.method" not in span.attributes:
+                span.set_attribute("http.method", request.method)
+                span.set_attribute("http.route", request.url.path)
+                span.set_attribute("http.url", str(request.url))
+                
+                # Client IP for debugging
+                if request.client:
+                    span.set_attribute("http.client_ip", request.client.host)
+            
+            logger.debug(
+                "span_enriched_middleware",
+                correlation_id=getattr(request.state, "correlation_id", None),
+                span_context=span.get_span_context(),
+            )
+        except Exception as e:
+            # Non-fatal: log but don't break the request
+            logger.warning(
+                "span_enrichment_failed",
+                error=str(e),
+                correlation_id=getattr(request.state, "correlation_id", None),
+            )
+    
+    response = await call_next(request)
+    
+    # Add response status to span if available
+    if span and span.is_recording():
+        span.set_attribute("http.status_code", response.status_code)
+        
+        # Mark span status based on HTTP status
+        if 200 <= response.status_code < 400:
+            from opentelemetry.trace import Status, StatusCode
+            span.set_status(Status(StatusCode.OK))
+        elif 400 <= response.status_code < 500:
+            # Client errors are not span errors (valid business logic)
+            span.set_attribute("http.error_type", "client_error")
+        elif response.status_code >= 500:
+            # Server errors should mark span as error
+            from opentelemetry.trace import Status, StatusCode
+            span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status_code}"))
+            span.set_attribute("http.error_type", "server_error")
+    
+    return response

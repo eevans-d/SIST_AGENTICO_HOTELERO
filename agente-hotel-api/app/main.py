@@ -19,6 +19,7 @@ from app.core.logging import setup_logging, logger
 from app.core.middleware import (
     correlation_id_middleware,
     logging_and_metrics_middleware,
+    tracing_enrichment_middleware,
     global_exception_handler,
     SecurityHeadersMiddleware,
     RequestSizeLimitMiddleware,
@@ -398,6 +399,7 @@ app.add_exception_handler(RateLimitExceeded, _rl_handler)
 app.add_middleware(RequestSizeLimitMiddleware, max_size=1_000_000, max_media_size=10_000_000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.middleware("http")(correlation_id_middleware)
+app.middleware("http")(tracing_enrichment_middleware)  # H1: Enrich spans with business context
 app.middleware("http")(logging_and_metrics_middleware)
 app.add_exception_handler(Exception, global_exception_handler)
 
