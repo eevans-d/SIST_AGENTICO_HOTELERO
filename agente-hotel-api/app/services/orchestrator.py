@@ -10,6 +10,7 @@ from .audio_processor import AudioProcessor
 from .session_manager import SessionManager
 from .lock_service import LockService
 from .template_service import TemplateService
+from .dlq_service import DLQService
 from ..models.unified_message import UnifiedMessage
 from .feature_flag_service import get_feature_flag_service
 from .metrics_service import metrics_service
@@ -103,7 +104,13 @@ escalation_response_time = Histogram(
 
 
 class Orchestrator:
-    def __init__(self, pms_adapter, session_manager: SessionManager, lock_service: LockService):
+    def __init__(
+        self,
+        pms_adapter,
+        session_manager: SessionManager,
+        lock_service: LockService,
+        dlq_service: DLQService = None,
+    ):
         self.pms_adapter = pms_adapter
         self.session_manager = session_manager
         self.lock_service = lock_service
@@ -111,6 +118,7 @@ class Orchestrator:
         self.nlp_engine = NLPEngine()
         self.audio_processor = AudioProcessor()
         self.template_service = TemplateService()
+        self.dlq_service = dlq_service  # Optional, will be None in tests without DLQ
 
         # Intent Handler Dispatcher Pattern
         # Maps intent names to their corresponding handler methods
@@ -1238,6 +1246,7 @@ class Orchestrator:
         # Métrica de negocio: contar mensaje por canal
         messages_by_channel.labels(channel=message.canal).inc()
 
+        # H2: Audio processing with DLQ fallback
         if message.tipo == "audio":
             media_url = getattr(message, "media_url", None)
             if not media_url:
@@ -1251,24 +1260,43 @@ class Orchestrator:
                 message.metadata["confidence_stt"] = message.metadata.get("confidence_stt", 0.0)
                 message.metadata["language_stt"] = message.metadata.get("language_stt")
             else:
-                # Compatibilidad: algunos tests parchean transcribe_audio
-                transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
-                if callable(transcribe_fn):
-                    maybe_coro = transcribe_fn(media_url)
-                    if asyncio.iscoroutine(maybe_coro):
-                        stt_result = await maybe_coro
+                try:
+                    # Compatibilidad: algunos tests parchean transcribe_audio
+                    transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
+                    if callable(transcribe_fn):
+                        maybe_coro = transcribe_fn(media_url)
+                        if asyncio.iscoroutine(maybe_coro):
+                            stt_result = await maybe_coro
+                        else:
+                            stt_result = maybe_coro
                     else:
-                        stt_result = maybe_coro
-                else:
-                    stt_result = await self.audio_processor.transcribe_whatsapp_audio(media_url)
+                        stt_result = await self.audio_processor.transcribe_whatsapp_audio(media_url)
 
-                if not isinstance(stt_result, dict):
-                    stt_result = {}
+                    if not isinstance(stt_result, dict):
+                        stt_result = {}
 
-                message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
-                message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
-                if lang := stt_result.get("language"):
-                    message.metadata["language_stt"] = lang
+                    message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
+                    message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
+                    if lang := stt_result.get("language"):
+                        message.metadata["language_stt"] = lang
+                
+                except Exception as audio_error:
+                    # H2: Enqueue audio processing failure to DLQ
+                    logger.error(
+                        "audio_processing_failed",
+                        error=str(audio_error),
+                        user_id=message.user_id,
+                        message_id=message.message_id,
+                    )
+                    if self.dlq_service:
+                        await self.dlq_service.enqueue_failed_message(
+                            message=message,
+                            error=audio_error,
+                            reason="audio_processing_failure"
+                        )
+                    # Graceful degradation: continue with empty text
+                    message.texto = ""
+                    message.metadata["audio_error"] = str(audio_error)
 
         try:
             text = message.texto or ""
@@ -1301,9 +1329,23 @@ class Orchestrator:
                     pass
 
             except Exception as nlp_error:
-                logger.warning(f"NLP failed, using rule-based fallback: {nlp_error}")
+                # H2: Log NLP failure and enqueue to DLQ for retry
+                logger.warning(
+                    "nlp_failed_using_fallback",
+                    error=str(nlp_error),
+                    user_id=message.user_id,
+                    message_id=message.message_id,
+                )
                 metrics_service.record_nlp_fallback("nlp_service_failure")
                 nlp_fallbacks.inc()
+                
+                # H2: Enqueue to DLQ for potential retry when NLP service recovers
+                if self.dlq_service:
+                    await self.dlq_service.enqueue_failed_message(
+                        message=message,
+                        error=nlp_error,
+                        reason="nlp_processing_failure"
+                    )
 
                 # Language detection fallback for rule-based matching
                 detected_language = await self.nlp_engine.detect_language(text)
@@ -1573,8 +1615,23 @@ class Orchestrator:
                     return {"response": "Lo siento, no puedo procesar tu solicitud en este momento."}
 
             except (PMSError, CircuitBreakerOpenError) as pms_error:
-                logger.error(f"PMS unavailable, degraded response: {pms_error}")
+                # H2: Log PMS failure and enqueue to DLQ for retry
+                logger.error(
+                    "pms_unavailable_degraded_response",
+                    error=str(pms_error),
+                    intent=intent_name,
+                    user_id=message.user_id,
+                    message_id=message.message_id,
+                )
                 orchestrator_degraded_responses.inc()
+                
+                # H2: Enqueue to DLQ for retry when PMS recovers
+                if self.dlq_service:
+                    await self.dlq_service.enqueue_failed_message(
+                        message=message,
+                        error=pms_error,
+                        reason="pms_unavailable"
+                    )
 
                 # Respuesta degradada según el intent
                 if intent_name == "check_availability":

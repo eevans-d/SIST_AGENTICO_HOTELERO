@@ -161,11 +161,28 @@ async def handle_whatsapp_webhook(request: Request):
 
     # Asegurar tipado para servicios que esperan redis.Redis
     redis_typed: redis.Redis = cast(redis.Redis, redis_client)
-    orchestrator = Orchestrator(
-        pms_adapter=get_pms_adapter(redis_typed),
-        session_manager=SessionManager(redis_typed),
-        lock_service=LockService(redis_typed),
-    )
+    
+    # H2: Initialize DLQ service for message retry on failures
+    from app.services.dlq_service import DLQService
+    from app.core.database import AsyncSessionFactory
+    
+    # Create DLQ service with its own DB session (will be used asynchronously)
+    async with AsyncSessionFactory() as dlq_db_session:
+        dlq_service = DLQService(
+            redis_client=redis_typed,
+            db_session=dlq_db_session,
+            max_retries=settings.dlq_max_retries,
+            retry_backoff_base=settings.dlq_retry_backoff_base,
+            ttl_days=settings.dlq_ttl_days,
+        )
+        
+        orchestrator = Orchestrator(
+            pms_adapter=get_pms_adapter(redis_typed),
+            session_manager=SessionManager(redis_typed),
+            lock_service=LockService(redis_typed),
+            dlq_service=dlq_service,
+        )
+    
     gateway = MessageGateway()
 
     try:
@@ -486,11 +503,26 @@ async def gmail_webhook(request: Request, body: bytes = Depends(get_body)):
         redis_client = _InMemoryRedis()  # type: ignore[assignment]
 
     redis_typed: redis.Redis = cast(redis.Redis, redis_client)
-    orchestrator = Orchestrator(
-        pms_adapter=get_pms_adapter(redis_typed),
-        session_manager=SessionManager(redis_typed),
-        lock_service=LockService(redis_typed),
-    )
+    
+    # H2: Initialize DLQ service for Gmail message retry
+    from app.services.dlq_service import DLQService
+    from app.core.database import AsyncSessionFactory
+    
+    async with AsyncSessionFactory() as dlq_db_session:
+        dlq_service = DLQService(
+            redis_client=redis_typed,
+            db_session=dlq_db_session,
+            max_retries=settings.dlq_max_retries,
+            retry_backoff_base=settings.dlq_retry_backoff_base,
+            ttl_days=settings.dlq_ttl_days,
+        )
+        
+        orchestrator = Orchestrator(
+            pms_adapter=get_pms_adapter(redis_typed),
+            session_manager=SessionManager(redis_typed),
+            lock_service=LockService(redis_typed),
+            dlq_service=dlq_service,
+        )
     gateway = MessageGateway()
     gmail_client = GmailIMAPClient()
 

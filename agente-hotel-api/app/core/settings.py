@@ -138,6 +138,28 @@ class Settings(BaseSettings):
     audio_cache_compression_threshold_kb: int = 100  # Comprimir archivos mayores a 100KB
     audio_cache_compression_level: int = 6  # Nivel de compresión (1-9, donde 9 es máxima compresión)
 
+    # Dead Letter Queue Settings (H2)
+    dlq_max_retries: int = Field(
+        default=3,
+        validation_alias=AliasChoices("DLQ_MAX_RETRIES", "dlq_max_retries"),
+        description="Maximum retry attempts before permanent failure"
+    )
+    dlq_retry_backoff_base: int = Field(
+        default=60,
+        validation_alias=AliasChoices("DLQ_RETRY_BACKOFF_BASE", "dlq_retry_backoff_base"),
+        description="Base delay in seconds for exponential backoff (60 → 120 → 240)"
+    )
+    dlq_ttl_days: int = Field(
+        default=7,
+        validation_alias=AliasChoices("DLQ_TTL_DAYS", "dlq_ttl_days"),
+        description="Time-to-live for DLQ messages in days"
+    )
+    dlq_worker_interval: int = Field(
+        default=300,
+        validation_alias=AliasChoices("DLQ_WORKER_INTERVAL", "dlq_worker_interval"),
+        description="Retry worker interval in seconds (default: 5 minutes)"
+    )
+
     # Operational Settings
     environment: Environment = Environment.DEV
     log_level: LogLevel = LogLevel.INFO
