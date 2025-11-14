@@ -202,6 +202,72 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  Error inicializando gestor de sesiones: {e}")
 
+        # 3.5. H2: Inicializar DLQ Retry Worker para procesamiento automático de mensajes fallidos
+        dlq_worker_task = None
+        try:
+            from app.services.dlq_service import DLQService
+            from app.core.database import AsyncSessionFactory
+            
+            redis_client = await get_redis()
+            
+            async def dlq_retry_worker():
+                """Background worker que procesa mensajes de DLQ listos para retry."""
+                async with AsyncSessionFactory() as db_session:
+                    dlq_service = DLQService(
+                        redis_client=redis_client,
+                        db_session=db_session,
+                        max_retries=settings.dlq_max_retries,
+                        retry_backoff_base=settings.dlq_retry_backoff_base,
+                        ttl_days=settings.dlq_ttl_days,
+                    )
+                    
+                    logger.info("🔄 DLQ Retry Worker iniciado", interval=f"{settings.dlq_worker_interval}s")
+                    
+                    while True:
+                        try:
+                            # Obtener candidatos listos para retry
+                            candidates = await dlq_service.get_retry_candidates()
+                            
+                            if candidates:
+                                logger.info(
+                                    "dlq_processing_candidates",
+                                    count=len(candidates),
+                                    candidates=[c["dlq_id"] for c in candidates[:5]],  # Log first 5
+                                )
+                                
+                                # Procesar cada candidato
+                                for entry in candidates:
+                                    dlq_id = entry["dlq_id"]
+                                    try:
+                                        success = await dlq_service.retry_message(dlq_id)
+                                        if success:
+                                            logger.info("dlq_retry_success", dlq_id=dlq_id)
+                                        else:
+                                            logger.warning("dlq_retry_failed", dlq_id=dlq_id)
+                                    except Exception as retry_error:
+                                        logger.error(
+                                            "dlq_retry_error",
+                                            dlq_id=dlq_id,
+                                            error=str(retry_error),
+                                        )
+                            
+                            # Actualizar métricas de queue size
+                            await dlq_service._update_queue_size_metric()
+                            await dlq_service._update_oldest_message_metric()
+                            
+                        except Exception as e:
+                            logger.error("dlq_worker_error", error=str(e))
+                        
+                        # Esperar antes del siguiente ciclo
+                        await asyncio.sleep(settings.dlq_worker_interval)
+            
+            # Iniciar worker como background task
+            dlq_worker_task = asyncio.create_task(dlq_retry_worker())
+            initialized_services.append("dlq_retry_worker")
+            logger.info("✅ DLQ Retry Worker inicializado")
+        except Exception as e:
+            logger.warning(f"⚠️  Error inicializando DLQ Retry Worker: {e}")
+
         # 4. Verificar conexiones críticas
         try:
             redis_client = await get_redis()
@@ -274,6 +340,18 @@ async def lifespan(app: FastAPI):
                 logger.info("✅ Gestor de sesiones detenido")
             except Exception as e:
                 logger.warning(f"⚠️  Error deteniendo gestor de sesiones: {e}")
+
+        # H2: Detener DLQ Retry Worker
+        if dlq_worker_task and not dlq_worker_task.done():
+            try:
+                dlq_worker_task.cancel()
+                try:
+                    await dlq_worker_task
+                except asyncio.CancelledError:
+                    pass
+                logger.info("✅ DLQ Retry Worker detenido")
+            except Exception as e:
+                logger.warning(f"⚠️  Error deteniendo DLQ Retry Worker: {e}")
 
         # Detener servicio de tenants
         try:
