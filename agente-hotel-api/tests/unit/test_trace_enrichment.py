@@ -5,7 +5,7 @@ Validates that business context is properly added to OpenTelemetry spans.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from fastapi import Request
 
 from app.core.tracing import enrich_span_from_request, enrich_span_with_business_context

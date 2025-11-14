@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from app.core.circuit_breaker import CircuitBreaker, CircuitState
 
 class DummyError(Exception):

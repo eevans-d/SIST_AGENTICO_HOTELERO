@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 from ..core.logging import logger
 from ..core.constants import (
     HTTP_TIMEOUT_DEFAULT,
