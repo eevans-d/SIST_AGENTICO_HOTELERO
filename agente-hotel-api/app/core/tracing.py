@@ -14,29 +14,39 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.trace import Status, StatusCode, SpanKind
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from typing import Optional
 from functools import wraps
 import structlog
+import os
 
 logger = structlog.get_logger(__name__)
 
-# Configuration
+# Configuration (externalized via environment variables)
 TRACE_CONFIG = {
-    "service_name": "agente-hotel-api",
-    "otlp_endpoint": "http://jaeger:4317",
-    "sampling_rate": 1.0,
+    "service_name": os.getenv("OTEL_SERVICE_NAME", "agente-hotel-api"),
+    "otlp_endpoint": os.getenv("OTLP_ENDPOINT", "http://jaeger:4317"),
+    "sampling_rate": float(os.getenv("TRACE_SAMPLING_RATE", "1.0")),
 }
 
 
 def setup_tracing():
-    """Setup OpenTelemetry tracing."""
+    """Setup OpenTelemetry tracing with configurable sampling."""
     resource = Resource.create({SERVICE_NAME: TRACE_CONFIG["service_name"]})
-    provider = TracerProvider(resource=resource)
+    
+    # Configure sampler based on sampling_rate (0.0 to 1.0)
+    # ParentBased ensures distributed tracing consistency across services
+    sampler = ParentBased(TraceIdRatioBased(TRACE_CONFIG["sampling_rate"]))
+    provider = TracerProvider(resource=resource, sampler=sampler)
 
     try:
         otlp_exporter = OTLPSpanExporter(endpoint=TRACE_CONFIG["otlp_endpoint"], insecure=True)
         provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-        logger.info("otlp_exporter_configured")
+        logger.info(
+            "otlp_exporter_configured",
+            endpoint=TRACE_CONFIG["otlp_endpoint"],
+            sampling_rate=TRACE_CONFIG["sampling_rate"],
+        )
     except Exception as e:
         logger.error("otlp_exporter_failed", error=str(e))
 

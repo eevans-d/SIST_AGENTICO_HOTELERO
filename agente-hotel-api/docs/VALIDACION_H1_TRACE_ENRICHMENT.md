@@ -256,11 +256,101 @@ poetry add opentelemetry-api@^1.20.0 \
 
 ---
 
-## Tests (10/10 Passing)
+### 6. Instrumentación FastAPI (`app/main.py`) - **CRÍTICO**
 
-### Estructura de Tests (`tests/unit/test_trace_enrichment.py`)
+**Activación de H1 en Runtime**:
 
-#### Fixtures
+```python
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# Después de app = FastAPI(...)
+FastAPIInstrumentor.instrument_app(
+    app,
+    excluded_urls="/health/live,/health/ready,/metrics"
+)
+```
+
+**¿Por qué es crítico?**
+
+Sin esta instrumentación:
+- `trace.get_current_span()` retorna `NonRecordingSpan`
+- `span.is_recording()` retorna `False`
+- El middleware `tracing_enrichment_middleware` **no enriquece nada**
+- H1 está implementado pero **no funciona en runtime**
+
+**Endpoints excluidos**:
+- `/health/live`, `/health/ready`: Alta frecuencia, bajo valor (readiness checks K8s)
+- `/metrics`: Prometheus scraping cada 8s, genera ruido en trazas
+
+---
+
+### 7. Sampler Configurado (`app/core/tracing.py`)
+
+**Configuración basada en `sampling_rate`**:
+
+```python
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+
+def setup_tracing():
+    resource = Resource.create({SERVICE_NAME: TRACE_CONFIG["service_name"]})
+    
+    # Sampler basado en sampling_rate (0.0 a 1.0)
+    sampler = ParentBased(TraceIdRatioBased(TRACE_CONFIG["sampling_rate"]))
+    provider = TracerProvider(resource=resource, sampler=sampler)
+    # ... resto
+```
+
+**Ventajas**:
+- `ParentBased`: Respeta decisiones de sampling upstream (distributed tracing)
+- `TraceIdRatioBased`: Muestrea consistentemente basado en TraceID (mismo trace siempre incluido/excluido)
+- Control vía `TRACE_SAMPLING_RATE` env var
+
+---
+
+### 8. Configuración Externalizada (Variables de Entorno)
+
+**Antes** (hardcoded):
+```python
+TRACE_CONFIG = {
+    "service_name": "agente-hotel-api",
+    "otlp_endpoint": "http://jaeger:4317",
+    "sampling_rate": 1.0,
+}
+```
+
+**Después** (externalizado):
+```python
+import os
+
+TRACE_CONFIG = {
+    "service_name": os.getenv("OTEL_SERVICE_NAME", "agente-hotel-api"),
+    "otlp_endpoint": os.getenv("OTLP_ENDPOINT", "http://jaeger:4317"),
+    "sampling_rate": float(os.getenv("TRACE_SAMPLING_RATE", "1.0")),
+}
+```
+
+**Variables de entorno**:
+- `OTEL_SERVICE_NAME`: Nombre del servicio en Jaeger (default: `agente-hotel-api`)
+- `OTLP_ENDPOINT`: Endpoint del collector OTLP (default: `http://jaeger:4317`)
+- `TRACE_SAMPLING_RATE`: Ratio de sampling 0.0-1.0 (default: `1.0` = 100%)
+
+**Uso en producción**:
+```bash
+# .env.production
+OTEL_SERVICE_NAME=agente-hotel-api-prod
+OTLP_ENDPOINT=http://otel-collector:4317
+TRACE_SAMPLING_RATE=0.1  # Sample 10% en producción para reducir carga
+```
+
+---
+
+## Tests (10 unitarios + 3 integración = 13 total)
+
+### Estructura de Tests
+
+#### Tests Unitarios (`tests/unit/test_trace_enrichment.py`)
+
+**Fixtures**:
 
 ```python
 @pytest.fixture
@@ -291,7 +381,7 @@ def mock_request():
     return request
 ```
 
-#### Test Classes
+**Test Classes**:
 
 **`TestEnrichSpanFromRequest`** (4 tests):
 - `test_enrich_span_basic` → Verifica todos los atributos básicos
@@ -309,8 +399,27 @@ def mock_request():
 - `test_tracing_middleware_enriches_request` → Verifica enriquecimiento automático
 - `test_tracing_middleware_adds_http_status` → Verifica status_code en response
 
+#### Tests de Integración (`tests/integration/test_trace_integration.py`)
+
+**Validación de instrumentación real** (3 tests):
+
+1. **`test_http_request_creates_span_with_tenant_context`**
+   - Valida que FastAPIInstrumentor crea spans automáticamente
+   - Verifica que spans HTTP tienen atributos `http.method`, `http.status_code`
+   - Usa `InMemorySpanExporter` para capturar spans reales
+
+2. **`test_span_enrichment_with_business_context`**
+   - Prueba `enrich_span_with_business_context()` con span real de OpenTelemetry
+   - Valida que atributos `business.*` se agregan correctamente
+   - Confirma que `span.is_recording()` funciona en spans reales
+
+3. **`test_excluded_urls_not_traced`**
+   - Verifica que endpoints excluidos (`/health/live`, `/metrics`) no generan spans
+   - Reduce ruido en producción (importante para escalabilidad)
+
 ### Ejecución
 
+**Tests unitarios**:
 ```bash
 cd agente-hotel-api
 poetry run pytest tests/unit/test_trace_enrichment.py -v --tb=short
@@ -327,10 +436,24 @@ poetry run pytest tests/unit/test_trace_enrichment.py -v --tb=short
 # tests/unit/test_trace_enrichment.py::TestEnrichSpanWithBusinessContext::test_enrich_business_context_non_recording PASSED
 # tests/unit/test_trace_enrichment.py::TestMiddlewareIntegration::test_tracing_middleware_enriches_request PASSED
 # tests/unit/test_trace_enrichment.py::TestMiddlewareIntegration::test_tracing_middleware_adds_http_status PASSED
-# ======================== 10 passed in 5.71s ========================
+# ======================== 10 passed in 3.99s ========================
 ```
 
-**Coverage de tracing.py**: 66% (de 48% anterior) → mejora de 18 puntos porcentuales
+**Tests de integración**:
+```bash
+poetry run pytest tests/integration/test_trace_integration.py -v
+
+# Output:
+# tests/integration/test_trace_integration.py::test_http_request_creates_span_with_tenant_context PASSED
+# tests/integration/test_trace_integration.py::test_span_enrichment_with_business_context PASSED
+# tests/integration/test_trace_integration.py::test_excluded_urls_not_traced PASSED
+# ======================== 3 passed in 3.36s =========================
+```
+
+**Coverage**:
+- `app/core/tracing.py`: 66% (de 48% anterior) → mejora de 18 puntos porcentuales
+- Tests unitarios: Validan lógica de enriquecimiento con mocks
+- Tests integración: Validan que FastAPIInstrumentor + spans reales funcionan
 
 ---
 

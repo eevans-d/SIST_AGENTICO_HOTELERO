@@ -341,6 +341,17 @@ app = FastAPI(
     openapi_url=openapi_url,
 )
 
+# OpenTelemetry FastAPI Instrumentation (H1: Trace Enrichment)
+# CRITICAL: This enables automatic span creation for all HTTP requests
+# Without this, tracing_enrichment_middleware gets NonRecordingSpan and H1 doesn't work
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+FastAPIInstrumentor.instrument_app(
+    app,
+    excluded_urls="/health/live,/health/ready,/metrics",  # Exclude high-frequency endpoints
+)
+logger.info("✅ OpenTelemetry FastAPI instrumentation enabled (H1 activated)")
+
 # CORS Configuration - Restrictivo en producción
 if settings.environment == Environment.PROD:
     # Producción: Solo orígenes específicos
