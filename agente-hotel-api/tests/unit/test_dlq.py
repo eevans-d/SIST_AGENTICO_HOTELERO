@@ -4,7 +4,6 @@ Unit tests for Dead Letter Queue (DLQ) service.
 Tests DLQ enqueue, retry logic, exponential backoff, and permanent failures.
 """
 
-import asyncio
 import json
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch

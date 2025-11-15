@@ -15,7 +15,6 @@ Architecture:
        Permanent Failure (PostgreSQL)
 """
 
-import asyncio
 import json
 import traceback
 import uuid
@@ -23,7 +22,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
@@ -90,6 +88,7 @@ class DLQService:
         error: Exception,
         retry_count: int = 0,
         correlation_id: Optional[str] = None,
+        reason: Optional[str] = None,
     ) -> str:
         """
         Enqueue a failed message to DLQ for retry.
@@ -99,12 +98,13 @@ class DLQService:
             error: Exception that caused the failure
             retry_count: Current retry count (default: 0 for first failure)
             correlation_id: Optional correlation ID for tracing
+            reason: Optional human-readable failure reason (e.g., "audio_processing_failure")
 
         Returns:
             str: DLQ entry ID (UUID)
         """
         dlq_id = str(uuid.uuid4())
-        error_type = type(error).__name__
+        error_type = reason or type(error).__name__
         error_msg = str(error)
 
         # Calculate next retry time with exponential backoff
@@ -249,11 +249,14 @@ class DLQService:
                 tenant_id=message_data.get("tenant_id"),
             )
 
-            # Import orchestrator dynamically to avoid circular dependency
-            from app.services import orchestrator
-            
-            # Get orchestrator instance (created during app startup)
-            orch = orchestrator._orchestrator_instance
+            # Obtener instancia de Orchestrator
+            # 1) Preferir instancia inyectada en self.orchestrator (tests/overrides)
+            # 2) Fallback al singleton global inicializado en app lifespan
+            orch = getattr(self, "orchestrator", None)
+            if orch is None:
+                # Import lazily para evitar ciclos
+                from app.services import orchestrator
+                orch = orchestrator._orchestrator_instance
             if orch is None:
                 raise RuntimeError("Orchestrator not initialized")
 

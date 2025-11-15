@@ -51,7 +51,7 @@ from .services.feature_flag_service import get_feature_flag_service
 from .core.redis_client import get_redis
 from .services.session_manager import SessionManager
 from sqlalchemy import select, func
-from app.core.database import AsyncSessionFactory, engine
+from app.core.database import engine
 from app.models.user import UserSession
 from app.services.metrics_service import metrics_service
 
