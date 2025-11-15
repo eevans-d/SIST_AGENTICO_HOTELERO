@@ -14,6 +14,7 @@ rule_files:
   - /etc/prometheus/alerts-extra.yml
   - /etc/prometheus/business_alerts.yml
   - /etc/prometheus/generated/recording_rules.yml
+  - /etc/prometheus/rules_slo.yml
 
 scrape_configs:
   - job_name: "agente-api"

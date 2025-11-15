@@ -1,0 +1,72 @@
+{
+  "id": null,
+  "uid": "m1-slo-dashboard",
+  "title": "M1 - SLO Overview",
+  "tags": ["slo", "reliability"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Error Ratio (5m)",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"},
+      "targets": [{"expr": "slo:error_ratio5m", "legendFormat": "error_ratio5m"}]
+    },
+    {
+      "type": "stat",
+      "title": "Burn Rate (5m)",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "none"},
+      "targets": [{"expr": "slo:burn_rate5m", "legendFormat": "burn_5m"}]
+    },
+    {
+      "type": "graph",
+      "title": "Error Ratio (5m vs 30m)",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "slo:error_ratio5m", "legendFormat": "5m"},
+        {"expr": "slo:error_ratio30m", "legendFormat": "30m"}
+      ],
+      "lines": true, "fill": 1
+    },
+    {
+      "type": "graph",
+      "title": "Request Volume (rate 5m)",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (endpoint) (slo:http_requests:rate5m)", "legendFormat": "{{endpoint}}"}],
+      "lines": true, "fill": 1
+    },
+    {
+      "type": "graph",
+      "title": "5xx Error Rate (rate 5m)",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (endpoint) (slo:http_errors_5xx:rate5m)", "legendFormat": "{{endpoint}}"}],
+      "lines": true, "fill": 1
+    },
+    {
+      "type": "graph",
+      "title": "Orchestrator Latency (p95/p99)",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "slo:orchestrator_latency:p95", "legendFormat": "p95"},
+        {"expr": "slo:orchestrator_latency:p99", "legendFormat": "p99"}
+      ],
+      "lines": true, "fill": 1
+    },
+    {
+      "type": "graph",
+      "title": "PMS API Latency (p95/p99 by endpoint)",
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "slo:pms_api_latency:p95", "legendFormat": "p95 {{endpoint}}"},
+        {"expr": "slo:pms_api_latency:p99", "legendFormat": "p99 {{endpoint}}"}
+      ],
+      "lines": true, "fill": 1
+    }
+  ],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"}
+}
