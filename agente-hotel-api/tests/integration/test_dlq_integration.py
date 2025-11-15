@@ -229,7 +229,6 @@ async def test_orchestrator_pms_failure_enqueues_to_dlq(redis_client, db_session
     assert len(keys) == 1
     
     # MockRedis returns strings, not bytes
-    dlq_id = keys[0].split(":")[-1] if isinstance(keys[0], str) else keys[0].decode().split(":")[-1]
     dlq_data_raw = await redis_client.hgetall(keys[0])
     # MockRedis may return bytes or strings
     dlq_data = {
@@ -370,7 +369,7 @@ async def test_dlq_metrics_exported(redis_client, db_session, sample_message):
     
     # Enqueue message
     error = PMSError("Test PMS failure")
-    dlq_id = await dlq_service.enqueue_failed_message(
+    await dlq_service.enqueue_failed_message(
         message=sample_message,
         error=error,
     )

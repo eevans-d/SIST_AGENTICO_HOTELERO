@@ -14,6 +14,11 @@ from fastapi import Request
 from starlette.responses import Response
 import asyncio
 
+try:  # opentelemetry es opcional en entornos locales/test
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+except ModuleNotFoundError:  # pragma: no cover - degradación cuando no está instalado
+    FastAPIInstrumentor = None
+
 from app.core.settings import settings, Environment
 from app.core.logging import setup_logging, logger
 from app.core.middleware import (
@@ -422,13 +427,14 @@ app = FastAPI(
 # OpenTelemetry FastAPI Instrumentation (H1: Trace Enrichment)
 # CRITICAL: This enables automatic span creation for all HTTP requests
 # Without this, tracing_enrichment_middleware gets NonRecordingSpan and H1 doesn't work
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-FastAPIInstrumentor.instrument_app(
-    app,
-    excluded_urls="/health/live,/health/ready,/metrics",  # Exclude high-frequency endpoints
-)
-logger.info("✅ OpenTelemetry FastAPI instrumentation enabled (H1 activated)")
+if FastAPIInstrumentor is not None:
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="/health/live,/health/ready,/metrics",  # Exclude high-frequency endpoints
+    )
+    logger.info("✅ OpenTelemetry FastAPI instrumentation enabled (H1 activated)")
+else:
+    logger.warning("OpenTelemetry FastAPI instrumentation not enabled (opentelemetry not installed)")
 
 # CORS Configuration - Restrictivo en producción
 if settings.environment == Environment.PROD:

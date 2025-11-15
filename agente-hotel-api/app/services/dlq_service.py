@@ -261,7 +261,7 @@ class DLQService:
                 raise RuntimeError("Orchestrator not initialized")
 
             # Retry processing
-            result = await orch.process_message(message)
+            await orch.process_message(message)
 
             # Success - remove from DLQ
             await self.redis.delete(message_key)
