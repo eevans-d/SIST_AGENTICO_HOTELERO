@@ -1,18 +1,10 @@
-"""
-Test Suite: Performance Router JWT Authentication
-Validates that all 16 endpoints in performance.py require valid Bearer tokens
+"""Test Suite: Performance Router JWT Authentication.
+
+Valida que todos los endpoints en performance.py requieren tokens Bearer válidos.
+Actualmente se salta a nivel de módulo en FASE 0.
 """
 
 import pytest
-
-# FASE 0/Path A: Algunos endpoints retornan 400 por validaciones previas en lugar
-# de 401 cuando falta token. Para evitar falsos negativos mientras alineamos
-# middlewares/validaciones, saltamos temporalmente esta suite.
-pytest.skip(
-    "Skipping performance auth tests en FASE 0 (ajustar a 401/403 en FASE 1)",
-    allow_module_level=True,
-)
-
 import pytest_asyncio
 from httpx import AsyncClient
 from app.main import app
@@ -37,6 +29,15 @@ PROTECTED_ENDPOINTS = [
     ("GET", "/api/v1/performance/benchmark"),
     ("GET", "/api/v1/performance/recommendations"),
 ]
+
+
+# FASE 0/Path A: Algunos endpoints retornan 400 por validaciones previas en lugar
+# de 401 cuando falta token. Para evitar falsos negativos mientras alineamos
+# middlewares/validaciones, saltamos temporalmente esta suite.
+pytest.skip(
+    "Skipping performance auth tests en FASE 0 (ajustar a 401/403 en FASE 1)",
+    allow_module_level=True,
+)
 
 
 @pytest_asyncio.fixture

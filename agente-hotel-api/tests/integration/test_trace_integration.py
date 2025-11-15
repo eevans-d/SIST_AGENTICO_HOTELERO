@@ -6,7 +6,6 @@ Validates that real HTTP requests generate spans with business context attribute
 """
 
 import pytest
-from unittest.mock import Mock, patch
 
 from app.core.tracing import enrich_span_with_business_context
 

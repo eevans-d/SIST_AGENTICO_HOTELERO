@@ -268,14 +268,6 @@ class Settings(BaseSettings):
     @field_validator("postgres_url", mode="before")
     @classmethod
     def build_postgres_url(cls, v, info):
-        data = getattr(info, "data", {}) or {}
-        host = data.get("postgres_host") or None
-        port = data.get("postgres_port") or None
-        db = data.get("postgres_db") or None
-        user = data.get("postgres_user") or None
-        pwd = data.get("postgres_password")
-        pwd_val = pwd.get_secret_value() if isinstance(pwd, SecretStr) else (pwd or None)
-
         # Si viene como string, normalizamos a async driver si es necesario
         if isinstance(v, str) and v:
             # Reemplazar esquemas sin async por asyncpg

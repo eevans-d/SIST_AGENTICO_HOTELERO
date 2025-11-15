@@ -6,7 +6,11 @@ from uuid import uuid4
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from opentelemetry import trace
+
+try:  # opentelemetry es opcional en entornos locales/test
+    from opentelemetry import trace
+except ModuleNotFoundError:  # pragma: no cover - degradación cuando no está instalado
+    trace = None
 
 from .logging import logger
 from ..services.metrics_service import metrics_service
@@ -148,17 +152,15 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 async def tracing_enrichment_middleware(request: Request, call_next):
+    """Middleware to enrich OpenTelemetry spans with business context.
+
+    Si opentelemetry no está instalado (trace is None), el middleware
+    simplemente delega sin intentar enriquecer spans.
     """
-    Middleware to enrich OpenTelemetry spans with business context.
-    
-    Automatically adds tenant_id, user_id, channel, correlation_id to all spans
-    from request.state. This enables better observability and debugging in production.
-    
-    Part of H1: Trace Enrichment implementation.
-    """
+
     # Get current span (created by OpenTelemetry FastAPI instrumentation or manually)
-    span = trace.get_current_span()
-    
+    span = trace.get_current_span() if trace is not None else None
+
     if span and span.is_recording():
         from .tracing import enrich_span_from_request
         
