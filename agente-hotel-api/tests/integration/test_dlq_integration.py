@@ -8,7 +8,7 @@ Tests the complete flow:
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -163,7 +163,7 @@ def sample_message():
         message_id="test-msg-001",
         canal="whatsapp",
         user_id="1234567890",
-        timestamp_iso=datetime.utcnow().isoformat(),
+        timestamp_iso=datetime.now(UTC).isoformat(),
         tipo="text",
         texto="Check availability for tomorrow",
         media_url=None,
@@ -265,7 +265,7 @@ async def test_retry_worker_processes_candidates(redis_client, db_session, sampl
     )
     
     # Manually set retry time to past (ready for retry)
-    past_timestamp = (datetime.utcnow() - timedelta(seconds=10)).timestamp()
+    past_timestamp = (datetime.now(UTC) - timedelta(seconds=10)).timestamp()
     await redis_client.zadd(dlq_service.DLQ_RETRY_SCHEDULE, {dlq_id: past_timestamp})
     
     # Get retry candidates
@@ -464,7 +464,7 @@ async def test_audio_processing_failure_enqueues_to_dlq(redis_client, db_session
         message_id="test-audio-001",
         canal="whatsapp",
         user_id="1234567890",
-        timestamp_iso=datetime.utcnow().isoformat(),
+        timestamp_iso=datetime.now(UTC).isoformat(),
         tipo="audio",
         texto=None,
         media_url="https://example.com/audio.ogg",

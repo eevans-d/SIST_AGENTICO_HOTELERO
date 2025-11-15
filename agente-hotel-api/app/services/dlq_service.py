@@ -18,7 +18,7 @@ Architecture:
 import json
 import traceback
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
@@ -109,7 +109,7 @@ class DLQService:
 
         # Calculate next retry time with exponential backoff
         backoff_seconds = self.retry_backoff_base * (2**retry_count)
-        retry_at = datetime.utcnow() + timedelta(seconds=backoff_seconds)
+        retry_at = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
 
         # Prepare DLQ entry data
         dlq_data = {
@@ -129,7 +129,7 @@ class DLQService:
             "error_message": error_msg,
             "error_traceback": traceback.format_exc(),
             "retry_count": retry_count,
-            "first_failed_at": datetime.utcnow().isoformat(),
+            "first_failed_at": datetime.now(UTC).isoformat(),
             "retry_at": retry_at.isoformat(),
             "correlation_id": correlation_id or message.metadata.get("correlation_id"),
         }
@@ -169,7 +169,7 @@ class DLQService:
         Returns:
             List of DLQ entry dictionaries ready for retry
         """
-        current_timestamp = datetime.utcnow().timestamp()
+        current_timestamp = datetime.now(UTC).timestamp()
 
         # Get all messages with retry_at <= now
         candidates_ids = await self.redis.zrangebyscore(
@@ -208,7 +208,7 @@ class DLQService:
         Returns:
             bool: True if retry succeeded, False otherwise
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         message_key = f"{self.DLQ_MESSAGE_PREFIX}{dlq_id}"
 
         # Get message data
@@ -270,7 +270,7 @@ class DLQService:
 
             # Update metrics
             dlq_retries_total.labels(result="success").inc()
-            elapsed = (datetime.utcnow() - start_time).total_seconds()
+            elapsed = (datetime.now(UTC) - start_time).total_seconds()
             dlq_retry_latency_seconds.observe(elapsed)
             await self._update_queue_size_metric()
 
@@ -302,12 +302,12 @@ class DLQService:
             else:
                 # Reschedule with new backoff
                 backoff_seconds = self.retry_backoff_base * (2**new_retry_count)
-                retry_at = datetime.utcnow() + timedelta(seconds=backoff_seconds)
+                retry_at = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
 
                 # Update retry count and retry_at
                 dlq_data["retry_count"] = new_retry_count
                 dlq_data["retry_at"] = retry_at.isoformat()
-                dlq_data["last_retry_at"] = datetime.utcnow().isoformat()
+                dlq_data["last_retry_at"] = datetime.now(UTC).isoformat()
 
                 # Update Redis hash
                 await self.redis.hset(
@@ -357,7 +357,7 @@ class DLQService:
             error_type=type(error).__name__,
             retry_count=dlq_data["retry_count"],
             first_failed_at=datetime.fromisoformat(dlq_data["first_failed_at"]),
-            last_retry_at=datetime.utcnow(),
+            last_retry_at=datetime.now(UTC),
         )
 
         # Save to database
@@ -400,7 +400,7 @@ class DLQService:
         }
 
         first_failed_at = datetime.fromisoformat(dlq_data["first_failed_at"])
-        age_seconds = (datetime.utcnow() - first_failed_at).total_seconds()
+        age_seconds = (datetime.now(UTC) - first_failed_at).total_seconds()
         return age_seconds
 
     async def cleanup_expired_messages(self) -> int:
@@ -410,7 +410,7 @@ class DLQService:
         Returns:
             int: Number of messages cleaned up
         """
-        current_timestamp = datetime.utcnow().timestamp()
+        current_timestamp = datetime.now(UTC).timestamp()
         ttl_cutoff = current_timestamp - self.ttl_seconds
 
         # Get all messages older than TTL
