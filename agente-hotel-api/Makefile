@@ -1332,10 +1332,7 @@ supabase-apply-schema: ## Aplica docs/supabase/schema.sql a la base de datos (re
 	@python3 scripts/apply_supabase_schema.py --schema-file docs/supabase/schema.sql || { echo "❌ Falló la aplicación del schema"; exit 1; }
 	@echo "✅ Schema aplicado"
 
-supabase-validate: ## Valida tablas e índices clave tras aplicar el schema
-	@echo "🔍 Validando schema en Supabase..."
-	@python3 scripts/validate_supabase_schema.py || { echo "❌ Validación fallida"; exit 1; }
-	@echo "✅ Validación completada"
+# NOTA: supabase-validate está definido en línea 62 (versión correcta)
 
 maintenance-cleanup: ## Limpia sesiones expiradas de user_sessions (requiere DATABASE_URL)
 	@echo "🧹 Limpiando sesiones expiradas..."
