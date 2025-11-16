@@ -10,14 +10,15 @@ Version: 1.0.0
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.trace import Status, StatusCode, SpanKind
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from typing import Optional
+from typing import Optional, Dict, Any
 from functools import wraps
 import structlog
+import re
 import os
 
 logger = structlog.get_logger(__name__)
@@ -26,12 +27,62 @@ logger = structlog.get_logger(__name__)
 TRACE_CONFIG = {
     "service_name": os.getenv("OTEL_SERVICE_NAME", "agente-hotel-api"),
     "otlp_endpoint": os.getenv("OTLP_ENDPOINT", "http://jaeger:4317"),
+    # NOTE: sampling_rate is still read from env for backwards compatibility.
+    # In production, TRACE_SAMPLING_RATE/env should match settings.trace_sampling_rate.
     "sampling_rate": float(os.getenv("TRACE_SAMPLING_RATE", "1.0")),
 }
 
 
+class SafeSpanProcessor(SimpleSpanProcessor):
+    """Span processor that redacts common PII patterns before export.
+
+    This is a defensive layer on top of structured logging and should
+    prevent accidental leakage of sensitive data into tracing backends.
+    """
+
+    EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+    PHONE_PATTERN = re.compile(r"\b(?:\+?\d{1,3})?[\s.-]?(?:\d{2,4}[\s.-]?){2,4}\d\b")
+    CREDIT_CARD_PATTERN = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
+    DNI_PATTERN = re.compile(r"\b\d{7,9}\b")
+
+    REDACTION_TOKEN = "[redacted]"
+
+    def _redact_value(self, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+
+        original = value
+        value = self.EMAIL_PATTERN.sub(self.REDACTION_TOKEN, value)
+        value = self.PHONE_PATTERN.sub(self.REDACTION_TOKEN, value)
+        value = self.CREDIT_CARD_PATTERN.sub(self.REDACTION_TOKEN, value)
+        value = self.DNI_PATTERN.sub(self.REDACTION_TOKEN, value)
+
+        if value != original:
+            logger.debug("pii_redacted_in_span_attribute")
+
+        return value
+
+    def _redact_attributes(self, attributes: Dict[str, Any]) -> Dict[str, Any]:
+        if not attributes:
+            return attributes
+
+        redacted: Dict[str, Any] = {}
+        for key, value in attributes.items():
+            redacted[key] = self._redact_value(value)
+        return redacted
+
+    def on_end(self, span) -> None:  # type: ignore[override]
+        try:
+            attributes = dict(span.attributes or {})
+            span.attributes = self._redact_attributes(attributes)  # type: ignore[assignment]
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("safe_span_processor_failed", error=str(exc))
+
+        super().on_end(span)
+
+
 def setup_tracing():
-    """Setup OpenTelemetry tracing with configurable sampling."""
+    """Setup OpenTelemetry tracing with configurable sampling and PII redaction."""
     resource = Resource.create({SERVICE_NAME: TRACE_CONFIG["service_name"]})
     
     # Configure sampler based on sampling_rate (0.0 to 1.0)
@@ -41,6 +92,7 @@ def setup_tracing():
 
     try:
         otlp_exporter = OTLPSpanExporter(endpoint=TRACE_CONFIG["otlp_endpoint"], insecure=True)
+        provider.add_span_processor(SafeSpanProcessor(otlp_exporter))
         provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
         logger.info(
             "otlp_exporter_configured",

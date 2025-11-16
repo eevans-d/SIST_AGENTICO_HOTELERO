@@ -186,6 +186,13 @@ class Settings(BaseSettings):
         description="Allowed IPs for Prometheus scraping. IPv4 and IPv6 supported."
     )
 
+    # Tracing / Sampling configuration
+    trace_sampling_rate: float = Field(
+        default=1.0,
+        description="Base sampling rate for traces (0.0 - 1.0)",
+        validation_alias=AliasChoices("TRACE_SAMPLING_RATE", "trace_sampling_rate"),
+    )
+
     # TrustedHost Configuration (PROD only)
     allowed_hosts: list[str] = Field(
         default=["localhost", "127.0.0.1"],

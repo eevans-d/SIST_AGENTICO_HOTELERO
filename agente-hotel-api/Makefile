@@ -45,6 +45,45 @@ validate-prometheus-rules: validate-prometheus  ## Alias for validate-prometheus
 .PHONY: deploy-status deploy-logs deploy-test
 .PHONY: incident-detect incident-simulate incident-report on-call-schedule post-mortem incident-test
 .PHONY: validate-prometheus validate-prometheus-rules validate-alerts validate-alerts-real
+.PHONY: test-tracing supabase-validate supabase-migrate supabase-quick-check
+
+# ==============================================================================
+# PR1: Tracing & Observability
+# ==============================================================================
+
+test-tracing: ## Run tracing-specific unit tests (SafeSpanProcessor, PII redaction)
+	@echo "🔍 Running tracing tests..."
+	@command -v poetry >/dev/null 2>&1 && poetry run pytest tests/unit/test_safe_span_processor.py -vv || pytest tests/unit/test_safe_span_processor.py -vv
+
+# ==============================================================================
+# Supabase Migration Helpers
+# ==============================================================================
+
+supabase-validate: ## Validate Supabase connection and schema
+	@echo "🔍 Validating Supabase setup..."
+	@if [ ! -f .env.supabase ]; then \
+		echo "❌ .env.supabase not found. Create it first (see docs/SUPABASE_QUICK_START.md)"; \
+		exit 1; \
+	fi
+	@export $$(cat .env.supabase | grep -v '^#' | xargs) && \
+		psql "$$POSTGRES_URL" -c "SELECT version();" || { \
+		echo "❌ Connection failed. Check POSTGRES_URL in .env.supabase"; \
+		exit 1; \
+	}
+	@echo "✅ Supabase connection OK"
+
+supabase-migrate: supabase-validate ## Run Alembic migrations on Supabase
+	@echo "🚀 Running Alembic migrations on Supabase..."
+	@export $$(cat .env.supabase | grep -v '^#' | xargs) && \
+		poetry run alembic upgrade head
+	@echo "✅ Migrations completed"
+
+supabase-quick-check: supabase-validate ## Quick health check for Supabase (tables, extensions)
+	@echo "📊 Supabase quick check..."
+	@export $$(cat .env.supabase | grep -v '^#' | xargs) && \
+		psql "$$POSTGRES_URL" -c "\dt" && \
+		psql "$$POSTGRES_URL" -c "SELECT extname FROM pg_extension WHERE extname IN ('pg_stat_statements', 'pgcrypto', 'pg_trgm', 'uuid-ossp');"
+	@echo "✅ Quick check complete"
 
 # ==============================================================================
 # Alembic (Migraciones)
