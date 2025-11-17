@@ -1,4 +1,3 @@
-import re
 from unittest.mock import Mock
 
 from app.core.tracing import SafeSpanProcessor

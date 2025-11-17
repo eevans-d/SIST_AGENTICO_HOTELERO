@@ -44,7 +44,7 @@ async def seed_database():
         print("   Ejecuta: export $(cat .env.supabase | grep -v '^#' | xargs)")
         sys.exit(1)
     
-    print(f"🔗 Conectando a Supabase...")
+    print("🔗 Conectando a Supabase...")
     print(f"   URL: {postgres_url[:50]}...")  # Mostrar solo primeros 50 chars
     
     try:
@@ -99,7 +99,7 @@ async def seed_database():
             """))
             
             tenants = result.fetchall()
-            print(f"   📋 Tenants activos:")
+            print("   📋 Tenants activos:")
             for t in tenants:
                 print(f"      - {t[0]}: {t[1]} ({t[2]})")
             
@@ -133,7 +133,7 @@ async def verify_connection():
         async with engine.connect() as conn:
             result = await conn.execute(text("SELECT version()"))
             version = result.scalar()
-            print(f"✅ Conexión exitosa")
+            print("✅ Conexión exitosa")
             print(f"   PostgreSQL: {version[:80]}...")
             
         await engine.dispose()
