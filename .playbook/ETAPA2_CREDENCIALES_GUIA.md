@@ -34,29 +34,38 @@
 
 ## 1. QloApps PMS - Configuración
 
-### Opción A: Instalación Local de QloApps
+### ⚠️ IMPORTANTE: No hay imagen Docker oficial de QloApps
+
+**Estado actual**: La imagen `webkul/qloapps:latest` no existe en Docker Hub.
+
+**Opciones disponibles**:
+
+### Opción A: Instalación Manual de QloApps (Recomendado para Producción)
 
 **Requisitos**:
-- Docker Compose con profile `pms`
+- Servidor con Apache/Nginx
 - MySQL 5.7+
 - PHP 7.4+
 
 **Pasos**:
 
 ```bash
-# 1. Levantar QloApps con Docker Compose
-cd /home/eevan/SIST_AGENTICO_HOTELERO/agente-hotel-api
-docker compose --profile pms up -d qloapps mysql
+# 1. Descargar QloApps desde sitio oficial
+wget https://qloapps.com/download/latest.zip
+unzip latest.zip -d /var/www/qloapps
 
-# 2. Esperar a que QloApps esté listo (tarda ~2-3 min)
-docker compose logs -f qloapps
+# 2. Configurar base de datos MySQL
+mysql -u root -p
+CREATE DATABASE qloapps;
+CREATE USER 'qloapps'@'localhost' IDENTIFIED BY 'strong_password';
+GRANT ALL PRIVILEGES ON qloapps.* TO 'qloapps'@'localhost';
+FLUSH PRIVILEGES;
 
-# 3. Acceder a la interfaz de instalación
-# URL: http://localhost:8080
-# Usuario admin por defecto: admin@qloapps.com
-# Password: admin123 (cambiar inmediatamente)
+# 3. Acceder a instalador web
+# URL: http://localhost/qloapps
+# Seguir wizard de instalación
 
-# 4. Generar API Key desde el panel de administración
+# 4. Generar API Key desde panel de administración
 # Admin Panel > Advanced Parameters > Webservice
 # Enable webservice: Yes
 # Add new key > Generate
@@ -64,15 +73,38 @@ docker compose logs -f qloapps
 
 **Credenciales generadas**:
 ```bash
-QLOAPPS_BASE_URL=http://qloapps:8080
+QLOAPPS_BASE_URL=http://localhost/qloapps
 QLOAPPS_API_KEY=<key_generada_en_panel>
 QLOAPPS_USERNAME=admin@qloapps.com
 QLOAPPS_PASSWORD=<tu_password_admin>
 ```
 
-### Opción B: QloApps Cloud/Hosting Externo
+### Opción B: Usar Mock PMS Adapter (Desarrollo/Testing)
 
-Si tienes una instancia de QloApps ya en producción:
+**Para continuar con ETAPA 2 sin QloApps real**:
+
+Mantén `PMS_TYPE=mock` en `.env` y el sistema usará datos simulados.
+
+**Ventajas**:
+- No requiere instalación compleja
+- Datos consistentes para testing
+- Respuestas rápidas sin latencia de red
+
+**Limitaciones**:
+- No conecta con sistema real
+- Datos de prueba únicamente
+- No persiste reservas reales
+
+**Configuración**:
+```bash
+# En .env
+PMS_TYPE=mock
+CHECK_PMS_IN_READINESS=false
+```
+
+### Opción B: QloApps Cloud/Hosting Externo (Producción)
+
+Si tienes una instancia de QloApps ya en producción o usas QloApps SaaS:
 
 ```bash
 QLOAPPS_BASE_URL=https://tu-hotel.qloapps.com
@@ -83,8 +115,35 @@ QLOAPPS_PASSWORD=<password_api>
 
 **Validar conexión**:
 ```bash
-curl -X GET "http://localhost:8080/api" \
+curl -X GET "https://tu-hotel.qloapps.com/api" \
   -H "Authorization: Basic $(echo -n 'QLOAPPS_API_KEY:' | base64)"
+```
+
+### Opción C: Continuar con Mock PMS (Desarrollo - Sin Bloqueo)
+
+**RECOMENDADO PARA ETAPA 2 INICIAL**: Continúa usando MockPMSAdapter mientras se gestiona instalación real de QloApps.
+
+```bash
+# En .env - Mantener configuración actual
+PMS_TYPE=mock
+CHECK_PMS_IN_READINESS=false
+
+# Esto permite:
+# - Continuar con integración WhatsApp
+# - Continuar con integración Gmail
+# - Ejecutar tests de flujo completo
+# - Validar orchestrator y NLP
+```
+
+**Cuando QloApps real esté disponible**:
+```bash
+# Cambiar a modo real
+PMS_TYPE=qloapps
+CHECK_PMS_IN_READINESS=true
+
+# Agregar credenciales reales
+QLOAPPS_BASE_URL=https://...
+QLOAPPS_API_KEY=...
 ```
 
 ---
