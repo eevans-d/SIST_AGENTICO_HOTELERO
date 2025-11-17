@@ -1,118 +1,79 @@
 import time
-from typing import Dict, Any, Optional
+from typing import Optional, Dict, Any
+import logging
+from dynamic_tenant_service import get_tenant_meta
+from core.constants import DEFAULT_TENANT_CONFIG
+
+# Configure structured logging
+logger = logging.getLogger(__name__)
 
 class TenantConfigService:
-    """Service to manage tenant-specific configuration."""
+    _instance = None
+    _cache: Dict[str, Dict[str, Any]] = {}
+    _cache_timestamp: Dict[str, float] = {}
+    _cache_ttl: int = 300  # Cache TTL in seconds
 
-    def __init__(self, dynamic_tenant_service: Any, defaults: Dict[str, Any]) -> None:
-        self.dynamic_tenant_service = dynamic_tenant_service
-        self.defaults = defaults
-        self.cache: Dict[str, Any] = {}
-        self.cache_ttl: int = 300  # 5 minutes
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TenantConfigService, cls).__new__(cls)
+        return cls._instance
 
-    async def get_business_hours(self, tenant_id: str) -> Dict[str, Any]:
-        """Retrieve business hours for the tenant.
-
-        Args:
-            tenant_id (str): The ID of the tenant.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing start_hour, end_hour, timezone, and weekend_mode.
-        """
-        return await self._fetch_from_cache_or_service(
-            tenant_id, self._retrieve_business_hours
-        )
-
-    async def get_nlp_thresholds(self, tenant_id: str) -> Dict[str, float]:
-        """Retrieve NLP confidence thresholds for the tenant.
+    def get_tenant_config(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+        """Fetch tenant configuration.
 
         Args:
-            tenant_id (str): The ID of the tenant.
+            tenant_id (Optional[str]): The ID of the tenant.
 
         Returns:
-            Dict[str, float]: A dictionary containing very_low, low, and high thresholds.
+            Dict[str, Any]: The tenant configuration data.
         """
-        return await self._fetch_from_cache_or_service(
-            tenant_id, self._retrieve_nlp_thresholds
-        )
+        try:
+            if tenant_id:
+                # Check cache first
+                if tenant_id in self._cache and (time.time() - self._cache_timestamp[tenant_id]) < self._cache_ttl:
+                    logger.debug("Returning cached config for tenant ID: %s", tenant_id)
+                    return self._cache[tenant_id]
 
-    async def get_late_checkout_policy(self, tenant_id: str) -> Dict[str, Any]:
-        """Retrieve late checkout policy for the tenant.
+                # Fetch tenant metadata
+                tenant_meta = get_tenant_meta(tenant_id)
+                if not tenant_meta:
+                    logger.warning("No tenant metadata found for tenant ID: %s, falling back to defaults", tenant_id)
+                    return DEFAULT_TENANT_CONFIG
+                # Cache the result
+                self._cache[tenant_id] = tenant_meta
+                self._cache_timestamp[tenant_id] = time.time()
+                logger.info("Fetched and cached config for tenant ID: %s", tenant_id)
+                return tenant_meta
+            else:
+                logger.info("Fetching global defaults as tenant_id is None")
+                return DEFAULT_TENANT_CONFIG
+        except Exception as e:
+            logger.error("Error fetching tenant config for tenant ID: %s, error: %s", tenant_id, e)
+            return DEFAULT_TENANT_CONFIG
+
+    def invalidate_cache(self, tenant_id: Optional[str] = None) -> None:
+        """Invalidate cache for a specific tenant or all tenants.
 
         Args:
-            tenant_id (str): The ID of the tenant.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing enabled, default_time, and fee_percentage.
+            tenant_id (Optional[str]): The ID of the tenant.
         """
-        return await self._fetch_from_cache_or_service(
-            tenant_id, self._retrieve_late_checkout_policy
-        )
+        if tenant_id:
+            if tenant_id in self._cache:
+                del self._cache[tenant_id]
+                del self._cache_timestamp[tenant_id]
+                logger.info("Cache invalidated for tenant ID: %s", tenant_id)
+            else:
+                logger.warning("Attempted to invalidate non-existing cache for tenant ID: %s", tenant_id)
+        else:
+            self._cache.clear()
+            self._cache_timestamp.clear()
+            logger.info("Cache invalidated for all tenants")
 
-    async def get_response_template_overrides(self, tenant_id: str) -> Dict[str, str]:
-        """Retrieve custom response templates for the tenant.
 
-        Args:
-            tenant_id (str): The ID of the tenant.
+def get_tenant_config_service() -> TenantConfigService:
+    """Get the singleton instance of TenantConfigService.
 
-        Returns:
-            Dict[str, str]: A dictionary of custom templates.
-        """
-        return await self._fetch_from_cache_or_service(
-            tenant_id, self._retrieve_response_template_overrides
-        )
-
-    async def _fetch_from_cache_or_service(self, tenant_id: str, fetch_method: Any) -> Any:
-        """Fetch data either from the cache or the service if cache is expired.
-
-        Args:
-            tenant_id (str): The ID of the tenant.
-            fetch_method (Callable): The method to fetch data if cache is expired.
-
-        Returns:
-            Any: The fetched data.
-        """
-        current_time = time.time()
-        if tenant_id in self.cache:
-            cached_time, data = self.cache[tenant_id]
-            if (current_time - cached_time) < self.cache_ttl:
-                return data
-
-        # Cache expired, fetch from service
-        data = await fetch_method(tenant_id)
-        self.cache[tenant_id] = (current_time, data)
-        return data
-
-    async def _retrieve_business_hours(self, tenant_id: str) -> Dict[str, Any]:
-        # Integration with dynamic_tenant_service
-        metadata = await self.dynamic_tenant_service.fetch_metadata(tenant_id)
-        return {
-            'start_hour': metadata.get('start_hour', self.defaults['business_hours']['start_hour']),
-            'end_hour': metadata.get('end_hour', self.defaults['business_hours']['end_hour']),
-            'timezone': metadata.get('timezone', self.defaults['business_hours']['timezone']),
-            'weekend_mode': metadata.get('weekend_mode', self.defaults['business_hours']['weekend_mode'])
-        }
-
-    async def _retrieve_nlp_thresholds(self, tenant_id: str) -> Dict[str, float]:
-        # Integration with dynamic_tenant_service
-        metadata = await self.dynamic_tenant_service.fetch_metadata(tenant_id)
-        return {
-            'very_low': metadata.get('nlp_thresholds', {}).get('very_low', self.defaults['nlp_thresholds']['very_low']),
-            'low': metadata.get('nlp_thresholds', {}).get('low', self.defaults['nlp_thresholds']['low']),
-            'high': metadata.get('nlp_thresholds', {}).get('high', self.defaults['nlp_thresholds']['high'])
-        }
-
-    async def _retrieve_late_checkout_policy(self, tenant_id: str) -> Dict[str, Any]:
-        # Integration with dynamic_tenant_service
-        metadata = await self.dynamic_tenant_service.fetch_metadata(tenant_id)
-        return {
-            'enabled': metadata.get('late_checkout_policy', {}).get('enabled', self.defaults['late_checkout_policy']['enabled']),
-            'default_time': metadata.get('late_checkout_policy', {}).get('default_time', self.defaults['late_checkout_policy']['default_time']),
-            'fee_percentage': metadata.get('late_checkout_policy', {}).get('fee_percentage', self.defaults['late_checkout_policy']['fee_percentage'])
-        }
-
-    async def _retrieve_response_template_overrides(self, tenant_id: str) -> Dict[str, str]:
-        # Integration with dynamic_tenant_service
-        metadata = await self.dynamic_tenant_service.fetch_metadata(tenant_id)
-        return metadata.get('response_template_overrides', self.defaults['response_template_overrides'])
-
+    Returns:
+        TenantConfigService: The singleton instance.
+    """
+    return TenantConfigService()
