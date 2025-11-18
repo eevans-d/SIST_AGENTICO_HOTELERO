@@ -1,0 +1,45 @@
+groups:
+  - name: slo-recording-rules
+    interval: 30s
+    rules:
+      # Request/Errors SLI (5m and 30m)
+      - record: slo:http_requests:rate5m
+        expr: sum by (endpoint) (rate(http_requests_total[5m]))
+      - record: slo:http_requests:rate30m
+        expr: sum by (endpoint) (rate(http_requests_total[30m]))
+
+      - record: slo:http_errors_5xx:rate5m
+        expr: sum by (endpoint) (rate(http_requests_total{status=~"5.."}[5m]))
+      - record: slo:http_errors_5xx:rate30m
+        expr: sum by (endpoint) (rate(http_requests_total{status=~"5.."}[30m]))
+
+      - record: slo:error_ratio5m
+        expr: |
+          (sum(rate(http_requests_total{status=~"5.."}[5m])))
+            / ignoring(status) sum(rate(http_requests_total[5m]))
+      - record: slo:error_ratio30m
+        expr: |
+          (sum(rate(http_requests_total{status=~"5.."}[30m])))
+            / ignoring(status) sum(rate(http_requests_total[30m]))
+
+      # Burn rate against 99% SLO (error budget 1%)
+      - record: slo:burn_rate5m
+        expr: slo:error_ratio5m / 0.01
+      - record: slo:burn_rate30m
+        expr: slo:error_ratio30m / 0.01
+
+      # Latency percentiles (orchestrator)
+      - record: slo:orchestrator_latency:p95
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(orchestrator_latency_seconds_bucket[5m])))
+      - record: slo:orchestrator_latency:p99
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(orchestrator_latency_seconds_bucket[5m])))
+
+      # Latency percentiles (PMS API)
+      - record: slo:pms_api_latency:p95
+        expr: |
+          histogram_quantile(0.95, sum by (endpoint, le) (rate(pms_api_latency_seconds_bucket[5m])))
+      - record: slo:pms_api_latency:p99
+        expr: |
+          histogram_quantile(0.99, sum by (endpoint, le) (rate(pms_api_latency_seconds_bucket[5m])))

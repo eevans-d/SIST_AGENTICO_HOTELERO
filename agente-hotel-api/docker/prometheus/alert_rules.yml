@@ -88,6 +88,42 @@ groups:
           summary: "High PMS API Latency"
           description: "PMS API P95 latency: {{ $value | humanizeDuration }} (threshold: 5s). PMS may be slow or overloaded."
       
+      # H3: Extended Circuit Breaker Alert - Long Duration OPEN
+      - alert: PMSCircuitBreakerOpenExtended
+        expr: pms_circuit_breaker_state == 1
+        for: 5m
+        labels:
+          severity: critical
+          service: pms_adapter
+          component: circuit_breaker
+        annotations:
+          summary: "PMS Circuit Breaker OPEN for Extended Period (>5min)"
+          description: "Circuit breaker has been OPEN for over 5 minutes. PMS integration is completely down. Immediate action required."
+      
+      # H3: High Failure Streak (approaching threshold)
+      - alert: PMSHighFailureStreak
+        expr: pms_circuit_breaker_failure_streak >= 3
+        for: 2m
+        labels:
+          severity: warning
+          service: pms_adapter
+          component: circuit_breaker
+        annotations:
+          summary: "PMS Approaching Circuit Breaker Trip ({{ $value }}/5 failures)"
+          description: "PMS has {{ $value }} consecutive failures. Circuit breaker will trip at 5 failures."
+      
+      # H3: Critical Latency Threshold (lower than 5s for faster response)
+      - alert: PMSLatencyP95Critical
+        expr: histogram_quantile(0.95, rate(pms_api_latency_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: pms_adapter
+          component: performance
+        annotations:
+          summary: "PMS P95 Latency Critical (>2s)"
+          description: "PMS API P95 latency is {{ $value | humanizeDuration }}. Performance degradation detected."
+      
       # PMS Cache Hit Rate Low
       - alert: LowPMSCacheHitRate
         expr: rate(pms_cache_hits_total[5m]) / (rate(pms_cache_hits_total[5m]) + rate(pms_cache_misses_total[5m])) < 0.5

@@ -281,15 +281,6 @@ async def test_optimization_history_tracking(performance_optimizer):
     """Test de tracking del historial de optimizaciones"""
     initial_count = len(performance_optimizer.optimization_history)
 
-    # Ejecutar múltiples optimizaciones
-    mock_metrics = {
-        "cpu": {"usage_percent": 85.0},
-        "memory": {"usage_percent": 60.0},
-        "database": {"active_connections": 50},
-        "cache": {"hit_rate": 0.8},
-        "api": {"avg_response_time": 200},
-    }
-
     from app.services.performance_optimizer import OptimizationAction, OptimizationType
     # Ejecutar dos acciones y verificar crecimiento de historial
     cpu_action = OptimizationAction(
@@ -319,14 +310,6 @@ async def test_optimization_history_tracking(performance_optimizer):
 @pytest.mark.asyncio
 async def test_optimization_throttling(performance_optimizer):
     """Test de throttling de optimizaciones"""
-    mock_metrics = {
-        "cpu": {"usage_percent": 85.0},
-        "memory": {"usage_percent": 60.0},
-        "database": {"active_connections": 50},
-        "cache": {"hit_rate": 0.8},
-        "api": {"avg_response_time": 200},
-    }
-
     from app.services.performance_optimizer import OptimizationAction, OptimizationType
     # En la API actual no hay fuerza/throttling explícito: validamos que se puedan ejecutar acciones consecutivas
     action = OptimizationAction(
@@ -422,14 +405,6 @@ async def test_get_performance_optimizer_singleton():
 @pytest.mark.asyncio
 async def test_optimization_impact_estimation(performance_optimizer):
     """Test de estimación de impacto de optimizaciones"""
-    mock_metrics = {
-        "cpu": {"usage_percent": 85.0},
-        "memory": {"usage_percent": 60.0},
-        "database": {"active_connections": 50},
-        "cache": {"hit_rate": 0.8},
-        "api": {"avg_response_time": 200},
-    }
-
     from app.services.performance_optimizer import OptimizationAction, OptimizationType
     action = OptimizationAction(
         type=OptimizationType.CPU,
