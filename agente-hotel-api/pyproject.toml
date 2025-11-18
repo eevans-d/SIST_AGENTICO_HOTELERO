@@ -53,6 +53,7 @@ mypy = "^1.11.2"
 alembic = "^1.13.2"
 pyotp = "^2.9.0"
 locust = "^2.42.1"
+pyyaml = "^6.0.3"
 
 [build-system]
 requires = ["poetry-core"]
