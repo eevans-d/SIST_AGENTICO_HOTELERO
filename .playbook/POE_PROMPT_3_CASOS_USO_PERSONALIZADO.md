@@ -1,12 +1,12 @@
 # 🎯 PROMPT 3 DEFINITIVO: Batería de Casos de Uso Enterprise
 ## PERSONALIZADO PARA: SIST_AGENTICO_HOTELERO
 
-**OBJETIVO**: Crear un conjunto EXHAUSTIVO de casos de uso realistas para validar, entrenar y documentar el comportamiento del bot o3-pro especializado en **SIST_AGENTICO_HOTELERO**.
+**OBJETIVO**: Crear un conjunto EXHAUSTIVO de casos de uso realistas para validar, entrenar y documentar el comportamiento de un LLM avanzado especializado en **SIST_AGENTICO_HOTELERO**, ejecutándose en un entorno donde tiene **acceso directo al repositorio** (código, documentación, estructura de carpetas) y, opcionalmente, a los archivos `.txt` generados por el script de extracción.
 
 **PROYECTO**: Sistema multi-servicio de recepcionista hotelero AI  
 **Stack**: Python 3.12.3, FastAPI, Docker Compose (7 servicios)  
 **Status**: Staging-ready (8.9/10 deployment readiness, 31% coverage)  
-**Commit**: 97676bcc27f7f999f602432a07383ce09c5dee68  
+**Commit hash**: fa92c37882ef75c8c499bd328c757e355d5be478  
 
 ═══════════════════════════════════════════════════════════════════════════════
 ## ESTRUCTURA DE CADA CASO DE USO
@@ -1111,9 +1111,13 @@ Total de **12 casos de uso** enterprise-grade con:
 **FORMATO**: Markdown estructurado de ~600-800 líneas por caso de uso  
 **Total esperado**: ~8,000-10,000 líneas de documentación ejecutable
 
+**NOTA**: Los 5 casos de uso desarrollados completamente (UC-001 a UC-005) sirven como plantilla.
+Los casos UC-006 a UC-012 están esbozados con metadata y outline; pueden expandirse bajo demanda.
+
 ---
 
 **Creado**: 2025-11-18  
+**Actualizado**: 2025-11-18 (validación exhaustiva + alineación con arquitectura real)  
 **Personalizado para**: SIST_AGENTICO_HOTELERO  
-**Commit hash**: 97676bcc27f7f999f602432a07383ce09c5dee68  
-**Versión**: 1.0 (Personalizada)
+**Commit hash**: fa92c37882ef75c8c499bd328c757e355d5be478  
+**Versión**: 2.0 DEFINITIVA

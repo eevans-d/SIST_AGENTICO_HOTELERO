@@ -1,16 +1,22 @@
 # 📦 PROMPT 1 DEFINITIVO: Script de Extracción Enterprise-Grade
 ## PERSONALIZADO PARA: SIST_AGENTICO_HOTELERO
 
-**OBJETIVO**: Crear un script Python production-ready para extraer y preparar el repositorio completo **SIST_AGENTICO_HOTELERO** para ingesta en Poe.com (o3-pro bot).
+**OBJETIVO**: Crear un script Python production-ready para extraer y preparar el repositorio completo **SIST_AGENTICO_HOTELERO** en uno o varios archivos `.txt` y un `manifest.json`, pensados como **base de conocimiento textual externa** (por ejemplo, para plataformas tipo Poe.com u otros entornos donde el LLM solo vea texto y no tenga acceso directo al repo).
+
+**NOTA IMPORTANTE**: Este script genera archivos `.txt` útiles para:
+- Plataformas como Poe.com donde el LLM solo tiene acceso a archivos subidos (knowledge base textual)
+- Backup consolidado del código en formato legible
+- Análisis offline del proyecto sin acceso al repo git
+- Sin embargo, si el LLM tiene **acceso directo al repositorio**, usar los prompts PERSONALIZADO 2 y 3 directamente sin necesidad de estos `.txt`
 
 **CONTEXTO DEL PROYECTO**:
 - **Repositorio**: eevans-d/SIST_AGENTICO_HOTELERO
 - **Branch actual**: feature/etapa2-qloapps-integration
-- **Commit hash**: 97676bcc27f7f999f602432a07383ce09c5dee68
+- **Commit hash**: fa92c37882ef75c8c499bd328c757e355d5be478
 - **Stack principal**: Python 3.12.3, FastAPI, Docker Compose (7 servicios)
 - **Archivos procesables**: ~570 archivos (.py, .md, .yml, .json, Dockerfile, Makefile)
 - **Líneas de código Python**: ~102,062 líneas
-- **Tamaño estimado**: ~9.6 MB (sin dependencias)
+- **Tamaño estimado**: ~8.6 MB (sin dependencias, medido por script real)
 
 ═══════════════════════════════════════════════════════════════════════════════
 ## PARTE 1: ESPECIFICACIONES TÉCNICAS EXACTAS
@@ -32,7 +38,7 @@
 │ METADATA HEADER (primeras 25 líneas):                                   │
 │ - Timestamp de generación (ISO 8601 UTC)                                │
 │ - Número de parte (1/4, 2/4, etc.)                                      │
-│ - Commit hash: 97676bcc27f7f999f602432a07383ce09c5dee68                │
+│ - Commit hash: fa92c37882ef75c8c499bd328c757e355d5be478                │
 │ - Branch: feature/etapa2-qloapps-integration                            │
 │ - Total de archivos en esta parte                                       │
 │ - Checksum SHA256 del contenido                                         │
@@ -1010,14 +1016,14 @@ ls -lh POE_KNOWLEDGE_FILES/
 ✅ Documentación consolidada FASE 1 (SUPABASE.md 22KB)  
 
 **Próximos pasos**:
-1. Usuario proporciona PROMPT 2 y PROMPT 3
-2. Personalizar ambos con mismo nivel de detalle
-3. Generar script `prepare_for_poe.py` completo
-4. Ejecutar y validar
-5. Subir archivos a Poe.com para usar o3-pro
+1. Este PROMPT 1 especifica el script de extracción (ya implementado en `agente-hotel-api/scripts/prepare_for_poe.py`)
+2. PROMPT 2 proporciona el system prompt para un LLM con acceso al repo (o con acceso a los `.txt` generados)
+3. PROMPT 3 proporciona casos de uso enterprise para validación y entrenamiento
 
 ---
 **Creado**: 2025-11-18  
+**Actualizado**: 2025-11-18 (validación exhaustiva + alineación con script real)  
 **Personalizado para**: SIST_AGENTICO_HOTELERO  
+**Commit hash**: fa92c37882ef75c8c499bd328c757e355d5be478  
 **Mantenido por**: Backend AI Team  
-**Versión**: 1.0 (Personalizada)
+**Versión**: 2.0 DEFINITIVA
