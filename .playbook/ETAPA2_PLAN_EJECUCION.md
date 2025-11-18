@@ -536,7 +536,7 @@ cat .playbook/deploy_plan.json
 | **WhatsApp Live** | Envío/Recepción OK | - | ⏳ |
 | **Gmail Live** | Confirmaciones enviadas | - | ⏳ |
 | **E2E Tests** | Flujo completo pasa | - | ⏳ |
-| **Cobertura Global** | 70%+ | 22% | ⏳ |
+| **Cobertura Global** | 70%+ | 31% | ⏳ |
 | **Load Testing** | 500 RPS, P95<500ms | - | ⏳ |
 | **Security Audit** | 0 CRITICAL/HIGH | - | ⏳ |
 | **Deployment Ready** | Staging deploy OK | - | ⏳ |

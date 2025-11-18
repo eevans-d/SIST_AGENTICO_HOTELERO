@@ -244,6 +244,8 @@ SECRET_KEY=TPkfez1Poyqjf0ojKjmrj7aRHwVraOOS2cG7MivsHSE
 | **Endpoints sin Auth** | 19 críticos | 0 críticos | -100% |
 | **Deployment Readiness** | 8.9/10 | **9.3/10** | +4.5% |
 
+> Nota: El readiness consolidado del proyecto es 8.9/10 según `.github/copilot-instructions.md`. Los valores comparativos de esta tabla reflejan mejoras relativas dentro del contexto del hardening de seguridad, no el estado global actual.
+
 ### Checklist Pre-Producción
 
 - [x] SECRET_KEY generado (crypto-secure, 256-bit)
@@ -415,7 +417,8 @@ docker-compose restart agente-api
 - **Código production-ready** (100%)
 - **Tests creados** (104 tests, 45 passing)
 - **Documentación completa** (SECURITY_HARDENING_REPORT.md)
-- **Deployment Readiness**: **9.3/10** ⬆️ (antes: 8.9/10)
+**Deployment Readiness**: **9.3/10** ⬆️ (antes: 8.9/10)
+Nota: readiness global consolidado: **8.9/10** (fuente: `.github/copilot-instructions.md`).
 
 ### Vulnerabilidades Mitigadas
 

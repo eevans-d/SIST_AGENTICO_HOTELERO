@@ -20,6 +20,8 @@ ETAPA 1 ha sido **completada exitosamente al 100%** con todos los objetivos crí
 - ✅ Documentación consolidada y limpia
 - ✅ Configuración corregida (COOP/COEP disabled)
 
+Nota: Cobertura actual consolidada del repositorio: **31%** (fuente: `.github/copilot-instructions.md`). La base original de ETAPA 1 fue **22%**.
+
 **Estado Global:** **STAGING READY** con PMS mock → **LISTO PARA ETAPA 2**
 
 ---
