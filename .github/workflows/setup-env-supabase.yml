@@ -1,0 +1,76 @@
+name: Setup Supabase Environment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create .env.supabase from secrets
+        working-directory: agente-hotel-api
+        run: |
+          cat > .env.supabase << 'EOF'
+          # ============================================================================
+          # SUPABASE STAGING - Variables de Entorno (AUTO-GENERADO)
+          # ============================================================================
+          
+          ENVIRONMENT=staging
+          DEBUG=false
+          USE_SUPABASE=true
+          
+          # Database (Supabase PostgreSQL)
+          POSTGRES_URL=${{ secrets.DATABASE_URL }}
+          DATABASE_URL=${POSTGRES_URL}
+          ALEMBIC_DB_URL=${POSTGRES_URL}
+          
+          # Redis (Upstash)
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          
+          # Pool de conexiones
+          # Auto-ajustado por settings.py cuando USE_SUPABASE=true
+          
+          # PMS Configuration
+          PMS_TYPE=mock
+          PMS_BASE_URL=http://localhost:8080
+          PMS_TIMEOUT=30
+          PMS_HOTEL_ID=1
+          
+          # Observability
+          PROMETHEUS_URL=http://localhost:9090
+          GRAFANA_ADMIN_PASSWORD=admin_staging
+          OTLP_ENDPOINT=http://jaeger:4317
+          TRACE_SAMPLING_RATE=0.1
+          
+          # Security Secrets
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN || 'dev-token' }}
+          WHATSAPP_PHONE_NUMBER_ID=000000000000
+          WHATSAPP_VERIFY_TOKEN=${{ secrets.WHATSAPP_VERIFY_TOKEN || 'dev-verify' }}
+          WHATSAPP_APP_SECRET=${{ secrets.WHATSAPP_APP_SECRET || 'dev-secret' }}
+          GMAIL_USERNAME=dev@example.com
+          GMAIL_APP_PASSWORD=${{ secrets.GMAIL_APP_PASSWORD || 'dev-gmail' }}
+          PMS_API_KEY=dev-pms-key
+          
+          # Multi-tenancy
+          TENANCY_DYNAMIC_ENABLED=true
+          
+          # Audio Processing
+          AUDIO_ENABLED=true
+          TTS_ENGINE=espeak
+          WHISPER_MODEL=base
+          WHISPER_LANGUAGE=es
+          
+          # Health Checks
+          CHECK_PMS_IN_READINESS=false
+          EOF
+          
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add agente-hotel-api/.env.supabase
+          git commit -m "chore: auto-generate .env.supabase from GitHub Secrets" || echo "No changes to commit"
+          git push

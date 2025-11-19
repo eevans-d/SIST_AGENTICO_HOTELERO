@@ -4,7 +4,6 @@ Unit tests for Dead Letter Queue (DLQ) service.
 Tests DLQ enqueue, retry logic, exponential backoff, and permanent failures.
 """
 
-import asyncio
 import json
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -111,43 +110,43 @@ async def test_retry_with_exponential_backoff(dlq_service, redis_client, sample_
     error = Exception("Temporary failure")
     
     # First failure (retry_count=0) → backoff 60s
-    dlq_id_1 = await dlq_service.enqueue_failed_message(
+    await dlq_service.enqueue_failed_message(
         message=sample_message, error=error, retry_count=0
     )
-    
+
     # Extract retry_at from Redis call (sorted set score)
     zadd_call_1 = redis_client.zadd.call_args_list[0]
     retry_timestamp_1 = list(zadd_call_1[0][1].values())[0]
     retry_at_1 = datetime.fromtimestamp(retry_timestamp_1)
     expected_retry_1 = datetime.utcnow() + timedelta(seconds=60)
-    
+
     # Allow 2 second tolerance for execution time
     assert abs((retry_at_1 - expected_retry_1).total_seconds()) < 2
-    
+
     # Second failure (retry_count=1) → backoff 120s
     redis_client.reset_mock()
-    dlq_id_2 = await dlq_service.enqueue_failed_message(
+    await dlq_service.enqueue_failed_message(
         message=sample_message, error=error, retry_count=1
     )
-    
+
     zadd_call_2 = redis_client.zadd.call_args_list[0]
     retry_timestamp_2 = list(zadd_call_2[0][1].values())[0]
     retry_at_2 = datetime.fromtimestamp(retry_timestamp_2)
     expected_retry_2 = datetime.utcnow() + timedelta(seconds=120)
-    
+
     assert abs((retry_at_2 - expected_retry_2).total_seconds()) < 2
-    
+
     # Third failure (retry_count=2) → backoff 240s
     redis_client.reset_mock()
-    dlq_id_3 = await dlq_service.enqueue_failed_message(
+    await dlq_service.enqueue_failed_message(
         message=sample_message, error=error, retry_count=2
     )
-    
+
     zadd_call_3 = redis_client.zadd.call_args_list[0]
     retry_timestamp_3 = list(zadd_call_3[0][1].values())[0]
     retry_at_3 = datetime.fromtimestamp(retry_timestamp_3)
     expected_retry_3 = datetime.utcnow() + timedelta(seconds=240)
-    
+
     assert abs((retry_at_3 - expected_retry_3).total_seconds()) < 2
 
 
@@ -262,8 +261,6 @@ async def test_retry_success_removes_from_dlq(dlq_service, redis_client, sample_
 @pytest.mark.asyncio
 async def test_dlq_ttl_expiration(dlq_service, redis_client):
     """Test that messages expire after TTL (7 days)."""
-    current_time = datetime.utcnow()
-    ttl_cutoff = current_time - timedelta(days=7)
     
     # Mock Redis to return expired message IDs
     expired_ids = [b"expired-1", b"expired-2", b"expired-3"]

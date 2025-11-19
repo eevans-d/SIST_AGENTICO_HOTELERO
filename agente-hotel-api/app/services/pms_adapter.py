@@ -9,15 +9,22 @@ from uuid import uuid4
 import httpx
 import redis.asyncio as redis
 from prometheus_client import Counter, Gauge, Histogram
-from ..core.prometheus import registry, metrics
+from pydantic import ValidationError
 
+from ..core.prometheus import registry, metrics
 from ..core.settings import settings
 from ..core.circuit_breaker import CircuitBreaker
 from ..core.logging import logger
 from ..core.retry import retry_with_backoff
+from ..core.rate_limiter import SlidingWindowRateLimiter
 from ..exceptions.pms_exceptions import CircuitBreakerOpenError, PMSError, PMSAuthError
 from .business_metrics import record_reservation, failed_reservations
 from .qloapps_client import create_qloapps_client
+from ..models.pms_schemas import (
+    RoomAvailability,
+    AvailabilityResponse,
+    ReservationConfirmation,
+)
 
 # Métricas Prometheus: usar definiciones centralizadas para evitar duplicados
 def _safe_counter(name: str, documentation: str, labelnames=None):
@@ -108,6 +115,13 @@ class QloAppsAdapter:
         )
         # Inicializar estado del CB
         circuit_breaker_state.set(0)
+
+        # Rate limiter para PMS (QloApps límite: ~80 req/min)
+        # Usamos 70 req/min como margen de seguridad
+        self.rate_limiter = SlidingWindowRateLimiter(
+            max_requests=70,  # 70 requests max
+            window_seconds=60,  # en 60 segundos
+        )
 
     async def close(self):
         """Close connections."""
@@ -217,6 +231,11 @@ class QloAppsAdapter:
             return cached_data
 
         async def fetch_availability():
+            # Rate limit: wait if needed antes de llamar al PMS
+            await self.rate_limiter.wait_if_needed(
+                operation="check_availability", max_wait=5.0
+            )
+            
             try:
                 # Call QloApps API
                 rooms = await self.qloapps.check_availability(
@@ -245,14 +264,33 @@ class QloAppsAdapter:
             # Normalize response
             normalized = self._normalize_qloapps_availability(data, guests)
 
-            # Cache the result (fresh)
-            await self._set_cache(cache_key, normalized, ttl=300)
+            # SECURITY FIX: Validate response schema before caching
+            try:
+                # Validar cada room contra schema
+                validated_rooms = [
+                    RoomAvailability(**room).model_dump() for room in normalized
+                ]
+            except ValidationError as e:
+                logger.error(
+                    "pms_response_validation_failed",
+                    operation="check_availability",
+                    error=str(e),
+                    data_preview=str(normalized)[:200],
+                )
+                # Métricas de error de validación
+                pms_errors.labels(
+                    operation="check_availability", error_type="validation_error"
+                ).inc()
+                raise PMSError(f"Invalid PMS response format: {e}")
+
+            # Cache the result (fresh) - usar datos validados
+            await self._set_cache(cache_key, validated_rooms, ttl=300)
             # Remove stale marker since we have fresh data
             await self.redis.delete(stale_cache_key)
             circuit_breaker_state.set(0)
             pms_operations.labels(operation="check_availability", status="success").inc()
 
-            return normalized
+            return validated_rooms
 
         except CircuitBreakerOpenError:
             logger.error("Circuit breaker is open, attempting fallback with stale cache")
@@ -312,6 +350,11 @@ class QloAppsAdapter:
             reservation_data["reservation_uuid"] = str(uuid4())
 
         async def post_reservation():
+            # Rate limit: wait if needed antes de crear reserva
+            await self.rate_limiter.wait_if_needed(
+                operation="create_reservation", max_wait=5.0
+            )
+            
             try:
                 # Parse dates
                 check_in = datetime.fromisoformat(reservation_data["checkin"].replace("Z", "+00:00")).date()
@@ -359,17 +402,32 @@ class QloAppsAdapter:
                     retry_with_backoff, post_reservation, operation_label="create_reservation"
                 )
 
+            # SECURITY FIX: Validate reservation confirmation schema
+            try:
+                validated_result = ReservationConfirmation(**result).model_dump()
+            except ValidationError as e:
+                logger.error(
+                    "pms_reservation_validation_failed",
+                    operation="create_reservation",
+                    error=str(e),
+                    data_preview=str(result)[:200],
+                )
+                pms_errors.labels(
+                    operation="create_reservation", error_type="validation_error"
+                ).inc()
+                raise PMSError(f"Invalid reservation response format: {e}")
+
             # Invalidate availability cache
             await self._invalidate_cache_pattern("availability:*")
 
             pms_operations.labels(operation="create_reservation", status="success").inc()
 
             # Métrica de negocio: registrar reserva confirmada
-            self._record_business_reservation(reservation_data, result, status="confirmed")
+            self._record_business_reservation(reservation_data, validated_result, status="confirmed")
 
-            logger.info(f"✅ Reservation created successfully: {result.get('booking_reference')}")
+            logger.info(f"✅ Reservation created successfully: {validated_result.get('booking_reference')}")
 
-            return result
+            return validated_result
 
         except CircuitBreakerOpenError:
             pms_operations.labels(operation="create_reservation", status="circuit_open").inc()
