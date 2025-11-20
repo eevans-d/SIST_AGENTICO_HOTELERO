@@ -402,12 +402,12 @@ class SessionManager:
         """
         # Obtener sesión actual (crea si no existe)
         session = await self.get_or_create_session(user_id, canal="whatsapp", tenant_id=tenant_id)
-
-        # Actualizar campo en contexto
+        # Actualizar campo tanto a nivel top-level como en el contexto para compatibilidad
+        # con tests que consultan claves en el nivel superior.
         if "context" not in session:
             session["context"] = {}
         session["context"][data_key] = data_value
-
+        session[data_key] = data_value
         # Guardar sesión actualizada
         await self.update_session(user_id, session, tenant_id=tenant_id)
 

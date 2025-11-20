@@ -32,8 +32,32 @@ class QRService:
     """Service for generating QR codes for hotel bookings and services."""
 
     def __init__(self):
-        self.temp_dir = Path(tempfile.gettempdir()) / "qr_codes"
-        self.temp_dir.mkdir(exist_ok=True)
+        # Intentar crear el directorio temporal para QR con tolerancia a fallos
+        base_tmp = Path(tempfile.gettempdir())
+        preferred = base_tmp / "qr_codes"
+        self.temp_dir = preferred
+        try:
+            self.temp_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            # Fallback 1: directorio en el home del usuario
+            logger.warning(
+                "qr_service.temp_dir_init_failed_primary",
+                temp_dir=str(self.temp_dir),
+                error=str(e),
+            )
+            try:
+                self.temp_dir = Path.home() / ".qr_codes"
+                self.temp_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e2:
+                # Fallback 2: directorio en el cwd del proceso
+                logger.warning(
+                    "qr_service.temp_dir_init_failed_home",
+                    temp_dir=str(self.temp_dir),
+                    error=str(e2),
+                )
+                self.temp_dir = Path.cwd() / "qr_codes"
+                # Si esto falla, dejamos que la excepción suba (poco probable)
+                self.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # QR Code styling
         self.qr_config = {
@@ -107,6 +131,13 @@ class QRService:
             filename = f"booking_{booking_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             file_path = self.temp_dir / filename
 
+            # Asegurar modo RGB/RGBA antes de guardar (algunos generadores devuelven modo '1')
+            if getattr(branded_img, "mode", "RGB") not in ("RGB", "RGBA"):
+                try:
+                    branded_img = branded_img.convert("RGB")
+                except Exception:
+                    pass
+
             branded_img.save(file_path, "PNG")
 
             logger.info(
@@ -171,6 +202,13 @@ class QRService:
 
             filename = f"checkin_{booking_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             file_path = self.temp_dir / filename
+
+            # Garantizar modo apropiado
+            if getattr(branded_img, "mode", "RGB") not in ("RGB", "RGBA"):
+                try:
+                    branded_img = branded_img.convert("RGB")
+                except Exception:
+                    pass
 
             branded_img.save(file_path, "PNG")
 
@@ -237,6 +275,13 @@ class QRService:
 
             filename = f"service_{service_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             file_path = self.temp_dir / filename
+
+            # Garantizar modo apropiado
+            if getattr(branded_img, "mode", "RGB") not in ("RGB", "RGBA"):
+                try:
+                    branded_img = branded_img.convert("RGB")
+                except Exception:
+                    pass
 
             branded_img.save(file_path, "PNG")
 

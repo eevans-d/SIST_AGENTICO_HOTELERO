@@ -444,6 +444,9 @@ async def handle_whatsapp_webhook(request: Request):
                 # Incluir contenido estructurado si existe
                 if "content" in result:
                     response_payload["content"] = result.get("content")
+                    # Compatibilidad: si es texto, exponer también en campo 'response'
+                    if result.get("response_type") == "text" and isinstance(result.get("content"), str):
+                        response_payload["response"] = result.get("content")
                 # Campos opcionales de imagen/audio
                 for extra_key in ("image_url", "image_caption", "audio_data"):
                     if extra_key in result:
