@@ -5,7 +5,7 @@
 | Incident | Alert | Root Cause | Mitigation | Recovery |
 |----------|-------|-----------|-----------|----------|
 | PMS Down | PMSCircuitBreakerOpen | PMS service unavailable | Workfow rolls back to mock mode or manual responses | Verify PMS URL, auth, and network; redeploy |
-| DB Down | DatabaseDown | Postgres crashed or network issue | App returns 503; readiness fails | Restore from backup or contact DB provider (Fly PG) |
+| DB Down | DatabaseDown | Postgres crashed or network issue | App returns 503; readiness fails | Restore from backup or contact DB provider |
 | Redis Down | RedisDown | Redis OOM or crashed | Cache disabled; rate limiting in-memory | Check Redis memory; restart; scale up |
 | High Latency | HighOrchestrationLatency | NLP slowness or PMS timeout | Rate limiting kicks in; queue builds | Analyze bottleneck; optimize; scale horizontally |
 | High Errors | HighErrorRate | Bad data, timeouts, or crashes | Monitor logs; error rate dashboard | Identify cause; patch & redeploy |
@@ -35,9 +35,9 @@
    # docker logs agente-api | grep -i pms | tail -20
    ```
 
-2. **Check Fly logs** (if on Fly):
+2. **Check logs**:
    ```bash
-   flyctl logs -a agente-hotel-api | grep -i pms
+   (Comando de logs) | grep -i pms
    ```
 
 3. **Check DNS & Network**:
@@ -52,7 +52,7 @@
 
 ```bash
 # Set PMS_TYPE=mock to disable PMS checks temporarily
-flyctl secrets set PMS_TYPE=mock -a agente-hotel-api
+(Comando para actualizar variable de entorno PMS_TYPE)
 
 # Notify customers: availability checks unavailable; using mock data
 # Dashboard shows "degraded mode"
@@ -62,7 +62,7 @@ flyctl secrets set PMS_TYPE=mock -a agente-hotel-api
 
 ```bash
 # If you have a backup PMS:
-flyctl secrets set PMS_BASE_URL=https://backup-qloapps.yourdomain.com -a agente-hotel-api
+(Comando para actualizar variable de entorno PMS_BASE_URL)
 ```
 
 ### Recovery (5–15 min)
@@ -74,8 +74,8 @@ flyctl secrets set PMS_BASE_URL=https://backup-qloapps.yourdomain.com -a agente-
 
 2. **Redeploy with PMS_TYPE=qloapps**
    ```bash
-   flyctl secrets set PMS_TYPE=qloapps -a agente-hotel-api
-   flyctl deploy --remote-only -a agente-hotel-api
+   (Comando para actualizar variable de entorno PMS_TYPE)
+   (Comando de deploy)
    ```
 
 3. **Verify Circuit Breaker Recovers**
@@ -119,10 +119,10 @@ flyctl secrets set PMS_BASE_URL=https://backup-qloapps.yourdomain.com -a agente-
    psql -h postgres -U agente_user -d agente_hotel -c "SELECT 1"
    ```
 
-3. **Check Fly DB status** (if using Fly Postgres):
+3. **Check DB status**:
    ```bash
-   flyctl postgres list -a agente-hotel-api
-   # or check from Fly dashboard for DB machine
+   (Comando de estado de DB)
+   # or check from dashboard
    ```
 
 ### Mitigation (2–5 min)
@@ -133,16 +133,16 @@ flyctl secrets set PMS_BASE_URL=https://backup-qloapps.yourdomain.com -a agente-
 # Local Docker:
 docker-compose restart postgres
 
-# Fly (Fly Postgres addon):
-flyctl postgres connect -a agente-hotel-api  # to verify it's up
+# Remote DB:
+(Comando de conexión a DB)
 ```
 
 **Option B: Failover to Backup DB** (if available)
 
 ```bash
 # Update DATABASE_URL to point to backup:
-flyctl secrets set DATABASE_URL=postgresql+asyncpg://user:pass@backup-db:5432/agente_hotel -a agente-hotel-api
-flyctl deploy --remote-only -a agente-hotel-api
+(Comando para actualizar variable de entorno DATABASE_URL)
+(Comando de deploy)
 ```
 
 ### Recovery (5–30 min)
@@ -159,12 +159,12 @@ flyctl deploy --remote-only -a agente-hotel-api
 
 3. **Redeploy App**
    ```bash
-   flyctl deploy --remote-only -a agente-hotel-api
+   (Comando de deploy)
    ```
 
 4. **Monitor readiness**
    ```bash
-   curl https://agente-hotel-api.fly.dev/health/ready
+   curl <APP_URL>/health/ready
    ```
 
 ### Post-Incident
@@ -215,8 +215,8 @@ flyctl deploy --remote-only -a agente-hotel-api
 **Option A: Scale Up Machines**
 
 ```bash
-# Increase Fly VM size temporarily
-flyctl scale memory 512 -a agente-hotel-api  # from 256MB to 512MB
+# Increase VM size temporarily
+(Comando de escalado vertical)
 ```
 
 **Option B: Enable Caching Aggressively**
@@ -224,14 +224,14 @@ flyctl scale memory 512 -a agente-hotel-api  # from 256MB to 512MB
 ```bash
 # Increase PMS cache TTL
 # In app/core/settings.py, update PMS_CACHE_TTL and redeploy
-flyctl secrets set PMS_CACHE_TTL_SECONDS=300 -a agente-hotel-api
+(Comando para actualizar variable de entorno PMS_CACHE_TTL_SECONDS)
 ```
 
 **Option C: Disable NLP for Non-Critical Paths**
 
 ```bash
 # Temporarily disable audio processing
-flyctl secrets set AUDIO_ENABLED=false -a agente-hotel-api
+(Comando para actualizar variable de entorno AUDIO_ENABLED)
 ```
 
 ### Recovery (5–15 min)
@@ -293,14 +293,14 @@ flyctl secrets set AUDIO_ENABLED=false -a agente-hotel-api
 ```bash
 # Increase Slowapi limit from 120/min to 300/min
 # In app/core/settings.py or via env var
-flyctl secrets set RATE_LIMIT_PER_MINUTE=300 -a agente-hotel-api
+(Comando para actualizar variable de entorno RATE_LIMIT_PER_MINUTE)
 ```
 
 **Option B: Scale Machines Horizontally**
 
 ```bash
 # Add more machines to distribute load
-flyctl scale count 3 -a agente-hotel-api  # e.g., scale to 3 instances
+(Comando de escalado horizontal)
 ```
 
 **Option C: Block Suspicious IP**

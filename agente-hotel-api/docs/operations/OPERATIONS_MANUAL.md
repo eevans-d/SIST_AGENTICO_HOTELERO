@@ -7,7 +7,7 @@ owner: Backend AI Team
 # Manual de Operaciones
 
 ## 1. Descripción
-Servicio FastAPI que orquesta WhatsApp/Gmail con PMS (QloApps o mock). Desplegado en Fly.io. Observabilidad con Prometheus/Grafana/Alertmanager y Jaeger (local con docker-compose).
+Servicio FastAPI que orquesta WhatsApp/Gmail con PMS (QloApps o mock). Desplegado en contenedor Docker. Observabilidad con Prometheus/Grafana/Alertmanager y Jaeger (local con docker-compose).
 
 ## 2. Health checks
 - Liveness: `GET /health/live` (siempre 200)
@@ -29,11 +29,11 @@ Servicio FastAPI que orquesta WhatsApp/Gmail con PMS (QloApps o mock). Desplegad
 - Programar cron en entorno operativo si aplica.
 
 ## 6. Despliegue
-- Fly.io: `flyctl deploy` con `Dockerfile.optimized`.
+- Despliegue: `(Comando de deploy)` con `Dockerfile.optimized`.
 - Argumento de build `INCLUDE_AUDIO=false` por defecto (reduce tamaño). Cambiar a `true` si se requiere stack de audio (ffmpeg/whisper).
 
 ## 7. Seguridad
-- Secretos en Fly (secrets) y `.env` local (no commitear).
+- Secretos en gestor de secretos y `.env` local (no commitear).
 - Dependencias escaneadas con `trivy`; abordar HIGH/CRITICAL.
 
 ## 8. Testing & calidad

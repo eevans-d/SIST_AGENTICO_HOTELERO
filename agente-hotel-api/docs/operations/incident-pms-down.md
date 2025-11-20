@@ -10,14 +10,14 @@
 1. QloApps PMS fuera de servicio (5 fallos en 30s)
 2. Timeout en requests PMS (> 15s sin respuesta)
 3. Credenciales PMS expiradas (API_KEY, token)
-4. Red interrumpida (Fly ↔ QloApps)
+4. Red interrumpida (App ↔ QloApps)
 
 ## Resolución
 
 ### Paso 1: Confirmar estado PMS (1-2 min)
 ```bash
-# 1a. Ver logs de Fly
-flyctl logs -a agente-hotel-api --limit 100 | grep -i "pms\|circuit"
+# 1a. Ver logs
+(Comando de logs) | grep -i "pms\|circuit"
 
 # 1b. Buscar timestamp de apertura del CB
 # Ej: "Circuit breaker opened at 2025-10-25T14:32:10Z"
@@ -42,7 +42,7 @@ curl -w "@curl-format.txt" -o /dev/null -s https://hotel-pms-url/api/availabilit
 ```bash
 # Opción: Reiniciar app (reseta CB a CLOSED)
 # PERO: esto cierra también cache. Solo si es crítico.
-flyctl restart -a agente-hotel-api
+(Comando de reinicio)
 ```
 
 ### Paso 4: Fallback automático activo

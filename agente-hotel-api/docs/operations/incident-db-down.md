@@ -8,7 +8,7 @@
 ## Causas Probables
 1. Neon está fuera de servicio o reiniciando
 2. Conexión agotada (connection pool lleno)
-3. Red interrumpida (Fly ↔ Neon)
+3. Red interrumpida (App ↔ Neon)
 4. Credenciales DATABASE_URL expiradas
 
 ## Resolución
@@ -16,21 +16,18 @@
 ### Paso 1: Confirmar estado (1-2 min)
 ```bash
 # 1a. Verificar health endpoint
-curl https://agente-hotel-api.fly.dev/health/ready
+curl <APP_URL>/health/ready
 
-# 1b. Ver logs recientes en Fly
-flyctl logs -a agente-hotel-api --limit 50
+# 1b. Ver logs recientes
+# (Comando de logs de tu plataforma)
 
 # 1c. Si ves "connection pool exhausted": restart necesario
 ```
 
-### Paso 2: Reiniciar máquinas Fly (3-5 min)
+### Paso 2: Reiniciar aplicación (3-5 min)
 ```bash
-# Soft restart (recarga sin downtime si tienes 2+ máquinas)
-flyctl restart -a agente-hotel-api
-
-# Alternativa: hard restart (30s downtime)
-flyctl apps restart agente-hotel-api
+# Reiniciar servicio
+# (Comando de reinicio de tu plataforma)
 ```
 
 ### Paso 3: Verificar conectividad Neon (2 min)

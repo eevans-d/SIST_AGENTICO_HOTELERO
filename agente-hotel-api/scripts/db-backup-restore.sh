@@ -77,8 +77,7 @@ restore_from_branch() {
     log "Alternativamente, via Neon CLI:"
     log "  neon branch promote $branch_name -p agente-hotel-prod"
     log ""
-    log "IMPORTANTE: Luego de promote, redeploya la app:"
-    log "  flyctl deploy -a agente-hotel-api"
+    log "IMPORTANTE: Luego de promote, redeploya la app en tu plataforma de hosting."
 }
 
 pitr_restore() {
@@ -93,8 +92,8 @@ pitr_restore() {
     log "3. Selecciona timestamp: $target_timestamp"
     log "4. Nombre branch: 'recovery-$target_timestamp'"
     log "5. Copia nueva CONNECTION STRING (que incluye punto de restore)"
-    log "6. Actualiza SECRET en Fly: flyctl secrets set DATABASE_URL='<nueva_url>' -a agente-hotel-api"
-    log "7. Valida: curl https://agente-hotel-api.fly.dev/health/ready"
+    log "6. Actualiza la variable de entorno DATABASE_URL en tu plataforma de hosting"
+    log "7. Valida el endpoint de health"
     log "8. Si OK, promote: neon branch promote recovery-$target_timestamp"
 }
 

@@ -87,7 +87,7 @@ neon branch promote recovery-pitr-20251025 \
   --project-id agente-hotel-prod
 
 # 5. Redeploy app
-flyctl deploy -a agente-hotel-api
+(Comando de deploy)
 ```
 
 ### 2.3 Después de Promote: Validación
@@ -97,14 +97,14 @@ flyctl deploy -a agente-hotel-api
 sleep 30
 
 # 2. Verifica health
-curl -f https://agente-hotel-api.fly.dev/health/ready
+curl -f <APP_URL>/health/ready
 # Output: {"status": "ready", "services": {"postgres": "ok", ...}}
 
 # 3. Verifica datos via API
-curl https://agente-hotel-api.fly.dev/api/guests -H "Authorization: Bearer ..."
+curl <APP_URL>/api/guests -H "Authorization: Bearer ..."
 
 # 4. Valida logs (último 5 min)
-flyctl logs -a agente-hotel-api --since 5m | grep ERROR
+(Comando de logs) | grep ERROR
 ```
 
 ---
@@ -138,7 +138,7 @@ neon branch promote restore-reservations-20251023 \
   --project-id agente-hotel-prod
 
 # Redeploy app para sincronizar
-flyctl deploy -a agente-hotel-api
+(Comando de deploy)
 ```
 
 ---
@@ -323,10 +323,10 @@ pg_restore -Fc -d hotel_restored backup_20251020.dump
 
 **Paso 3**: Validar datos
 
-**Paso 4**: Cambiar CONNECTION STRING en Fly
+**Paso 4**: Cambiar CONNECTION STRING en la plataforma
 ```bash
-flyctl secrets set DATABASE_URL="postgresql://..." -a agente-hotel-api
-flyctl deploy -a agente-hotel-api
+(Comando para actualizar variable de entorno DATABASE_URL)
+(Comando de deploy)
 ```
 
 **RTO**: 20-30 minutos (incluye validación + deploy)

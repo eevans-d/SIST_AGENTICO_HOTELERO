@@ -1,5 +1,5 @@
 #!/bin/bash
-# Backup/Restore Script for Agente Hotelero Postgres on Fly.io
+# Backup/Restore Script for Agente Hotelero Postgres
 # Usage:
 #   ./backup-restore.sh backup  [file_prefix]  - Create backup
 #   ./backup-restore.sh restore [backup_file]  - Restore from backup
@@ -36,15 +36,10 @@ log_success() {
     echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS:${NC} $1" | tee -a "${LOG_FILE}"
 }
 
-# Function to get Postgres connection string from Fly
+# Function to get Postgres connection string
 get_postgres_url() {
-    # Try to get DATABASE_URL from Fly secrets
+    # Try to get DATABASE_URL from environment
     local db_url
-    
-    # If we're running on Fly machines, get from app config
-    if command -v flyctl &> /dev/null; then
-        db_url=$(flyctl secrets list -a "${APP_NAME}" 2>/dev/null | grep DATABASE_URL | awk '{print $2}' || echo "")
-    fi
     
     # Fallback to environment variable
     if [ -z "$db_url" ]; then
@@ -52,7 +47,7 @@ get_postgres_url() {
     fi
     
     if [ -z "$db_url" ]; then
-        log_error "DATABASE_URL not found. Set it in Fly secrets or environment."
+        log_error "DATABASE_URL not found. Set it in environment."
         return 1
     fi
     

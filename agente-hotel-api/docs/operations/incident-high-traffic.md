@@ -17,7 +17,7 @@
 ### Paso 1: Confirmar rate limiting (1 min)
 ```bash
 # Ver qué endpoints reciben más 429
-flyctl logs -a agente-hotel-api | grep "429\|RateLimitExceeded"
+(Comando de logs) | grep "429\|RateLimitExceeded"
 
 # Medir tasa de requests exitosos (200, 201, etc.)
 # vs rechazados (429)
@@ -26,7 +26,7 @@ flyctl logs -a agente-hotel-api | grep "429\|RateLimitExceeded"
 ### Paso 2: Identificar origen (2-5 min)
 ```bash
 # Buscar IPs repetidas en logs de 429
-flyctl logs -a agente-hotel-api --limit 500 | grep "429" | awk '{print $X}' | sort | uniq -c | sort -rn
+(Comando de logs) | grep "429" | awk '{print $X}' | sort | uniq -c | sort -rn
 # (Ajusta columna X según formato de logs)
 
 # Si ves IP repetida: probablemente cliente legítimo con retry loop
@@ -50,19 +50,19 @@ flyctl logs -a agente-hotel-api --limit 500 | grep "429" | awk '{print $X}' | so
 #### Si es ATAQUE SOSPECHOSO (muchas IPs, pattern aleatorio)
 1. **Activar protección**:
    ```bash
-   # Escalar Fly.io a más máquinas temporalmente
-   flyctl scale count 5 --app agente-hotel-api
+   # Escalar a más máquinas temporalmente
+   (Comando de escalado)
    ```
 2. **Implementar CAPTCHA o verificación** (más lento, pero seguro):
    - Modificar `/webhooks/whatsapp` para validar X-Hub-Signature
    - Meta Cloud siempre envía firma; verificar en middleware
-3. **Contactar Fly.io DDoS protection** si ataque persiste
+3. **Contactar protección DDoS** si ataque persiste
 
 #### Si es EVENTO LEGÍTIMO (todos los clientes, no pattern)
 1. **Escalar temporalmente**:
    ```bash
-   # Aumentar máquinas en Fly
-   flyctl scale count 10 --app agente-hotel-api
+   # Aumentar máquinas
+   (Comando de escalado)
    
    # Aumentar límite en slowapi (temporal, en memory)
    # Nota: requiere restart si cambio en settings
@@ -71,13 +71,13 @@ flyctl logs -a agente-hotel-api --limit 500 | grep "429" | awk '{print $X}' | so
    - P95 latency debe mantenerse < 1s
    - Error rate debe mantenerse < 2%
 3. **Post-pico**:
-   - Reducir máquinas: `flyctl scale count 2`
+   - Reducir máquinas: (Comando de escalado inverso)
    - Documentar: causa, duración, impacto
 
 ### Paso 4: Validación post-resolución
 ```bash
 # Debe estar de nuevo en 200/201, sin 429
-curl -i https://agente-hotel-api.fly.dev/webhooks/whatsapp -X POST \
+curl -i <APP_URL>/webhooks/whatsapp -X POST \
   -H "Content-Type: application/json" \
   -d '{"test": true}'
 

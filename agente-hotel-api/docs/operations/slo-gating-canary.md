@@ -132,10 +132,10 @@ jobs:
 **Phase 1 (Canary 5%)**: Route 5% traffic → Wait 10 min, monitor
 
 ```bash
-# Fly.io canary config (if scaling to multiple machines)
-# flyctl scale count --vm=shared 1 # primary (95%)
-# flyctl scale count --vm=shared 1 # canary (5%)
-# Use Fly regions or Nginx upstream to split traffic
+# Canary config (if scaling to multiple machines)
+# (Comando de escalado primary)
+# (Comando de escalado canary)
+# Use regions or Nginx upstream to split traffic
 ```
 
 **Phase 2 (Canary 25%)**: If no errors, increase to 25%
@@ -192,13 +192,13 @@ jobs:
       
       - name: Build & Deploy to Staging
         run: |
-          flyctl deploy -a agente-hotel-api-staging
+          (Comando de deploy staging)
           sleep 30
       
       - name: Smoke Tests
         run: |
           for i in {1..10}; do
-            curl -f http://agente-hotel-api-staging.fly.dev/health/ready && break || sleep 6
+            curl -f <STAGING_URL>/health/ready && break || sleep 6
           done
       
       - name: Integration Tests (5 min)
@@ -248,8 +248,8 @@ jobs:
       - name: Phase 1: Deploy Canary (5%)
         run: |
           # Scale secondary machine
-          flyctl scale count --vm=shared 1 -a agente-hotel-api-canary
-          flyctl deploy -a agente-hotel-api-canary
+          (Comando de escalado canary)
+          (Comando de deploy canary)
           sleep 30
           
           # Route 5% traffic via DNS or load balancer
@@ -264,7 +264,7 @@ jobs:
             
             if (( $(echo "$ERROR_RATE > 0.05" | bc -l) )); then
               echo "❌ Canary error rate too high: $ERROR_RATE. Rollback!"
-              flyctl deploy -a agente-hotel-api  # Redeploy primary
+              (Comando de redeploy primary)  # Redeploy primary
               exit 1
             fi
             
@@ -286,7 +286,7 @@ jobs:
         run: |
           # Promote canary to primary
           echo "🟢 Promoting canary to production (100%)"
-          flyctl scale count --vm=shared 2 -a agente-hotel-api
+          (Comando de escalado production)
           # Keep canary running for quick rollback
 
       - name: Post-Deployment SLO Report
@@ -313,7 +313,7 @@ jobs:
           ## Links
           - Production Dashboard: http://localhost:3000/d/pms_health
           - Prometheus: http://localhost:9090
-          - Logs: flyctl logs -a agente-hotel-api
+          - Logs: (Comando de logs)
           EOF
           
           # Post to Slack
@@ -357,18 +357,18 @@ set -e
 
 echo "🔄 Initiating rollback..."
 
-# Get previous version (git tag or Fly release)
+# Get previous version (git tag or release)
 PREVIOUS_VERSION=$(git describe --tags --abbrev=0 | tail -1)
 
 echo "Rolling back to version: $PREVIOUS_VERSION"
 
 # Redeploy previous version
-flyctl deploy -a agente-hotel-api \
+(Comando de deploy) \
   --image ghcr.io/eevans-d/agente-hotel-api:$PREVIOUS_VERSION
 
 # Validate
 sleep 30
-curl -f https://agente-hotel-api.fly.dev/health/ready || {
+curl -f <APP_URL>/health/ready || {
   echo "❌ Rollback health check failed"
   exit 1
 }
@@ -377,7 +377,7 @@ echo "✅ Rollback complete. Version: $PREVIOUS_VERSION"
 echo ""
 echo "Post-Rollback Actions:"
 echo "1. Verify all dashboards green: http://localhost:3000"
-echo "2. Check logs for errors: flyctl logs -a agente-hotel-api"
+echo "2. Check logs for errors: (Comando de logs)"
 echo "3. Notify #ops-incidents on Slack"
 echo "4. Create incident post-mortem"
 ```
@@ -445,7 +445,7 @@ echo "4. Create incident post-mortem"
 
 - [ ] Prometheus + Grafana running and scraping metrics
 - [ ] AlertManager configured with Slack webhooks
-- [ ] Two Fly.io apps: `agente-hotel-api` (prod) + `agente-hotel-api-staging` (canary)
+- [ ] Two apps: `agente-hotel-api` (prod) + `agente-hotel-api-staging` (canary)
 - [ ] GitHub Secrets: `PROMETHEUS_PROD_URL`, `PROMETHEUS_STAGING_URL`
 - [ ] Baseline metrics captured (before first canary)
 

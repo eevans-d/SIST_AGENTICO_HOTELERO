@@ -9,13 +9,12 @@
 
 ## 1. Secrets Inventory
 
-### 1.1 Production Secrets (Fly.io)
+### 1.1 Production Secrets
 
 | Secret Name | Type | Source | Rotation | Owner | Alert if Exposed |
 |---|---|---|---|---|---|
 | `DATABASE_URL` | PostgreSQL Connection | Neon Console | Quarterly + post-incident | DevOps | Critical |
 | `REDIS_URL` | Redis Connection | Upstash Console | Quarterly + post-incident | DevOps | Critical |
-| `FLY_API_TOKEN` | Fly.io Auth | flyctl auth | Quarterly | DevOps | Critical |
 | `PMS_API_KEY` | QloApps Auth | QloApps Admin | Quarterly | Integration | High |
 | `WHATSAPP_TOKEN` | Meta Cloud API | Meta Business Manager | Quarterly | Product | High |
 | `GMAIL_SERVICE_KEY` | Google Service Account | Google Cloud Console | Quarterly | Product | High |
@@ -106,11 +105,11 @@ gh secret set DATABASE_URL_NEW --body "$NEW_DATABASE_URL"
 # Verify: curl https://agente-hotel-api-staging.fly.dev/health/ready
 
 # 3. Once staging validates, deploy production with new secret
-flyctl secrets set DATABASE_URL="$NEW_DATABASE_URL" -a agente-hotel-api
+(Comando para actualizar variable de entorno DATABASE_URL)
 
 # 4. Wait for redeployment + health check
 sleep 30
-curl -f https://agente-hotel-api.fly.dev/health/ready
+curl -f <APP_URL>/health/ready
 
 # 5. Delete old GitHub secret
 gh secret delete DATABASE_URL_OLD
@@ -123,13 +122,13 @@ gh secret delete DATABASE_URL_OLD
 
 ```bash
 # 1. Check logs for connection errors
-flyctl logs -a agente-hotel-api --since 5m | grep -i "connection\|error"
+(Comando de logs) | grep -i "connection\|error"
 
 # 2. Verify metrics flowing
 curl http://localhost:9090/api/v1/query?query=up | jq '.data.result[] | select(.labels.job=="agente-api")'
 
 # 3. Test critical endpoints
-curl -f https://agente-hotel-api.fly.dev/api/guests  # Requires guest data
+curl -f <APP_URL>/api/guests  # Requires guest data
 
 # 4. Update rotation log
 cat >> .github/ROTATION_LOG.md <<EOF
@@ -157,7 +156,7 @@ EOF
 
 ```bash
 # Option A: Simple rotation (if data can be cleared)
-flyctl secrets set REDIS_URL="rediss://default:newpass@newhost:newport" -a agente-hotel-api
+(Comando para actualizar variable de entorno REDIS_URL)
 
 # Option B: Zero-downtime with replication
 # 1. Configure Redis source replication to new instance
@@ -177,37 +176,7 @@ flyctl secrets set REDIS_URL="rediss://default:newpass@newhost:newport" -a agent
 gh secret delete REDIS_URL_OLD
 ```
 
-### 2.4 FLY_API_TOKEN Rotation
-
-**Step 1: Generate New Token**
-
-```bash
-# Login to Fly.io locally
-flyctl auth login
-
-# Create new auth token
-NEW_FLY_TOKEN=$(flyctl auth token --output=json | jq -r '.token')
-```
-
-**Step 2: Update GitHub Secret**
-
-```bash
-# Substitute new token
-gh secret set FLY_API_TOKEN --body "$NEW_FLY_TOKEN"
-
-# Test: Run a workflow that uses flyctl
-# E.g., manual dispatch of deploy-fly.yml
-```
-
-**Step 3: Revoke Old Token**
-
-```bash
-# In Fly.io Console or CLI:
-# flyctl auth revoke <old_token_hash>
-# (Check available commands: flyctl auth --help)
-```
-
-### 2.5 Third-Party API Keys (PMS, WhatsApp, Gmail)
+### 2.4 Third-Party API Keys (PMS, WhatsApp, Gmail)
 
 **Procedure** (varies by provider):
 
@@ -215,14 +184,14 @@ gh secret set FLY_API_TOKEN --body "$NEW_FLY_TOKEN"
 1. QloApps Admin Console → API Keys
 2. Generate new key (or rotate existing)
 3. Copy new key
-4. Update secret: `flyctl secrets set PMS_API_KEY="..." -a agente-hotel-api`
+4. Update secret: (Comando para actualizar variable de entorno PMS_API_KEY)
 5. Test: `curl $PMS_ENDPOINT/api/availability` with new key
 6. Revoke old key
 
 **WhatsApp (Meta)**:
 1. Meta Business Manager → App → Settings → API Credentials
 2. Generate new token (or create new app)
-3. Update secret: `flyctl secrets set WHATSAPP_TOKEN="..." -a agente-hotel-api`
+3. Update secret: (Comando para actualizar variable de entorno WHATSAPP_TOKEN)
 4. Redeploy app
 5. Send test message via WhatsApp to verify connection
 6. Revoke old token in Meta Console
@@ -232,13 +201,13 @@ gh secret set FLY_API_TOKEN --body "$NEW_FLY_TOKEN"
 2. Create new service account key (or regenerate existing)
 3. Download JSON key file
 4. Encode as base64 or inject as secret
-5. Update: `flyctl secrets set GMAIL_SERVICE_KEY="$(cat key.json | base64)" -a agente-hotel-api`
+5. Update: (Comando para actualizar variable de entorno GMAIL_SERVICE_KEY)
 6. Test: Send test email via Gmail API
 7. Delete old key from Google Console
 
 **JWT_SECRET**:
 1. Generate new secret: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Update: `flyctl secrets set JWT_SECRET="..." -a agente-hotel-api`
+2. Update: (Comando para actualizar variable de entorno JWT_SECRET)
 3. Note: All existing JWTs become invalid (users re-login)
 4. Monitor for auth errors in logs
 
@@ -271,11 +240,11 @@ git filter-branch -f --env-filter '
 # 1. Generate new secret (do not commit to git!)
 NEW_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
 
-# 2. Update in Fly.io only (via CLI, not GitHub)
-flyctl secrets set EXPOSED_SECRET="$NEW_SECRET" -a agente-hotel-api
+# 2. Update in platform only (via CLI, not GitHub)
+(Comando para actualizar variable de entorno EXPOSED_SECRET)
 
 # 3. Verify deployment + health
-sleep 30 && curl -f https://agente-hotel-api.fly.dev/health/ready
+sleep 30 && curl -f <APP_URL>/health/ready
 
 # 4. Document incident
 cat >> SECURITY_LOG.md <<EOF

@@ -42,13 +42,6 @@ secrets/*.json
 .env.railway.local
 .env.railway.local.backup.*
 
-# Fly.io secrets and local files (NUNCA commitear)
-.env.fly
-.env.fly.local
-.env.fly.local.backup.*
-.flyio-backups/
-.fly/
-
 # Docker
 *.tar
 *.gz

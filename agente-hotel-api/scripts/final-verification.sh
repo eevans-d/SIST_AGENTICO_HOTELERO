@@ -119,14 +119,7 @@ fi
 # ============================================================================
 echo -e "\n${BLUE}[2/6] Deployment Configuration${NC}\n"
 
-# 2.1 fly.toml exists
-if [[ -f "$PROJECT_ROOT/fly.toml" ]]; then
-    log_check "fly.toml present" PASS
-else
-    log_check "fly.toml present" WARN "Not found locally (app may be managed remotely). Run 'flyctl launch' to create if needed"
-fi
-
-# 2.2 .env.example exists
+# 2.1 .env.example exists
 if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
     log_check ".env.example documentation" PASS
 else
@@ -147,35 +140,36 @@ fi
 # ============================================================================
 # 3. HEALTH CHECKS
 # ============================================================================
-echo -e "\n${BLUE}[3/6] Fly.io Health Checks${NC}\n"
+echo -e "\n${BLUE}[3/6] Health Checks${NC}\n"
 
 # 3.1 Health live endpoint
-if command -v flyctl &> /dev/null; then
-    FLY_APP=$(grep "^app = " "$PROJECT_ROOT/fly.toml" 2>/dev/null | cut -d'"' -f2 || echo "agente-hotel-api")
-    if LIVE_RESPONSE=$(curl -s -w "\n%{http_code}" "https://$FLY_APP.fly.dev/health/live" 2>/dev/null); then
+if command -v curl &> /dev/null; then
+    # Assuming local check or configurable URL
+    APP_URL="${APP_URL:-http://localhost:8002}"
+    if LIVE_RESPONSE=$(curl -s -w "\n%{http_code}" "$APP_URL/health/live" 2>/dev/null); then
         HTTP_CODE=$(echo "$LIVE_RESPONSE" | tail -n1)
         if [[ "$HTTP_CODE" == "200" ]]; then
-            log_check "Fly: /health/live endpoint" PASS "(HTTP $HTTP_CODE)"
+            log_check "/health/live endpoint" PASS "(HTTP $HTTP_CODE)"
         else
-            log_check "Fly: /health/live endpoint" FAIL "(HTTP $HTTP_CODE)"
+            log_check "/health/live endpoint" FAIL "(HTTP $HTTP_CODE)"
         fi
     else
-        log_check "Fly: /health/live endpoint" WARN "Cannot reach deployed app (may not be deployed yet)"
+        log_check "/health/live endpoint" WARN "Cannot reach app at $APP_URL"
     fi
     
     # 3.2 Health ready endpoint
-    if READY_RESPONSE=$(curl -s "https://$FLY_APP.fly.dev/health/ready" 2>/dev/null); then
+    if READY_RESPONSE=$(curl -s "$APP_URL/health/ready" 2>/dev/null); then
         if echo "$READY_RESPONSE" | jq -e '.ready == true' > /dev/null 2>&1; then
-            log_check "Fly: /health/ready endpoint" PASS "All checks passing"
+            log_check "/health/ready endpoint" PASS "All checks passing"
         else
-            log_check "Fly: /health/ready endpoint" WARN "Some checks failing (may be expected)"
+            log_check "/health/ready endpoint" WARN "Some checks failing (may be expected)"
             echo "  Checks: $(echo "$READY_RESPONSE" | jq '.checks' 2>/dev/null || echo "unable to parse")"
         fi
     else
-        log_check "Fly: /health/ready endpoint" WARN "Cannot reach deployed app"
+        log_check "/health/ready endpoint" WARN "Cannot reach app at $APP_URL"
     fi
 else
-    log_check "Fly.io health checks" WARN "flyctl not installed, skipping Fly verification"
+    log_check "Health checks" WARN "curl not installed, skipping verification"
 fi
 
 # ============================================================================
@@ -271,16 +265,15 @@ fi
 # ============================================================================
 echo -e "\n${BLUE}[6/6] Deployment Readiness${NC}\n"
 
-# 6.1 Secrets configured (on Fly)
-if command -v flyctl &> /dev/null && [[ -n "${FLY_APP:-}" ]]; then
-    SECRETS=$(flyctl secrets list -a "$FLY_APP" 2>/dev/null | grep -c "DATABASE_URL\|REDIS_URL" || echo "0")
-    if [[ "$SECRETS" -ge 2 ]]; then
-        log_check "Fly secrets configured" PASS "($SECRETS of 2 required)"
+# 6.1 Secrets configured
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+    if grep -q "DATABASE_URL" "$PROJECT_ROOT/.env" && grep -q "REDIS_URL" "$PROJECT_ROOT/.env"; then
+        log_check "Secrets configured (.env)" PASS
     else
-        log_check "Fly secrets configured" WARN "Only $SECRETS of 2 required secrets set"
+        log_check "Secrets configured (.env)" WARN "Missing DATABASE_URL or REDIS_URL in .env"
     fi
 else
-    log_check "Fly secrets configured" WARN "Cannot verify (flyctl unavailable or app not set)"
+    log_check "Secrets configured" WARN ".env file not found"
 fi
 
 # 6.2 pyproject.toml valid
