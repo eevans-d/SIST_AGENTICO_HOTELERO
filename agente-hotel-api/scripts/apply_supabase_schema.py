@@ -24,6 +24,7 @@ import asyncio
 import os
 import sys
 import time
+import ssl
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -133,7 +134,8 @@ def parse_sql_statements(sql_text: str) -> List[str]:
         # Separación por ';' solo si estamos fuera de strings, comentarios y dollar-quoted
         if ch == ';' and not in_squote and not in_dquote and not in_block_comment and not in_line_comment and dollar_tag is None:
             stmt = ''.join(buf).strip()
-            if stmt:
+            # Ignorar statements vacíos o que solo contienen comentarios
+            if stmt and not stmt.startswith('--') and not stmt.startswith('/*'):
                 statements.append(stmt)
             buf = []
             i += 1
@@ -144,7 +146,7 @@ def parse_sql_statements(sql_text: str) -> List[str]:
 
     # Último buffer
     tail = ''.join(buf).strip()
-    if tail:
+    if tail and not tail.startswith('--') and not tail.startswith('/*'):
         statements.append(tail)
 
     return statements
@@ -174,11 +176,21 @@ async def apply_schema(database_url: str, schema_file: Path, dry_run: bool = Fal
         base, _sep, query = database_url.partition('?')
         parts = [p for p in query.split('&') if not p.startswith('sslmode=') and p]
         sanitized_url = base + (('?' + '&'.join(parts)) if parts else '')
-        connect_kwargs["ssl"] = True
+        
+        # Crear contexto SSL permisivo para evitar errores de certificado self-signed en poolers
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_kwargs["ssl"] = ssl_ctx
+        
         print(f"🔐 Normalizando URL Supabase (quitando sslmode): {sanitized_url}")
     elif "supabase" in database_url:
-        connect_kwargs["ssl"] = True
-        print("🔐 Activando SSL explícito para Supabase")
+        # Crear contexto SSL permisivo
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_kwargs["ssl"] = ssl_ctx
+        print("🔐 Activando SSL explícito (sin verificación) para Supabase")
 
     conn = await asyncpg.connect(sanitized_url, **connect_kwargs)
     try:
