@@ -122,10 +122,6 @@ class Settings(BaseSettings):
     espeak_speed: int = 150  # words per minute
     espeak_pitch: int = 50  # 0-99
 
-    # Audio Caching Configuration
-    audio_cache_enabled: bool = True
-    audio_cache_ttl_seconds: int = 86400  # 24 hours default
-
     # Audio Processing Limits
     audio_max_size_mb: int = 25  # WhatsApp limit
     audio_timeout_seconds: int = 30

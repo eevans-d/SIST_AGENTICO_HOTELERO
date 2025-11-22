@@ -38,11 +38,16 @@ if is_supabase:
             "idle_in_transaction_session_timeout": "10000",  # 10s
         }
     )
+    # Enforce SSL for Supabase connections
+    connect_args["ssl"] = "require"
+    # Disable prepared statements for PgBouncer (Supabase transaction pooler)
+    connect_args["statement_cache_size"] = 0
 
 if settings.environment == Environment.PROD:
     engine_kwargs.update({"pool_timeout": 30})
 
 engine_kwargs["connect_args"] = connect_args
+print(f"DEBUG: connect_args={connect_args}")
 
 engine = create_async_engine(POSTGRES_URL, **engine_kwargs)
 

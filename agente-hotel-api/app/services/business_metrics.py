@@ -127,9 +127,9 @@ response_time_by_channel = Histogram(
 #   * delega .labels(...) al Counter real con label "reason"
 class _SimpleValue:
     def __init__(self):
-        self._v = 0
+        self._v: float = 0.0
 
-    def get(self):
+    def get(self) -> float:
         return self._v
 
     def add(self, n: float):

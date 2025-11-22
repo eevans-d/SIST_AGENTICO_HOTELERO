@@ -9,6 +9,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
+import app.services.orchestrator  # Import module for patching globals
+
 from app.models.unified_message import UnifiedMessage
 from app.services.orchestrator import Orchestrator
 from app.services.session_manager import SessionManager
@@ -62,15 +64,16 @@ class TestAvailabilityWithRoomPhoto:
         )
 
         # Mock NLP to detect check_availability intent
+        # Patch is_business_hours to ensure we don't get an after-hours response
         with patch.object(
             orchestrator.nlp_engine,
             "process_text",
             return_value={
                 "intent": {"name": "check_availability", "confidence": 0.95},
-                "entities": [],
+                "entities": {},
                 "language": "en",
             },
-        ):
+        ), patch.object(app.services.orchestrator, "is_business_hours", return_value=True, create=True):
             result = await orchestrator.handle_unified_message(message)
 
         # Should include image in response
@@ -97,10 +100,10 @@ class TestAvailabilityWithRoomPhoto:
             "process_text",
             return_value={
                 "intent": {"name": "check_availability", "confidence": 0.95},
-                "entities": [],
+                "entities": {},
                 "language": "en",
             },
-        ):
+        ), patch.object(app.services.orchestrator, "is_business_hours", return_value=True, create=True):
             result = await orchestrator.handle_unified_message(message)
 
         # Should not have image_url or it should be None
@@ -126,10 +129,10 @@ class TestAvailabilityWithRoomPhoto:
             "process_text",
             return_value={
                 "intent": {"name": "check_availability", "confidence": 0.95},
-                "entities": [],
+                "entities": {},
                 "language": "en",
             },
-        ):
+        ), patch.object(app.services.orchestrator, "is_business_hours", return_value=True, create=True):
             result = await orchestrator.handle_unified_message(message)
 
         # Should have caption
@@ -157,10 +160,10 @@ class TestAvailabilityWithRoomPhoto:
             "process_text",
             return_value={
                 "intent": {"name": "check_availability", "confidence": 0.95},
-                "entities": [],
+                "entities": {},
                 "language": "en",
             },
-        ):
+        ), patch.object(app.services.orchestrator, "is_business_hours", return_value=True, create=True):
             result = await orchestrator.handle_unified_message(message)
 
         # Should still return valid response
@@ -202,10 +205,10 @@ class TestAvailabilityWithRoomPhoto:
                 "process_text",
                 return_value={
                     "intent": {"name": "check_availability", "confidence": 0.95},
-                    "entities": [],
+                    "entities": {},
                     "language": "en",
                 },
-            ):
+            ), patch.object(app.services.orchestrator, "is_business_hours", return_value=True, create=True):
                 # Mock TTS
                 with patch.object(
                     orchestrator.audio_processor, "generate_audio_response", return_value=b"fake_audio_data"

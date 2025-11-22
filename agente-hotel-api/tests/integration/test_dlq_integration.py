@@ -198,10 +198,11 @@ async def test_orchestrator_pms_failure_enqueues_to_dlq(redis_client, db_session
     )
     
     # Mock NLP to return check_availability intent
-    with patch.object(orchestrator.nlp_engine, "process_text", new_callable=AsyncMock) as mock_nlp:
+    with patch.object(orchestrator.nlp_engine, "process_text", new_callable=AsyncMock) as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
         mock_nlp.return_value = {
             "intent": {"name": "check_availability", "confidence": 0.9},
-            "entities": [],
+            "entities": {},
             "language": "es",
         }
         

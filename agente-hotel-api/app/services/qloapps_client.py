@@ -5,7 +5,7 @@ API Documentation: https://qloapps.com/qlo-reservation-api/
 """
 
 from datetime import date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 import httpx
 from ..core.logging import logger
 from ..core.settings import settings
@@ -106,7 +106,7 @@ class QloAppsClient:
 
             # Parse response
             if response.content:
-                return response.json()
+                return cast(Dict[str, Any], response.json())
             return {}
 
         except httpx.HTTPError as e:
@@ -387,7 +387,7 @@ class QloAppsClient:
 
         response = await self._request("PUT", f"/hotel_bookings/{booking_id}", json_data=update_data)
 
-        return response.get("booking", {})
+        return cast(Dict[str, Any], response.get("booking", {}))
 
     async def cancel_booking(self, booking_id: int, reason: Optional[str] = None) -> bool:
         """
@@ -423,12 +423,12 @@ class QloAppsClient:
             Created customer with ID
         """
         response = await self._request("POST", "/customers", json_data=customer_data)
-        return response.get("customer", {})
+        return cast(Dict[str, Any], response.get("customer", {}))
 
     async def get_customer(self, customer_id: int) -> Dict[str, Any]:
         """Get customer by ID."""
         response = await self._request("GET", f"/customers/{customer_id}")
-        return response.get("customer", {})
+        return cast(Dict[str, Any], response.get("customer", {}))
 
     async def search_customer_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """
@@ -445,7 +445,7 @@ class QloAppsClient:
 
         customers = response.get("customers", [])
         if customers:
-            return customers[0]
+            return cast(Dict[str, Any], customers[0])
         return None
 
     # ============================================================================
@@ -455,12 +455,12 @@ class QloAppsClient:
     async def get_hotels(self) -> List[Dict[str, Any]]:
         """Get list of all hotels."""
         response = await self._request("GET", "/hotels")
-        return response.get("hotels", [])
+        return cast(List[Dict[str, Any]], response.get("hotels", []))
 
     async def get_hotel(self, hotel_id: int) -> Dict[str, Any]:
         """Get specific hotel details."""
         response = await self._request("GET", f"/hotels/{hotel_id}")
-        return response.get("hotel", {})
+        return cast(Dict[str, Any], response.get("hotel", {}))
 
     # ============================================================================
     # UTILITY METHODS

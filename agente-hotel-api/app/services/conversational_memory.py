@@ -8,7 +8,7 @@ Este módulo proporciona funcionalidades para:
 4. Gestionar "follow-up questions" sin repetir toda la información
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 import json
 import re
@@ -119,15 +119,15 @@ class ConversationalMemory:
                 "history": [],
                 "language": "es",  # Por defecto español
                 "last_intent": None,
-                "last_update": datetime.utcnow().isoformat(),
+                "last_update": datetime.now(timezone.utc).isoformat(),
             }
 
             # Actualizar historial
-            history_entry = {"text": text, "intent": intent, "timestamp": datetime.utcnow().isoformat()}
+            history_entry = {"text": text, "intent": intent, "timestamp": datetime.now(timezone.utc).isoformat()}
             context["history"] = (context.get("history", []) + [history_entry])[-10:]  # Mantener solo los últimos 10
 
             # Actualizar entities con timestamps
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
 
             # Procesar nuevas entidades
             for entity in entities:
@@ -254,11 +254,14 @@ class ConversationalMemory:
                 return {}
 
             # Filtrar entidades por tipo y comprobar vigencia
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             for entity_type in entity_types:
                 if entity_type in context["entities"]:
                     entity_data = context["entities"][entity_type]
+                    # Asegurar que updated_at tenga timezone si no lo tiene
                     updated_at = datetime.fromisoformat(entity_data["updated_at"])
+                    if updated_at.tzinfo is None:
+                        updated_at = updated_at.replace(tzinfo=timezone.utc)
 
                     # Comprobar si la entidad sigue siendo relevante (no ha caducado)
                     if current_time - updated_at <= ENTITY_LIFESPAN.get(entity_type, timedelta(minutes=15)):
@@ -332,7 +335,10 @@ class ConversationalMemory:
 
             # Verificar si hay una conversación en curso
             last_update = datetime.fromisoformat(context["last_update"])
-            if datetime.utcnow() - last_update > timedelta(minutes=5):
+            if last_update.tzinfo is None:
+                last_update = last_update.replace(tzinfo=timezone.utc)
+                
+            if datetime.now(timezone.utc) - last_update > timedelta(minutes=5):
                 # Si ha pasado más de 5 minutos, no es una pregunta de seguimiento
                 return False
 

@@ -15,7 +15,7 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.trace import Status, StatusCode, SpanKind
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 from functools import wraps
 import structlog
 import re
@@ -83,11 +83,11 @@ class SafeSpanProcessor(SimpleSpanProcessor):
 
 def setup_tracing():
     """Setup OpenTelemetry tracing with configurable sampling and PII redaction."""
-    resource = Resource.create({SERVICE_NAME: TRACE_CONFIG["service_name"]})
+    resource = Resource.create({SERVICE_NAME: str(TRACE_CONFIG["service_name"])})
     
     # Configure sampler based on sampling_rate (0.0 to 1.0)
     # ParentBased ensures distributed tracing consistency across services
-    sampler = ParentBased(TraceIdRatioBased(TRACE_CONFIG["sampling_rate"]))
+    sampler = ParentBased(TraceIdRatioBased(cast(float, TRACE_CONFIG["sampling_rate"])))
     provider = TracerProvider(resource=resource, sampler=sampler)
 
     try:

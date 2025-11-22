@@ -55,12 +55,21 @@ async def test_audio_message_full_integration_flow(orchestrator, audio_message):
     """
 
     # 1. Mock del STT (transcripción)
-    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
+    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt, \
+         patch.object(orchestrator.nlp_engine, "process_text") as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
+        
         mock_stt.return_value = {
             "text": "Hola, quisiera saber si tienen habitaciones disponibles para este fin de semana",
             "confidence": 0.92,
             "success": True,
             "language": "es",
+        }
+        
+        mock_nlp.return_value = {
+            "intent": {"name": "check_availability", "confidence": 0.95},
+            "entities": {"checkin_date": "2023-10-20", "checkout_date": "2023-10-22"},
+            "language": "es"
         }
 
         # 2. Mock del TTS (síntesis)
@@ -99,12 +108,21 @@ async def test_audio_intent_detection_and_response(orchestrator, audio_message):
     """Test que verifica la detección de intents específicos desde audio."""
 
     # Test para intent de disponibilidad
-    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
+    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt, \
+         patch.object(orchestrator.nlp_engine, "process_text") as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
+        
         mock_stt.return_value = {
             "text": "¿Tienen habitaciones disponibles para dos personas?",
             "confidence": 0.89,
             "success": True,
             "language": "es",
+        }
+        
+        mock_nlp.return_value = {
+            "intent": {"name": "check_availability", "confidence": 0.95},
+            "entities": {"guests": 2},
+            "language": "es"
         }
 
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:
@@ -141,21 +159,35 @@ async def test_audio_error_handling_integration(orchestrator, audio_message):
         mock_session = MagicMock()
         orchestrator.session_manager.get_or_create_session.return_value = mock_session
 
-        # Debería manejar el error graciosamente
-        with pytest.raises(Exception):
-            await orchestrator.handle_unified_message(audio_message)
+        # Debería manejar el error graciosamente (NO levantar excepción)
+        # El orchestrator captura la excepción, loguea, y continúa con texto vacío
+        result = await orchestrator.handle_unified_message(audio_message)
+        
+        # Verificar que se manejó el error
+        assert audio_message.texto == ""
+        assert "audio_error" in audio_message.metadata
+        assert audio_message.metadata["audio_error"] == "Error al transcribir audio"
 
 
 @pytest.mark.asyncio
 async def test_audio_fallback_to_text_response(orchestrator, audio_message):
     """Test del fallback a respuesta de texto cuando TTS falla."""
 
-    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
+    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt, \
+         patch.object(orchestrator.nlp_engine, "process_text") as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
+        
         mock_stt.return_value = {
             "text": "Hola, ¿cuáles son sus precios?",
             "confidence": 0.85,
             "success": True,
             "language": "es",
+        }
+        
+        mock_nlp.return_value = {
+            "intent": {"name": "pricing_info", "confidence": 0.90},
+            "entities": {},
+            "language": "es"
         }
 
         # Mock TTS que falla
@@ -177,12 +209,21 @@ async def test_audio_fallback_to_text_response(orchestrator, audio_message):
 async def test_audio_cache_integration(orchestrator, audio_message):
     """Test de integración del sistema de cache con audio."""
 
-    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
+    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt, \
+         patch.object(orchestrator.nlp_engine, "process_text") as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
+        
         mock_stt.return_value = {
             "text": "¿Dónde están ubicados?",
             "confidence": 0.91,
             "success": True,
             "language": "es",
+        }
+        
+        mock_nlp.return_value = {
+            "intent": {"name": "hotel_location", "confidence": 0.95},
+            "entities": {},
+            "language": "es"
         }
 
         # Mock del servicio de cache a nivel de generación de audio
@@ -223,12 +264,21 @@ async def test_audio_multilingual_support(orchestrator):
         tenant_id="hotel_test",
     )
 
-    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt:
+    with patch.object(orchestrator.audio_processor, "transcribe_whatsapp_audio") as mock_stt, \
+         patch.object(orchestrator.nlp_engine, "process_text") as mock_nlp, \
+         patch("app.services.orchestrator.is_business_hours", return_value=True):
+        
         mock_stt.return_value = {
             "text": "Do you have rooms available for this weekend?",
             "confidence": 0.88,
             "success": True,
             "language": "en",
+        }
+        
+        mock_nlp.return_value = {
+            "intent": {"name": "check_availability", "confidence": 0.95},
+            "entities": {},
+            "language": "en"
         }
 
         with patch.object(orchestrator.audio_processor, "generate_audio_response") as mock_tts:

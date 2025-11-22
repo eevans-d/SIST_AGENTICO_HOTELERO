@@ -151,7 +151,7 @@ class QloAppsAdapter:
         except Exception as e:
             logger.warning(f"⚠️  Cache warming failed (non-critical): {e}")
 
-    async def _get_from_cache(self, key: str) -> Optional[dict]:
+    async def _get_from_cache(self, key: str) -> Optional[Any]:
         try:
             cached = await self.redis.get(key)
             if cached:
@@ -583,7 +583,8 @@ class QloAppsAdapter:
             if cached_generic:
                 cache_hits_total.labels(operation="late_checkout_check").inc()
                 logger.debug(f"Late checkout check cache hit (generic): {generic_cache_key}")
-                return json.loads(cached_generic)
+                from typing import cast
+                return cast(Dict[str, Any], json.loads(cached_generic))
 
             # Get current booking details
             booking = await self.qloapps.get_booking(booking_id)
@@ -611,7 +612,8 @@ class QloAppsAdapter:
             if cached:
                 cache_hits_total.labels(operation="late_checkout_check").inc()
                 logger.debug(f"Late checkout check cache hit: {cache_key}")
-                return json.loads(cached)
+                from typing import cast
+                return cast(Dict[str, Any], json.loads(cached))
 
             cache_misses_total.labels(operation="late_checkout_check").inc()
 
@@ -764,7 +766,8 @@ class QloAppsAdapter:
             cached = await self._get_from_cache(cache_key)
 
             if cached:
-                return cached
+                from typing import cast
+                return cast(List[Dict[str, Any]], cached)
 
             room_types = await self.qloapps.get_room_types()
 
@@ -959,7 +962,8 @@ def get_pms_adapter(redis_client: redis.Redis | None = None):
             def ping(self):
                 return True
 
-        redis_client = _InMemoryRedis()
+        from typing import cast
+        redis_client = cast(redis.Redis, _InMemoryRedis())
 
     if str(app_settings.pms_type).lower() == "mock":
         return MockPMSAdapter(redis_client)

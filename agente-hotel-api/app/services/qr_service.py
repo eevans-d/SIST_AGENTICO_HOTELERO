@@ -327,8 +327,8 @@ class QRService:
 
             # Try to load a font, fallback to default
             try:
-                title_font = ImageFont.truetype("arial.ttf", 16)
-                subtitle_font = ImageFont.truetype("arial.ttf", 12)
+                title_font: Any = ImageFont.truetype("arial.ttf", 16)
+                subtitle_font: Any = ImageFont.truetype("arial.ttf", 12)
             except OSError:
                 title_font = ImageFont.load_default()
                 subtitle_font = ImageFont.load_default()
@@ -412,7 +412,7 @@ class QRService:
             total_size = sum(f.stat().st_size for f in files)
 
             # Group by type
-            type_counts = {}
+            type_counts: Dict[str, int] = {}
             for file_path in files:
                 filename = file_path.name
                 if filename.startswith("booking_"):

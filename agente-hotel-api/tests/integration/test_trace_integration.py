@@ -6,6 +6,19 @@ Validates that real HTTP requests generate spans with business context attribute
 """
 
 import pytest
+import sys
+from unittest.mock import MagicMock
+
+# Check if OpenTelemetry is mocked (via conftest.py or missing lib)
+is_otel_mocked = False
+try:
+    import opentelemetry
+    if isinstance(opentelemetry, MagicMock) or (hasattr(opentelemetry, "trace") and isinstance(opentelemetry.trace, MagicMock)):
+        is_otel_mocked = True
+except ImportError:
+    is_otel_mocked = True
+
+pytestmark = pytest.mark.skipif(is_otel_mocked, reason="OpenTelemetry is mocked or missing")
 
 from app.core.tracing import enrich_span_with_business_context
 

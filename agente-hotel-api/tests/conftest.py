@@ -2,6 +2,31 @@
 
 import warnings
 from typing import Any
+import sys
+from unittest.mock import MagicMock
+
+# [GLOBAL MOCK] OpenTelemetry dependencies
+# This prevents ModuleNotFoundError in environments where opentelemetry is not installed
+# Must be executed before any app imports that might use tracing
+if "opentelemetry" not in sys.modules:
+    mock_otel = MagicMock()
+    mock_otel.trace = MagicMock()
+    mock_otel.trace.get_tracer = MagicMock(return_value=MagicMock())
+    mock_otel.trace.Span = MagicMock
+    sys.modules["opentelemetry"] = mock_otel
+    sys.modules["opentelemetry.trace"] = mock_otel.trace
+    sys.modules["opentelemetry.instrumentation.fastapi"] = MagicMock()
+    sys.modules["opentelemetry.instrumentation.sqlalchemy"] = MagicMock()
+    sys.modules["opentelemetry.sdk.trace"] = MagicMock()
+    sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
+    sys.modules["opentelemetry.sdk.trace.sampling"] = MagicMock()
+    sys.modules["opentelemetry.sdk.resources"] = MagicMock()
+    # Mock exporters
+    sys.modules["opentelemetry.exporter"] = MagicMock()
+    sys.modules["opentelemetry.exporter.otlp"] = MagicMock()
+    sys.modules["opentelemetry.exporter.otlp.proto"] = MagicMock()
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = MagicMock()
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = MagicMock()
 
 import httpx
 import pytest
@@ -143,6 +168,20 @@ def mock_auto_scaler():
 def mock_nlp_service():
     """Retorna mock de NLPService"""
     return MockNLPService()
+
+
+@pytest.fixture
+def mock_pms_adapter():
+    """Fixture for mocking QloAppsAdapter with AsyncMock."""
+    from unittest.mock import AsyncMock
+    from app.services.pms_adapter import QloAppsAdapter
+    
+    mock = AsyncMock(spec=QloAppsAdapter)
+    # Setup default return values for common methods to avoid TypeErrors in tests
+    mock.check_availability.return_value = []
+    mock.create_reservation.return_value = {"reservation_uuid": "mock-uuid", "status": "confirmed"}
+    mock.test_connection.return_value = True
+    return mock
 
 
 @pytest_asyncio.fixture

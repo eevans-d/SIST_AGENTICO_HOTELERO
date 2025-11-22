@@ -65,8 +65,11 @@ class TestOrchestratorHardening:
             "content": "Reservation flow started"
         })
         # Update intent handlers dict because it was initialized with original methods
-        orchestrator._intent_handlers["make_reservation"] = orchestrator._handle_make_reservation        # Execute
-        result = await orchestrator.handle_unified_message(message)
+        orchestrator._intent_handlers["make_reservation"] = orchestrator._handle_make_reservation
+        
+        # Execute with business hours patched to True via the override mechanism
+        with patch("app.services.orchestrator.is_business_hours", return_value=True, create=True):
+            result = await orchestrator.handle_unified_message(message)
         
         # Assert
         orchestrator.nlp_engine.process_text.assert_called_once()
@@ -144,8 +147,11 @@ class TestOrchestratorHardening:
             "response_type": "text",
             "content": "Checking availability..."
         })
-        orchestrator._intent_handlers["check_availability"] = orchestrator._handle_availability        # Execute
-        result = await orchestrator.handle_unified_message(message)
+        orchestrator._intent_handlers["check_availability"] = orchestrator._handle_availability
+        
+        # Execute with business hours patched via override mechanism
+        with patch("app.services.orchestrator.is_business_hours", return_value=True, create=True):
+            result = await orchestrator.handle_unified_message(message)
         
         # Assert
         orchestrator.audio_processor.transcribe_whatsapp_audio.assert_called_with("http://example.com/audio.ogg")

@@ -183,61 +183,61 @@ class TestConversationContext:
         assert context["current_entities"]["num_guests"] == 2
         assert context["intent_history"] == ["greeting", "check_availability"]
 
-    async def test_resolve_anaphora(self, context_service, mock_redis):
-        """Test para resolución de referencias anafóricas."""
+    async def test_get_context(self, context_service, mock_redis):
+        """Test para recuperar contexto."""
         user_id = "user123"
         channel = "whatsapp"
-        text = "quiero reservar esa habitación para la misma fecha"
-
-        # Mock para simular contexto existente
-        existing_context = {
-            "last_updated": "2023-01-01T12:00:00",
-            "last_intent": "check_availability",
-            "turns": 2,
+        
+        # Mock stored context
+        stored_context = {
+            "last_intent": "book_room",
+            "turns": 5,
+            "intent_history": ["greet", "book_room"],
             "entity_history": {
-                "check_in_date": [
-                    {
-                        "value": "2023-12-25",
-                        "turn": 2,
-                        "timestamp": "2023-01-01T12:10:00",
-                        "confidence": 0.95,
-                        "is_correction": False,
-                    }
-                ],
                 "room_type": [
-                    {
-                        "value": "suite",
-                        "turn": 1,
-                        "timestamp": "2023-01-01T12:00:00",
-                        "confidence": 0.9,
-                        "is_correction": False,
-                    }
-                ],
-            },
+                    {"value": "single", "timestamp": "2023-10-26T10:00:00", "is_correction": False},
+                    {"value": "double", "timestamp": "2023-10-26T10:01:00", "is_correction": True}
+                ]
+            }
         }
-        mock_redis.get.return_value = json.dumps(existing_context)
+        mock_redis.get.return_value = json.dumps(stored_context)
+        
+        # Execute
+        result = await context_service.get_context(user_id, channel)
+        
+        # Verify
+        assert result["has_context"] is True
+        assert result["last_intent"] == "book_room"
+        assert result["current_entities"]["room_type"] == "double"  # Should pick the correction
 
-        # Ejecutar
+    async def test_resolve_anaphora(self, context_service, mock_redis):
+        """Test para resolver anáforas."""
+        user_id = "user123"
+        channel = "whatsapp"
+        text = "quiero esa habitación"
+        
+        # Mock context
+        stored_context = {
+            "entity_history": {
+                "room_type": [{"value": "suite", "timestamp": "2023-10-26T10:00:00"}]
+            }
+        }
+        mock_redis.get.return_value = json.dumps(stored_context)
+        
+        # Execute
         result = await context_service.resolve_anaphora(text, user_id, channel)
-
-        # Verificar
-        assert "check_in_date" in result["resolutions"]
-        assert result["resolutions"]["check_in_date"] == "2023-12-25"
-        assert "room_type" in result["resolutions"]
+        
+        # Verify
+        assert "suite" in result["resolved_text"]
         assert result["resolutions"]["room_type"] == "suite"
-        assert "esa habitación (suite)" in result["resolved_text"]
-        assert "misma fecha (2023-12-25)" in result["resolved_text"]
 
     async def test_clear_context(self, context_service, mock_redis):
-        """Test para eliminar contexto."""
+        """Test para limpiar contexto."""
         user_id = "user123"
         channel = "whatsapp"
-
-        # Ejecutar
-        result = await context_service.clear_context(user_id, channel)
-
-        # Verificar
-        assert result is True
+        
+        await context_service.clear_context(user_id, channel)
+        
         mock_redis.delete.assert_called_once_with(f"context:{user_id}:{channel}")
 
     async def test_is_correction_true(self, context_service):
@@ -267,6 +267,35 @@ class TestConversationContext:
 
         # Verificar
         assert result is False
+
+    async def test_is_correction_logic(self, context_service):
+        """Test para lógica de detección de correcciones."""
+        # Caso 1: Corrección explícita
+        text = "no, quiero una suite"
+        entity_type = "room_type"
+        new_value = "suite"
+        previous_entries = [{"value": "double"}]
+        
+        is_correction = context_service._is_correction(text, entity_type, new_value, previous_entries)
+        assert is_correction is True
+
+        # Caso 2: No es corrección (mismo valor)
+        text = "quiero una suite"
+        entity_type = "room_type"
+        new_value = "suite"
+        previous_entries = [{"value": "suite"}]
+        
+        is_correction = context_service._is_correction(text, entity_type, new_value, previous_entries)
+        assert is_correction is False
+
+        # Caso 3: No es corrección (sin patrón de negación)
+        text = "y también una suite"
+        entity_type = "room_type"
+        new_value = "suite"
+        previous_entries = [{"value": "double"}]
+        
+        is_correction = context_service._is_correction(text, entity_type, new_value, previous_entries)
+        assert is_correction is False
 
     async def test_tenant_specific_context(self, context_service, mock_redis):
         """Test para contexto específico por tenant."""

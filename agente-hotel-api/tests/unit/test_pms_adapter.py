@@ -1,9 +1,59 @@
 # tests/unit/test_pms_adapter.py
 # Comprehensive unit tests for PMS Adapter
 
+import sys
+from unittest.mock import MagicMock
+
+# --- MOCK OPENTELEMETRY BEFORE IMPORTS ---
+# This is required because app.services.pms_adapter imports app.core.tracing,
+# which imports opentelemetry. We need to mock the entire tree to avoid
+# ModuleNotFoundError in environments where opentelemetry is not installed.
+
+mock_opentelemetry = MagicMock()
+mock_trace = MagicMock()
+mock_sdk = MagicMock()
+mock_sdk_trace = MagicMock()
+mock_sdk_trace_export = MagicMock()
+mock_exporter = MagicMock()
+mock_otlp = MagicMock()
+mock_proto = MagicMock()
+mock_grpc = MagicMock()
+mock_trace_exporter = MagicMock()
+mock_resources = MagicMock()
+mock_sampling = MagicMock()
+
+# Construct the dependency tree
+mock_opentelemetry.trace = mock_trace
+mock_opentelemetry.sdk = mock_sdk
+mock_sdk.trace = mock_sdk_trace
+mock_sdk.trace.export = mock_sdk_trace_export
+mock_sdk.trace.sampling = mock_sampling
+mock_sdk.resources = mock_resources
+mock_opentelemetry.exporter = mock_exporter
+mock_exporter.otlp = mock_otlp
+mock_otlp.proto = mock_proto
+mock_proto.grpc = mock_grpc
+mock_grpc.trace_exporter = mock_trace_exporter
+
+# Patch sys.modules
+sys.modules["opentelemetry"] = mock_opentelemetry
+sys.modules["opentelemetry.trace"] = mock_trace
+sys.modules["opentelemetry.sdk"] = mock_sdk
+sys.modules["opentelemetry.sdk.trace"] = mock_sdk_trace
+sys.modules["opentelemetry.sdk.trace.export"] = mock_sdk_trace_export
+sys.modules["opentelemetry.sdk.trace.sampling"] = mock_sampling
+sys.modules["opentelemetry.sdk.resources"] = mock_resources
+sys.modules["opentelemetry.exporter"] = mock_exporter
+sys.modules["opentelemetry.exporter.otlp"] = mock_otlp
+sys.modules["opentelemetry.exporter.otlp.proto"] = mock_proto
+sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = mock_grpc
+sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = mock_trace_exporter
+
+# --- END MOCK ---
+
 import json
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -85,6 +135,35 @@ def mock_qloapps_client(mocker):
     )
     client.close = mocker.AsyncMock()
     return client
+
+
+@pytest.fixture(autouse=True)
+def mock_opentelemetry():
+    """Mock opentelemetry to avoid import errors."""
+    mock_otel = MagicMock()
+    mock_otel.sdk = MagicMock()
+    mock_otel.sdk.trace = MagicMock()
+    mock_otel.sdk.trace.export = MagicMock()
+    mock_otel.trace = MagicMock()
+    mock_otel.exporter = MagicMock()
+    mock_otel.exporter.otlp = MagicMock()
+    mock_otel.exporter.otlp.proto = MagicMock()
+    mock_otel.exporter.otlp.proto.grpc = MagicMock()
+    mock_otel.exporter.otlp.proto.grpc.trace_exporter = MagicMock()
+    
+    with patch.dict("sys.modules", {
+        "opentelemetry": mock_otel,
+        "opentelemetry.trace": mock_otel.trace,
+        "opentelemetry.sdk": mock_otel.sdk,
+        "opentelemetry.sdk.trace": mock_otel.sdk.trace,
+        "opentelemetry.sdk.trace.export": mock_otel.sdk.trace.export,
+        "opentelemetry.exporter": mock_otel.exporter,
+        "opentelemetry.exporter.otlp": mock_otel.exporter.otlp,
+        "opentelemetry.exporter.otlp.proto": mock_otel.exporter.otlp.proto,
+        "opentelemetry.exporter.otlp.proto.grpc": mock_otel.exporter.otlp.proto.grpc,
+        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": mock_otel.exporter.otlp.proto.grpc.trace_exporter
+    }):
+        yield
 
 
 # ==============================================================================

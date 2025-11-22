@@ -13,7 +13,7 @@ Flujo completo:
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.unified_message import UnifiedMessage
@@ -36,80 +36,108 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
-
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
-
-        # Mock PMS responses
+        # Patch business hours and NLP Engine
         with (
-            patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
-            patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm,
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
         ):
-            # Mock availability check - disponible con cargo
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "15:00",
-                "fee": 75.0,
-                "is_free": False,
-                "reason": None,
-            }
+            # Configure NLP Mock
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-            # Mock confirmation
-            mock_confirm.return_value = {
-                "success": True,
-                "confirmation_id": "LC-67890",
-                "late_checkout_time": "15:00",
-                "fee": 75.0,
-            }
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-            # Step 1: Usuario solicita late checkout (con booking_id en sesión)
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            message_request = UnifiedMessage(
-                user_id=user_id, texto="necesito late checkout por favor", canal="whatsapp", tipo="text", metadata={}
-            )
+            # Mock PMS responses
+            with (
+                patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
+                patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm,
+            ):
+                # Mock availability check - disponible con cargo
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "15:00",
+                    "fee": 75.0,
+                    "is_free": False,
+                    "reason": None,
+                }
 
-            # Act & Assert - Primera respuesta (solicita confirmación)
-            response = await orchestrator.process_message(message_request)
+                # Mock confirmation
+                mock_confirm.return_value = {
+                    "success": True,
+                    "confirmation_id": "LC-67890",
+                    "late_checkout_time": "15:00",
+                    "fee": 75.0,
+                }
 
-            # Verificaciones primera respuesta
-            assert response.response_type == "text"
-            assert "Late checkout disponible hasta las 15:00" in response.content
-            assert "$75" in response.content
-            assert "¿Confirmas el late checkout?" in response.content
+                # Step 1: Usuario solicita late checkout (con booking_id en sesión)
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Verificar que se llamó al PMS adapter
-            mock_check.assert_called_once_with(booking_id, user_id)
+                message_request = UnifiedMessage(
+                    user_id=user_id, texto="necesito late checkout por favor", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Verificar que se guardó el estado pending en sesión
-            session_data = await session_manager.get_session_data(user_id)
-            assert session_data.get("pending_late_checkout") is True
-            assert session_data.get("late_checkout_details") is not None
+                # Act & Assert - Primera respuesta (solicita confirmación)
+                response = await orchestrator.process_message(message_request)
 
-            # Step 2: Usuario confirma
-            confirmation_message = UnifiedMessage(
-                user_id=user_id, texto="sí, confirmo", canal="whatsapp", tipo="text", metadata={}
-            )
+                # Verificaciones primera respuesta
+                assert response.response_type == "text"
+                assert "late checkout disponible" in response.content.lower()
+                assert "15:00" in response.content
+                assert "$75" in response.content
+                assert "confirmas" in response.content.lower()
 
-            # Act - Confirmación
-            confirmation_response = await orchestrator.process_message(confirmation_message)
+                # Verificar que se llamó al PMS adapter
+                mock_check.assert_called_once_with(reservation_id=booking_id, requested_checkout_time="14:00")
 
-            # Assert - Respuesta de confirmación
-            assert confirmation_response.response_type == "text"
-            assert "Late checkout confirmado hasta las 15:00" in confirmation_response.content
-            assert "$75" in confirmation_response.content
-            assert "Se agregará a tu cuenta" in confirmation_response.content
+                # Verificar que se guardó el estado pending en sesión
+                session_data = await session_manager.get_session_data(user_id)
+                assert session_data.get("pending_late_checkout") is not None
 
-            # Verificar que se llamó al confirm
-            mock_confirm.assert_called_once()
+                # Step 2: Usuario confirma
+                # Para la confirmación, el intent podría ser "affirm" o similar, o el orchestrator maneja el contexto
+                # Si el orchestrator usa NLP para detectar "sí", necesitamos actualizar el mock
+                mock_nlp.process_message.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
+                mock_nlp.process_text.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
 
-            # Verificar que se limpió el estado pending
-            final_session = await session_manager.get_session_data(user_id)
-            assert final_session.get("pending_late_checkout") is False
+                confirmation_message = UnifiedMessage(
+                    user_id=user_id, texto="sí, confirmo", canal="whatsapp", tipo="text", metadata={}
+                )
+
+                # Act - Confirmación
+                confirmation_response = await orchestrator.process_message(confirmation_message)
+
+                # Assert - Respuesta de confirmación
+                assert confirmation_response.response_type == "text"
+                assert "Late checkout confirmado hasta las 15:00" in confirmation_response.content
+                assert "$75" in confirmation_response.content
+                assert "Se agregará a tu cuenta" in confirmation_response.content
+
+                # Verificar que se llamó al confirm
+                mock_confirm.assert_called_once()
+
+                # Verificar que se limpió el estado pending
+                final_session = await session_manager.get_session_data(user_id)
+                assert final_session.get("pending_late_checkout") is None
 
     @pytest.mark.asyncio
     async def test_late_checkout_without_booking_id(self):
@@ -120,25 +148,41 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        # Mensaje sin booking_id en sesión
-        message = UnifiedMessage(
-            user_id=user_id, texto="quiero late checkout", canal="whatsapp", tipo="text", metadata={}
-        )
+            user_id = "5491112345678"
 
-        # Act
-        response = await orchestrator.process_message(message)
+            # Mensaje sin booking_id en sesión
+            message = UnifiedMessage(
+                user_id=user_id, texto="quiero late checkout", canal="whatsapp", tipo="text", metadata={}
+            )
 
-        # Assert
-        assert response.response_type == "text"
-        assert "necesito tu número de reserva" in response.content.lower()
-        assert "podrías compartirlo" in response.content.lower()
+            # Act
+            response = await orchestrator.process_message(message)
+
+            # Assert
+            assert response.response_type == "text"
+            assert "necesito tu número de reserva" in response.content.lower()
+            assert "podrías compartirlo" in response.content.lower()
 
     @pytest.mark.asyncio
     async def test_late_checkout_not_available(self):
@@ -149,39 +193,55 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            # Mock no disponibilidad
-            mock_check.return_value = {
-                "available": False,
-                "late_checkout_time": None,
-                "fee": 0,
-                "is_free": False,
-                "reason": "next_booking_conflict",
-            }
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            # Setup sesión con booking_id
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                # Mock no disponibilidad
+                mock_check.return_value = {
+                    "available": False,
+                    "late_checkout_time": None,
+                    "fee": 0,
+                    "is_free": False,
+                    "reason": "next_booking_conflict",
+                }
 
-            message = UnifiedMessage(
-                user_id=user_id, texto="necesito late checkout", canal="whatsapp", tipo="text", metadata={}
-            )
+                # Setup sesión con booking_id
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Act
-            response = await orchestrator.process_message(message)
+                message = UnifiedMessage(
+                    user_id=user_id, texto="necesito late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Assert
-            assert response.response_type == "text"
-            assert "no hay disponibilidad para late checkout" in response.content.lower()
-            assert "habitación está reservada" in response.content.lower()
-            assert "guardar equipaje" in response.content.lower()
+                # Act
+                response = await orchestrator.process_message(message)
+
+                # Assert
+                assert response.response_type == "text"
+                assert "no hay disponibilidad para late checkout" in response.content.lower()
+                assert "habitación está reservada" in response.content.lower()
+                assert "guardar equipaje" in response.content.lower()
 
     @pytest.mark.asyncio
     async def test_late_checkout_confirmation_flow(self):
@@ -192,64 +252,88 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
-
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
-
+        # Patch business hours and NLP Engine
         with (
-            patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
-            patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm,
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
         ):
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "16:00",
-                "fee": 100.0,
-                "is_free": False,
-                "reason": None,
-            }
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-            # Setup
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-            # Step 1: Solicitud inicial
-            request_message = UnifiedMessage(
-                user_id=user_id, texto="late checkout por favor", canal="whatsapp", tipo="text", metadata={}
-            )
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            await orchestrator.process_message(request_message)
+            with (
+                patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
+                patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm,
+            ):
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "16:00",
+                    "fee": 100.0,
+                    "is_free": False,
+                    "reason": None,
+                }
 
-            # Verificar pending state
-            session_data = await session_manager.get_session_data(user_id)
-            assert session_data.get("pending_late_checkout") is True
+                # Setup
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            details = session_data.get("late_checkout_details")
-            assert details is not None
-            assert details["late_checkout_time"] == "16:00"
-            assert details["fee"] == 100.0
+                # Step 1: Solicitud inicial
+                request_message = UnifiedMessage(
+                    user_id=user_id, texto="late checkout por favor", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Step 2: Confirmación positiva
-            mock_confirm.return_value = {
-                "success": True,
-                "confirmation_id": "LC-99999",
-                "late_checkout_time": "16:00",
-                "fee": 100.0,
-            }
+                await orchestrator.process_message(request_message)
 
-            confirm_message = UnifiedMessage(user_id=user_id, texto="sí", canal="whatsapp", tipo="text", metadata={})
+                # Verificar pending state
+                session_data = await session_manager.get_session_data(user_id)
+                pending_data = session_data.get("pending_late_checkout")
+                assert pending_data is not None
+                assert isinstance(pending_data, dict)
+                assert pending_data["checkout_time"] == "16:00"
+                assert pending_data["fee"] == 100.0
 
-            response2 = await orchestrator.process_message(confirm_message)
+                # Step 2: Confirmación positiva
+                mock_nlp.process_message.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
+                mock_nlp.process_text.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
+                
+                mock_confirm.return_value = {
+                    "success": True,
+                    "confirmation_id": "LC-99999",
+                    "late_checkout_time": "16:00",
+                    "fee": 100.0,
+                }
 
-            # Verificaciones finales
-            assert "confirmado" in response2.content.lower()
-            mock_confirm.assert_called_once()
+                confirm_message = UnifiedMessage(user_id=user_id, texto="sí", canal="whatsapp", tipo="text", metadata={})
 
-            # Estado pending debe estar limpio
-            final_session = await session_manager.get_session_data(user_id)
-            assert final_session.get("pending_late_checkout") is False
+                response2 = await orchestrator.process_message(confirm_message)
+
+                # Verificaciones finales
+                assert "confirmado" in response2.content.lower()
+                mock_confirm.assert_called_once()
+
+                # Estado pending debe estar limpio
+                final_session = await session_manager.get_session_data(user_id)
+                assert final_session.get("pending_late_checkout") is None
 
     @pytest.mark.asyncio
     async def test_late_checkout_cancel_flow(self):
@@ -260,51 +344,76 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "14:00",
-                "fee": 50.0,
-                "is_free": False,
-                "reason": None,
-            }
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            # Setup y solicitud inicial
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "15:00",
+                    "fee": 50.0,
+                    "is_free": False,
+                    "reason": None,
+                }
 
-            request_message = UnifiedMessage(
-                user_id=user_id, texto="quiero late checkout", canal="whatsapp", tipo="text", metadata={}
-            )
+                # Setup y solicitud inicial
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            await orchestrator.process_message(request_message)
+                request_message = UnifiedMessage(
+                    user_id=user_id, texto="quiero late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Verificar pending state
-            session_data = await session_manager.get_session_data(user_id)
-            assert session_data.get("pending_late_checkout") is True
+                await orchestrator.process_message(request_message)
 
-            # Usuario cancela
-            cancel_message = UnifiedMessage(
-                user_id=user_id, texto="no, cancelo", canal="whatsapp", tipo="text", metadata={}
-            )
+                # Verificar pending state
+                session_data = await session_manager.get_session_data(user_id)
+                assert session_data.get("pending_late_checkout") is not None
 
-            # Act
-            cancel_response = await orchestrator.process_message(cancel_message)
+                # Usuario cancela
+                mock_nlp.process_message.return_value = {
+                    "intent": {"name": "deny", "confidence": 0.95},
+                    "entities": {}
+                }
+                mock_nlp.process_text.return_value = {
+                    "intent": {"name": "deny", "confidence": 0.95},
+                    "entities": {}
+                }
 
-            # Assert
-            assert cancel_response.response_type == "text"
-            # Debe manejar la cancelación (respuesta genérica o specific)
+                cancel_message = UnifiedMessage(
+                    user_id=user_id, texto="no, cancelar", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Estado pending debe estar limpio
-            final_session = await session_manager.get_session_data(user_id)
-            assert final_session.get("pending_late_checkout") is False
+                # Act - Cancelación
+                cancel_response = await orchestrator.process_message(cancel_message)
+
+                # Assert - Respuesta de cancelación
+                assert cancel_response.response_type == "text"
+                assert "cancelado" in cancel_response.content.lower() or "entendido" in cancel_response.content.lower()
+
+                # Verificar que se limpió el estado pending
+                final_session = await session_manager.get_session_data(user_id)
+                assert final_session.get("pending_late_checkout") is None
 
     @pytest.mark.asyncio
     async def test_late_checkout_with_audio(self):
@@ -315,42 +424,64 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "15:00",
-                "fee": 0.0,  # Gratis en este caso
-                "is_free": True,
-                "reason": None,
-            }
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            # Setup sesión
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "15:00",
+                    "fee": 0.0,  # Gratis en este caso
+                    "is_free": True,
+                    "reason": None,
+                }
 
-            # Mensaje de audio (simulando transcripción)
-            audio_message = UnifiedMessage(
-                user_id=user_id,
-                texto="hola necesito late checkout por favor",  # Texto transcrito
-                canal="whatsapp",
-                tipo="audio",
-                metadata={"audio_duration": 3.5, "transcription_confidence": 0.95},
-            )
+                # Setup sesión
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Act
-            response = await orchestrator.process_message(audio_message)
+                # Mensaje de audio (simulando transcripción)
+                audio_message = UnifiedMessage(
+                    user_id=user_id,
+                    texto="quisiera salir más tarde",  # Transcripción
+                    canal="whatsapp",
+                    tipo="audio",
+                    metadata={"audio_duration": 5},
+                )
 
-            # Assert
-            assert response.response_type == "text"
-            assert "Late checkout" in response.content
-            assert "sin cargo adicional" in response.content or "gratuito" in response.content.lower()
+                # Act
+                response = await orchestrator.process_message(audio_message)
+
+                # Assert
+                # La respuesta debe ser audio también (o texto si no hay TTS configurado, pero el orchestrator intenta audio)
+                # En este test verificamos el contenido del texto generado
+                if response.response_type == "audio":
+                    content_text = response.content["text"]
+                else:
+                    content_text = response.content
+
+                assert "late checkout" in content_text.lower()
+                assert "gratis" in content_text.lower() or "sin costo" in content_text.lower() or "sin cargo" in content_text.lower()
 
     @pytest.mark.asyncio
     async def test_late_checkout_multiple_requests(self):
@@ -361,37 +492,64 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "15:00",
-                "fee": 75.0,
-                "is_free": False,
-                "reason": None,
-            }
+            user_id = "5491112345678"
+            booking_id = "HTL-12345"
 
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "14:00",
+                    "fee": 50.0,
+                    "is_free": False,
+                    "reason": None,
+                }
 
-            message = UnifiedMessage(user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={})
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Primera solicitud
-            response1 = await orchestrator.process_message(message)
-            assert "¿Confirmas" in response1.content
+                # Primera solicitud
+                msg1 = UnifiedMessage(
+                    user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
+                await orchestrator.process_message(msg1)
 
-            # Segunda solicitud (duplicada)
-            await orchestrator.process_message(message)
+                # Verificar estado pending
+                session1 = await session_manager.get_session_data(user_id)
+                assert session1.get("pending_late_checkout") is not None
 
-            # Debe manejar gracefully (no duplicar pending state)
-            session_data = await session_manager.get_session_data(user_id)
-            assert session_data.get("pending_late_checkout") is True
+                # Segunda solicitud (debería detectar que ya hay una pendiente o actualizarla)
+                msg2 = UnifiedMessage(
+                    user_id=user_id, texto="quiero salir tarde", canal="whatsapp", tipo="text", metadata={}
+                )
+                response2 = await orchestrator.process_message(msg2)
+
+                # Assert - Debería recordar la oferta o volver a ofrecerla
+                assert "disponible hasta las 14:00" in response2.content
+                assert "$50" in response2.content
+
+                # Verificar que no se duplicó el estado (o sigue siendo válido)
+                session2 = await session_manager.get_session_data(user_id)
+                assert session2.get("pending_late_checkout") is not None
 
     @pytest.mark.asyncio
     async def test_late_checkout_cache_behavior(self):
@@ -402,42 +560,61 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "15:00",
-                "fee": 75.0,
-                "is_free": False,
-                "reason": None,
-            }
+            user_id = "5491112345678"
+            booking_id = "HTL-CACHE-TEST"
 
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            # Usamos un mock que cuente las llamadas reales (aunque el adapter tiene su propio cache,
+            # aquí probamos que el orchestrator llame al adapter)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "15:00",
+                    "fee": 60.0,
+                    "is_free": False,
+                    "reason": None,
+                }
 
-            message = UnifiedMessage(
-                user_id=user_id, texto="late checkout por favor", canal="whatsapp", tipo="text", metadata={}
-            )
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Primera consulta (debe llamar PMS)
-            await orchestrator.process_message(message)
-            assert mock_check.call_count == 1
+                # Primera llamada
+                msg1 = UnifiedMessage(
+                    user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
+                await orchestrator.process_message(msg1)
 
-            # Cancel pending state para hacer segunda consulta
-            await session_manager.set_session_data(user_id, "pending_late_checkout", False)
+                # Segunda llamada inmediata
+                msg2 = UnifiedMessage(
+                    user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
+                await orchestrator.process_message(msg2)
 
-            # Segunda consulta (puede usar cache)
-            await orchestrator.process_message(message)
-
-            # Verificar que el cache funciona correctamente
-            # (El número exacto de calls depende de la implementación del cache)
-            assert mock_check.call_count >= 1
+                # Assert
+                # Si el PMS adapter tiene cache, mock_check podría ser llamado 1 o 2 veces dependiendo de cómo se mockea.
+                # Si mockeamos el método público del adapter, el cache interno del adapter NO se ejecuta (porque estamos reemplazando el método).
+                # Así que esperamos 2 llamadas al mock.
+                # Si quisiéramos probar el cache del adapter, deberíamos no mockear el método público sino el request interno.
+                assert mock_check.call_count == 2
 
     @pytest.mark.asyncio
     async def test_late_checkout_error_handling(self):
@@ -447,32 +624,48 @@ class TestLateCheckoutFlowE2E:
         from app.services.session_manager import SessionManager
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
+        from app.exceptions.pms_exceptions import PMSError
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
+        # Patch business hours and NLP Engine
+        with (
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
+        ):
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-        with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
-            # Mock error en PMS
-            mock_check.side_effect = Exception("PMS connection failed")
+            user_id = "5491112345678"
+            booking_id = "HTL-ERROR"
 
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            with patch.object(pms_adapter, "check_late_checkout_availability") as mock_check:
+                # Simular error del PMS
+                mock_check.side_effect = PMSError("Connection timeout")
 
-            message = UnifiedMessage(
-                user_id=user_id, texto="necesito late checkout", canal="whatsapp", tipo="text", metadata={}
-            )
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Act
-            response = await orchestrator.process_message(message)
+                message = UnifiedMessage(
+                    user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Assert - Debe manejar el error gracefully
-            assert response.response_type == "text"
-            # Debe mostrar mensaje de error genérico
-            assert "error" in response.content.lower() or "problema" in response.content.lower()
+                # Act
+                response = await orchestrator.process_message(message)
+
+                # Assert - Debería dar un mensaje de error amigable o fallback
+                assert response.response_type == "text"
+                assert "lo siento" in response.content.lower() or "problema técnico" in response.content.lower() or "intentar más tarde" in response.content.lower()
 
     @pytest.mark.asyncio
     async def test_late_checkout_free_offer(self):
@@ -483,51 +676,75 @@ class TestLateCheckoutFlowE2E:
         from app.services.lock_service import LockService
         from app.services.pms_adapter import get_pms_adapter
 
-        pms_adapter = await get_pms_adapter()
-        session_manager = SessionManager()
-        lock_service = LockService()
-        orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
-
-        user_id = "5491112345678"
-        booking_id = "HTL-12345"
-
+        # Patch business hours and NLP Engine
         with (
-            patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
-            patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm,
+            patch("app.services.orchestrator.is_business_hours", return_value=True),
+            patch("app.services.orchestrator.NLPEngine") as MockNLPEngine
         ):
-            # Mock late checkout gratuito
-            mock_check.return_value = {
-                "available": True,
-                "late_checkout_time": "14:00",
-                "fee": 0.0,
-                "is_free": True,
-                "reason": "vip_guest",
-            }
+            mock_nlp = MockNLPEngine.return_value
+            mock_nlp.process_message = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
+            mock_nlp.detect_language = AsyncMock(return_value="es")
+            mock_nlp.process_text = AsyncMock(return_value={
+                "intent": {"name": "late_checkout", "confidence": 0.95},
+                "entities": {}
+            })
 
-            mock_confirm.return_value = {
-                "success": True,
-                "confirmation_id": "LC-FREE-001",
-                "late_checkout_time": "14:00",
-                "fee": 0.0,
-            }
+            pms_adapter = get_pms_adapter()
+            session_manager = SessionManager()
+            lock_service = LockService()
+            orchestrator = Orchestrator(pms_adapter, session_manager, lock_service)
 
-            await session_manager.set_session_data(user_id, "booking_id", booking_id)
+            user_id = "5491112345678"
+            booking_id = "HTL-VIP"
 
-            # Solicitud
-            message = UnifiedMessage(user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={})
+            with (
+                patch.object(pms_adapter, "check_late_checkout_availability") as mock_check,
+                patch.object(pms_adapter, "confirm_late_checkout") as mock_confirm
+            ):
+                mock_check.return_value = {
+                    "available": True,
+                    "requested_time": "14:00",
+                    "fee": 0.0,
+                    "is_free": True,
+                    "reason": "loyalty_program",
+                }
+                mock_confirm.return_value = {
+                    "success": True,
+                    "confirmation_id": "LC-FREE-123",
+                    "late_checkout_time": "14:00",
+                    "fee": 0.0
+                }
 
-            response = await orchestrator.process_message(message)
+                await session_manager.set_session_data(user_id, "booking_id", booking_id)
 
-            # Assert - Debe mencionar que es gratuito
-            assert response.response_type == "text"
-            assert "sin cargo" in response.content.lower() or "gratuito" in response.content.lower()
-            assert "14:00" in response.content
+                message = UnifiedMessage(
+                    user_id=user_id, texto="late checkout", canal="whatsapp", tipo="text", metadata={}
+                )
 
-            # Confirmación
-            confirm_message = UnifiedMessage(
-                user_id=user_id, texto="sí, confirmo", canal="whatsapp", tipo="text", metadata={}
-            )
+                # Act
+                response = await orchestrator.process_message(message)
 
-            confirm_response = await orchestrator.process_message(confirm_message)
-            assert "confirmado" in confirm_response.content.lower()
-            mock_confirm.assert_called_once()
+                # Assert
+                assert "gratis" in response.content.lower() or "sin costo" in response.content.lower() or "sin cargo" in response.content.lower()
+                assert "14:00" in response.content
+
+                # Confirmación
+                mock_nlp.process_message.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
+                mock_nlp.process_text.return_value = {
+                    "intent": {"name": "affirm", "confidence": 0.95},
+                    "entities": {}
+                }
+
+                confirm_message = UnifiedMessage(
+                    user_id=user_id, texto="sí, confirmo", canal="whatsapp", tipo="text", metadata={}
+                )
+
+                confirm_response = await orchestrator.process_message(confirm_message)
+                assert "confirmado" in confirm_response.content.lower()
+                mock_confirm.assert_called_once()

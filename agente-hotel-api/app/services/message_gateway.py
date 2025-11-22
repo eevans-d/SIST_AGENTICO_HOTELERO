@@ -8,8 +8,7 @@ from ..models.unified_message import UnifiedMessage
 from ..exceptions.pms_exceptions import ChannelSpoofingError
 from .feature_flag_service import DEFAULT_FLAGS
 from .metrics_service import metrics_service
-
-logger = logging.getLogger(__name__)
+from ..core.logging import logger
 
 
 # SECURITY: Custom exception for tenant isolation violations

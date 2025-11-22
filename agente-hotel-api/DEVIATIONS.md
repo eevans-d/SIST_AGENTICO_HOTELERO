@@ -48,3 +48,16 @@
 - **Documentación:** Se actualizó `docs/AUDIO_RESPONSES.md` con los nuevos intents y sus comportamientos.
 - **Pruebas:** Creadas pruebas exhaustivas en `tests/unit/test_extended_audio_intents.py`.
 - **Estado:** Completamente implementado y probado; amplía significativamente la cobertura de respuestas de audio del sistema.
+
+## Refactorización Asíncrona del Adaptador PMS y Corrección de Flujos (22 de noviembre, 2025)
+
+- **Mejora:** Refactorización completa de `PMSAdapter` para usar `async/await` de forma nativa y corrección de flujos de negocio.
+- **Detalles:**
+  - Se migró `PMSAdapter` y `QloAppsClient` a métodos totalmente asíncronos.
+  - Se corrigió el flujo de `late_checkout` en el `Orchestrator` para manejar correctamente las cancelaciones (`deny`, `no`, `cancel`) limpiando el estado de la sesión.
+  - Se solucionaron discrepancias de tipos en `pms_adapter.py` y sus dependencias (15 errores de `mypy` resueltos).
+  - Se actualizaron los tests de integración (`test_late_checkout_flow.py`) para reflejar la estructura de datos real de la sesión (diccionario en lugar de booleano).
+- **Calidad:**
+  - `mypy` pasa sin errores en `app/services/pms_adapter.py`.
+  - Tests de integración `test_late_checkout_flow.py` pasando (10/10).
+- **Estado:** Completo y validado.
