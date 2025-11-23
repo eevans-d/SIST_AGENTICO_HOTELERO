@@ -115,7 +115,7 @@ curl http://localhost:8000/metrics
 ### Archivos de Configuración
 
 - **Desarrollo**: `.env` (creado desde `.env.example`)
-- **Staging**: `.env.staging` (creado desde `.env.staging.example`)
+- **Staging**: `.env.staging` (creado desde `.env.staging.template`)
 - **Producción**: `.env.production` (configurado en despliegue)
 
 ### Variables de Entorno Principales
@@ -265,7 +265,7 @@ make health
 
 ```bash
 # Preparación
-cp .env.staging.example .env.staging
+cp .env.staging.template .env.staging
 nano .env.staging  # Editar con valores reales
 
 # Despliegue automatizado

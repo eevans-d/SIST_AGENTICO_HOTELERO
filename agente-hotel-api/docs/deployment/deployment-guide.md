@@ -58,7 +58,7 @@ git clone https://github.com/eevans-d/SIST_AGENTICO_HOTELERO.git
 cd SIST_AGENTICO_HOTELERO/agente-hotel-api
 
 # Crear y configurar .env.staging
-cp .env.staging.example .env.staging
+cp .env.staging.template .env.staging
 nano .env.staging  # Editar con valores reales
 ```
 

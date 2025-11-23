@@ -258,7 +258,6 @@ async def lifespan(app: FastAPI):
                             
                             # Actualizar métricas de queue size
                             await dlq_service._update_queue_size_metric()
-                            await dlq_service._update_oldest_message_metric()
                             
                         except Exception as e:
                             logger.error("dlq_worker_error", error=str(e))
