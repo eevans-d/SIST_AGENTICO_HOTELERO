@@ -3,7 +3,35 @@ Business Metrics for Hotel Operations
 Métricas de negocio específicas del dominio hotelero
 """
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter as PromCounter, Histogram as PromHistogram, Gauge as PromGauge, REGISTRY
+
+def _get_or_create_counter(name, documentation, labelnames=None):
+    try:
+        return PromCounter(name, documentation, labelnames or ())
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]
+
+def _get_or_create_histogram(name, documentation, labelnames=None, buckets=None):
+    try:
+        kwargs = {}
+        if buckets:
+            kwargs['buckets'] = buckets
+        if labelnames:
+            kwargs['labelnames'] = labelnames
+        return PromHistogram(name, documentation, **kwargs)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]
+
+def _get_or_create_gauge(name, documentation, labelnames=None):
+    try:
+        return PromGauge(name, documentation, labelnames or ())
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]
+
+# Redefine classes to use safe helpers
+Counter = _get_or_create_counter
+Histogram = _get_or_create_histogram
+Gauge = _get_or_create_gauge
 
 # ============================================================================
 # MÉTRICAS DE RESERVAS

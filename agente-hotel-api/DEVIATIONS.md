@@ -61,3 +61,17 @@
   - `mypy` pasa sin errores en `app/services/pms_adapter.py`.
   - Tests de integración `test_late_checkout_flow.py` pasando (10/10).
 - **Estado:** Completo y validado.
+
+## INFRA-01: Configuración de Base de Datos para Supabase (23 de noviembre, 2025)
+
+- **Desviación:** Se deshabilitaron los *prepared statements* en la configuración de `asyncpg` / SQLAlchemy.
+- **Razón:** Supabase utiliza `pgbouncer` en modo transacción, lo cual es incompatible con *prepared statements* por defecto en `asyncpg`.
+- **Implementación:** Se configuró `statement_cache_size=0` y `prepare_threshold=None` en `app/core/database.py`.
+- **Impacto:** Previene errores `DuplicatePreparedStatementError` durante el inicio y operación de la aplicación.
+
+## INFRA-02: Manejo de Métricas Prometheus (23 de noviembre, 2025)
+
+- **Desviación:** Se implementó un patrón "get or create" para la instanciación de métricas Prometheus.
+- **Razón:** El cliente de Prometheus lanza errores `Duplicated timeseries` si se intenta re-declarar una métrica que ya existe en el registro global (común durante *hot reloads* o reinicios de componentes).
+- **Implementación:** Se crearon wrappers `_get_or_create_*` en `app/services/business_metrics.py` y `app/monitoring/business_metrics.py`.
+- **Impacto:** Mayor estabilidad en el reinicio de servicios y durante el desarrollo con *auto-reload*.

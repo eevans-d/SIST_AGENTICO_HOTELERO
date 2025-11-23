@@ -2,6 +2,7 @@
 
 import time
 import asyncio
+from typing import Optional
 from datetime import datetime, timezone, date
 from prometheus_client import Histogram, Counter
 from .message_gateway import MessageGateway
@@ -1962,6 +1963,7 @@ class Orchestrator:
         # Feature-flagged interactive menu for informational intents
         try:
             ff = await get_feature_flag_service()
+
             if await ff.is_enabled("features.interactive_messages", default=False):
                 info_intents = {
                     "guest_services",
@@ -2097,3 +2099,33 @@ orchestrator_errors_total = Counter(
 orchestrator_degraded_responses = Counter(
     "orchestrator_degraded_responses_total", "Respuestas degradadas por fallo de servicios externos"
 )
+
+# Singleton instance
+_orchestrator_instance: Optional[Orchestrator] = None
+
+async def get_orchestrator() -> Orchestrator:
+    """Get Orchestrator singleton."""
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        from app.services.pms_adapter import get_pms_adapter
+        from app.services.session_manager import get_session_manager
+        from app.services.lock_service import get_lock_service
+        from app.services.dlq_service import get_dlq_service
+        
+        pms_adapter = await get_pms_adapter()
+        session_manager = await get_session_manager()
+        lock_service = await get_lock_service()
+        
+        # Try to get DLQ service, but don't fail if not initialized (e.g. tests)
+        try:
+            dlq_service = await get_dlq_service()
+        except RuntimeError:
+            dlq_service = None
+        
+        _orchestrator_instance = Orchestrator(
+            pms_adapter=pms_adapter,
+            session_manager=session_manager,
+            lock_service=lock_service,
+            dlq_service=dlq_service
+        )
+    return _orchestrator_instance

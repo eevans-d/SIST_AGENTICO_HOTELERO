@@ -15,6 +15,9 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+from app.core.redis_client import get_redis
+from app.services.metrics_service import metrics_service as global_metrics_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -1003,6 +1006,7 @@ async def get_performance_service() -> PerformanceMonitoringService:
     """Get performance monitoring service instance"""
     global performance_service
     if performance_service is None:
-        # This would be initialized with actual Redis and metrics service
-        performance_service = PerformanceMonitoringService(None, None)
+        redis_client = await get_redis()
+        performance_service = PerformanceMonitoringService(redis_client, global_metrics_service)
+        performance_service._start_background_tasks()
     return performance_service

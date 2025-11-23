@@ -256,7 +256,7 @@ class DLQService:
             if orch is None:
                 # Import lazily para evitar ciclos
                 from app.services import orchestrator
-                orch = orchestrator._orchestrator_instance
+                orch = await orchestrator.get_orchestrator()
             if orch is None:
                 raise RuntimeError("Orchestrator not initialized")
 

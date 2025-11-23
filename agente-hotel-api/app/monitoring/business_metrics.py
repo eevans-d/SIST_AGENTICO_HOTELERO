@@ -88,20 +88,44 @@ class AdvancedBusinessMetrics:
 
     def _init_prometheus_metrics(self):
         """Initialize Prometheus metrics for business intelligence"""
+        from prometheus_client import REGISTRY
+
+        def get_or_create_counter(name, documentation, labelnames=None):
+            try:
+                return Counter(name, documentation, labelnames)
+            except ValueError:
+                return REGISTRY._names_to_collectors[name]
+
+        def get_or_create_histogram(name, documentation, labelnames=None, buckets=None):
+            try:
+                kwargs = {}
+                if buckets:
+                    kwargs['buckets'] = buckets
+                if labelnames:
+                    kwargs['labelnames'] = labelnames
+                return Histogram(name, documentation, **kwargs)
+            except ValueError:
+                return REGISTRY._names_to_collectors[name]
+
+        def get_or_create_gauge(name, documentation, labelnames=None):
+            try:
+                return Gauge(name, documentation, labelnames)
+            except ValueError:
+                return REGISTRY._names_to_collectors[name]
 
         # Reservation metrics
-        self.reservations_total = Counter(
+        self.reservations_total = get_or_create_counter(
             "hotel_reservations_total", "Total number of reservations", ["status", "channel", "room_type"]
         )
 
-        self.reservation_value = Histogram(
+        self.reservation_value = get_or_create_histogram(
             "hotel_reservation_value_euros",
             "Reservation value in euros",
             ["room_type", "channel"],
             buckets=[50, 100, 200, 500, 1000, 2000, 5000],
         )
 
-        self.booking_lead_time = Histogram(
+        self.booking_lead_time = get_or_create_histogram(
             "hotel_booking_lead_time_days",
             "Days between booking and check-in",
             ["channel", "room_type"],
@@ -109,53 +133,53 @@ class AdvancedBusinessMetrics:
         )
 
         # Occupancy metrics
-        self.occupancy_rate = Gauge(
+        self.occupancy_rate = get_or_create_gauge(
             "hotel_occupancy_rate_percent", "Current occupancy rate percentage", ["date", "room_type"]
         )
 
-        self.available_rooms = Gauge("hotel_available_rooms_count", "Number of available rooms", ["room_type", "date"])
+        self.available_rooms = get_or_create_gauge("hotel_available_rooms_count", "Number of available rooms", ["room_type", "date"])
 
-        self.adr = Gauge("hotel_adr_euros", "Average Daily Rate in euros", ["date", "room_type"])
+        self.adr = get_or_create_gauge("hotel_adr_euros", "Average Daily Rate in euros", ["date", "room_type"])
 
-        self.revpar = Gauge("hotel_revpar_euros", "Revenue per Available Room in euros", ["date", "room_type"])
+        self.revpar = get_or_create_gauge("hotel_revpar_euros", "Revenue per Available Room in euros", ["date", "room_type"])
 
         # Guest satisfaction metrics
-        self.guest_satisfaction_score = Gauge(
+        self.guest_satisfaction_score = get_or_create_gauge(
             "hotel_guest_satisfaction_score", "Guest satisfaction score (1-10)", ["category", "date"]
         )
 
-        self.nps_score = Gauge("hotel_nps_score", "Net Promoter Score (-100 to 100)", ["date"])
+        self.nps_score = get_or_create_gauge("hotel_nps_score", "Net Promoter Score (-100 to 100)", ["date"])
 
         # Operational metrics
-        self.check_in_duration = Histogram(
+        self.check_in_duration = get_or_create_histogram(
             "hotel_check_in_duration_seconds",
             "Check-in process duration",
             ["method"],  # automated, assisted, manual
             buckets=[30, 60, 120, 300, 600, 1200],
         )
 
-        self.response_time_guest = Histogram(
+        self.response_time_guest = get_or_create_histogram(
             "hotel_guest_response_time_seconds",
             "Time to respond to guest requests",
             ["request_type", "channel"],
             buckets=[10, 30, 60, 300, 600, 1800],
         )
 
-        self.maintenance_requests = Counter(
+        self.maintenance_requests = get_or_create_counter(
             "hotel_maintenance_requests_total", "Number of maintenance requests", ["type", "priority", "room"]
         )
 
         # Revenue metrics
-        self.daily_revenue = Gauge("hotel_daily_revenue_euros", "Daily revenue in euros", ["date", "revenue_type"])
+        self.daily_revenue = get_or_create_gauge("hotel_daily_revenue_euros", "Daily revenue in euros", ["date", "revenue_type"])
 
-        self.forecast_accuracy = Gauge(
+        self.forecast_accuracy = get_or_create_gauge(
             "hotel_forecast_accuracy_percent", "Revenue forecast accuracy percentage", ["forecast_horizon_days"]
         )
 
         # Communication metrics
-        self.message_volume = Counter("hotel_messages_total", "Total messages processed", ["channel", "type", "status"])
+        self.message_volume = get_or_create_counter("hotel_messages_total", "Total messages processed", ["channel", "type", "status"])
 
-        self.intent_recognition_accuracy = Gauge(
+        self.intent_recognition_accuracy = get_or_create_gauge(
             "hotel_intent_accuracy_percent", "Intent recognition accuracy", ["intent_category"]
         )
 
