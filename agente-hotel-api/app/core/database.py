@@ -27,12 +27,15 @@ connect_args = {
     }
 }
 
+import os
+
 # Cost guardrails for Supabase or when explicitly requested
 is_supabase = (
     "supabase.co" in (POSTGRES_URL or "")
     or "supabase.com" in (POSTGRES_URL or "")
     or bool(getattr(settings, "use_supabase", False))
 )
+
 if is_supabase:
     # Set conservative timeouts to avoid runaway queries consuming credits
     # Values in milliseconds
@@ -44,15 +47,18 @@ if is_supabase:
     )
     # Enforce SSL for Supabase connections
     connect_args["ssl"] = "require"
-    # Disable prepared statements for PgBouncer (Supabase transaction pooler)
+
+# Disable prepared statements if Supabase (pgbouncer) or explicitly requested (e.g. for tests)
+if is_supabase or os.getenv("DISABLE_STATEMENT_CACHE", "false").lower() == "true":
     connect_args["statement_cache_size"] = 0
-    # Ensure asyncpg doesn't try to prepare statements (redundant but safe)
-    # connect_args["prepare_threshold"] = None
 
 if settings.environment == Environment.PROD:
     engine_kwargs.update({"pool_timeout": 30})
 
 engine_kwargs["connect_args"] = connect_args
+print(f"DEBUG: POSTGRES_URL={POSTGRES_URL}")
+print(f"DEBUG: is_supabase={is_supabase}")
+print(f"DEBUG: DISABLE_STATEMENT_CACHE={os.getenv('DISABLE_STATEMENT_CACHE')}")
 print(f"DEBUG: connect_args={connect_args}")
 
 engine = create_async_engine(POSTGRES_URL, **engine_kwargs)

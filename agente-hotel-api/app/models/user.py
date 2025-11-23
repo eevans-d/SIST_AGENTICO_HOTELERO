@@ -9,11 +9,20 @@ Date: 2025-11-03
 """
 
 from datetime import datetime
-
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text
+from enum import Enum as PyEnum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text, Enum as SAEnum
 from sqlalchemy.orm import relationship
 
 from app.models.lock_audit import Base
+
+
+class UserRole(str, PyEnum):
+    """User roles for RBAC"""
+    GUEST = "guest"
+    RECEPTIONIST = "receptionist"
+    MANAGER = "manager"
+    ADMIN = "admin"
+    SYSTEM = "system"
 
 
 class User(Base):
@@ -25,6 +34,7 @@ class User(Base):
         username: Unique username
         email: User email address
         hashed_password: Bcrypt hashed password
+        role: User role (RBAC)
         full_name: User's full name
         is_active: Whether user is active
         is_superuser: Whether user has admin privileges
@@ -40,10 +50,21 @@ class User(Base):
     username = Column(String(255), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    role = Column(SAEnum(UserRole), default=UserRole.GUEST, nullable=False)
     full_name = Column(String(255), nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+
+    # MFA
+    mfa_enabled = Column(Boolean, default=False, nullable=False)
+    mfa_secret = Column(String(255), nullable=True)
+
+    # Login stats
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    last_login = Column(DateTime, nullable=True)
+    account_locked_until = Column(DateTime, nullable=True)
 
     tenant_id = Column(String(255), ForeignKey("tenants.tenant_id"), nullable=True)
 

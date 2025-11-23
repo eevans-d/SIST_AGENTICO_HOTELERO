@@ -20,6 +20,8 @@ import base64
 from app.core.settings import get_settings
 from app.core.redis_client import get_redis
 from app.security.password_policy import get_password_policy
+from app.models.user import User, UserRole
+from app.repositories.user_repository import UserRepository
 from prometheus_client import Counter, Histogram, Gauge
 
 logger = logging.getLogger(__name__)
@@ -32,16 +34,6 @@ auth_duration_seconds = Histogram("auth_duration_seconds", "Authentication opera
 active_sessions_gauge = Gauge("active_sessions_total", "Number of active user sessions")
 
 failed_login_attempts_gauge = Gauge("failed_login_attempts_total", "Number of failed login attempts", ["user_id"])
-
-
-class UserRole(Enum):
-    """User roles for RBAC"""
-
-    GUEST = "guest"
-    RECEPTIONIST = "receptionist"
-    MANAGER = "manager"
-    ADMIN = "admin"
-    SYSTEM = "system"
 
 
 class Permission(Enum):
@@ -85,34 +77,6 @@ class TokenType(Enum):
 
 
 @dataclass
-class User:
-    """User model"""
-
-    user_id: str
-    username: str
-    email: str
-    password_hash: str
-    role: UserRole
-    is_active: bool = True
-    is_verified: bool = False
-    mfa_enabled: bool = False
-    mfa_secret: Optional[str] = None
-    failed_login_attempts: int = 0
-    last_login: Optional[datetime] = None
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
-    password_changed_at: datetime = field(default_factory=datetime.now)
-    account_locked_until: Optional[datetime] = None
-
-    @property
-    def is_locked(self) -> bool:
-        """Check if account is locked"""
-        if self.account_locked_until:
-            return datetime.now(timezone.utc) < self.account_locked_until
-        return False
-
-
-@dataclass
 class JWTToken:
     """JWT token model"""
 
@@ -145,6 +109,7 @@ class AdvancedJWTAuth:
     def __init__(self):
         self.settings = get_settings()
         self.redis_client = None
+        self.user_repository = UserRepository()
 
         # Password hashing
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -312,20 +277,21 @@ class AdvancedJWTAuth:
         start_time = asyncio.get_event_loop().time()
 
         try:
-            # Get user (mock implementation - replace with actual user service)
-            user = await self._get_user_by_username(username)
+            # Get user from repository
+            user = await self.user_repository.get_by_username(username)
 
             if not user or not user.is_active:
                 auth_operations_total.labels(operation="authenticate", status="user_not_found").inc()
                 return None
 
-            if user.is_locked:
+            # Check if account is locked
+            if user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
                 auth_operations_total.labels(operation="authenticate", status="account_locked").inc()
                 logger.warning(f"Attempted login to locked account: {username}")
                 return None
 
             # Verify password
-            if not self.verify_password(password, user.password_hash):
+            if not self.verify_password(password, user.hashed_password):
                 await self._handle_failed_login(user)
                 auth_operations_total.labels(operation="authenticate", status="invalid_password").inc()
                 return None
@@ -342,7 +308,7 @@ class AdvancedJWTAuth:
 
             # Create tokens
             access_token = self.create_jwt_token(
-                user_id=user.user_id,
+                user_id=user.id,
                 token_type=TokenType.ACCESS,
                 extra_claims={
                     "role": user.role.value,
@@ -350,13 +316,13 @@ class AdvancedJWTAuth:
                 },
             )
 
-            refresh_token = self.create_jwt_token(user_id=user.user_id, token_type=TokenType.REFRESH)
+            refresh_token = self.create_jwt_token(user_id=user.id, token_type=TokenType.REFRESH)
 
             # Create session
             session_id = secrets.token_urlsafe(32)
             session = AuthSession(
                 session_id=session_id,
-                user_id=user.user_id,
+                user_id=user.id,
                 access_token=access_token,
                 refresh_token=refresh_token,
                 user_agent=user_agent,
@@ -373,11 +339,11 @@ class AdvancedJWTAuth:
                 )
 
                 await self.redis_client.setex(
-                    f"access_token:{access_token.jti}", int(self.access_token_expire.total_seconds()), user.user_id
+                    f"access_token:{access_token.jti}", int(self.access_token_expire.total_seconds()), user.id
                 )
 
                 await self.redis_client.setex(
-                    f"refresh_token:{refresh_token.jti}", int(self.refresh_token_expire.total_seconds()), user.user_id
+                    f"refresh_token:{refresh_token.jti}", int(self.refresh_token_expire.total_seconds()), user.id
                 )
 
             # Reset failed attempts and update last login
@@ -418,7 +384,7 @@ class AdvancedJWTAuth:
                     return None
 
             # Get user and verify still active
-            user = await self._get_user_by_id(user_id)
+            user = await self.user_repository.get_by_id(user_id)
             if not user or not user.is_active:
                 return None
 
@@ -543,60 +509,40 @@ class AdvancedJWTAuth:
         """Check if user role has specific permission"""
         return permission in self.role_permissions.get(user_role, [])
 
-    async def _get_user_by_username(self, username: str) -> Optional[User]:
-        """Get user by username (mock implementation)"""
-        # This would typically query your user database
-        # For demo purposes, creating a mock admin user
-        if username == "admin":
-            return User(
-                user_id="admin_001",
-                username="admin",
-                email="admin@hotelagenteia.com",
-                password_hash=self.hash_password("admin123!"),
-                role=UserRole.ADMIN,
-                is_verified=True,
-            )
 
-        # Mock receptionist user
-        if username == "receptionist":
-            return User(
-                user_id="rec_001",
-                username="receptionist",
-                email="receptionist@hotelagenteia.com",
-                password_hash=self.hash_password("reception123!"),
-                role=UserRole.RECEPTIONIST,
-                is_verified=True,
-            )
-
-        return None
-
-    async def _get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Get user by ID (mock implementation)"""
-        if user_id == "admin_001":
-            return await self._get_user_by_username("admin")
-        elif user_id == "rec_001":
-            return await self._get_user_by_username("receptionist")
-        return None
 
     async def _handle_failed_login(self, user: User):
         """Handle failed login attempt"""
-        user.failed_login_attempts += 1
+        failed_attempts = user.failed_login_attempts + 1
+        locked_until = None
 
-        if user.failed_login_attempts >= self.max_failed_attempts:
-            user.account_locked_until = datetime.now(timezone.utc) + self.lockout_duration
+        if failed_attempts >= self.max_failed_attempts:
+            locked_until = datetime.now(timezone.utc) + self.lockout_duration
             logger.warning(f"Account locked due to failed attempts: {user.username}")
 
-        failed_login_attempts_gauge.labels(user_id=user.user_id).set(user.failed_login_attempts)
+        await self.user_repository.update_login_stats(
+            user_id=user.id,
+            failed_attempts=failed_attempts,
+            locked_until=locked_until
+        )
+        
+        failed_login_attempts_gauge.labels(user_id=user.id).set(failed_attempts)
 
     async def _reset_failed_attempts(self, user: User):
         """Reset failed login attempts"""
-        user.failed_login_attempts = 0
-        user.account_locked_until = None
-        failed_login_attempts_gauge.labels(user_id=user.user_id).set(0)
+        await self.user_repository.update_login_stats(
+            user_id=user.id,
+            failed_attempts=0,
+            locked_until=None
+        )
+        failed_login_attempts_gauge.labels(user_id=user.id).set(0)
 
     async def _update_last_login(self, user: User):
         """Update last login timestamp"""
-        user.last_login = datetime.now(timezone.utc)
+        await self.user_repository.update_login_stats(
+            user_id=user.id,
+            last_login=datetime.now(timezone.utc)
+        )
 
     async def cleanup_expired_sessions(self):
         """Clean up expired sessions"""
