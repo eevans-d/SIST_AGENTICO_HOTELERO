@@ -46,3 +46,4 @@ class LockAudit(Base):
     event_type = Column(String, nullable=False)  # e.g., acquired, extended, released, expired
     timestamp = Column(DateTime, default=utc_now)
     details = Column(JSON)
+    tenant_id = Column(String(100), nullable=True, index=True)

@@ -10,6 +10,7 @@ from prometheus_client import Counter
 from ..core.logging import logger
 from ..core.database import AsyncSessionFactory
 from ..models.lock_audit import LockAudit
+from ..core.redis_client import get_redis_client
 
 # Métricas para lock service
 lock_operations_total = Counter(
@@ -291,6 +292,12 @@ class LockService:
                 locks.append(json.loads(lock_data_str))
         return locks
 
+    async def release_all_locks(self):
+        """Libera todos los locks (usar con precaución, solo admin/cleanup)."""
+        async for key in self.redis.scan_iter("lock:room:*"):
+            await self.redis.delete(key)
+        logger.warning("Todos los locks han sido liberados manualmente")
+
     async def _audit_lock_event(self, lock_key: str, event_type: str, details: dict):
         """
         Registra un evento de lock en la tabla de auditoría.
@@ -324,4 +331,16 @@ class LockService:
                 exc_info=True
             )
             # No re-lanzar - la auditoría no debería romper operaciones críticas
+
+
+_lock_service_instance = None
+
+
+async def get_lock_service() -> LockService:
+    """Dependency provider for LockService singleton."""
+    global _lock_service_instance
+    if _lock_service_instance is None:
+        redis_client = await get_redis_client()
+        _lock_service_instance = LockService(redis_client)
+    return _lock_service_instance
 

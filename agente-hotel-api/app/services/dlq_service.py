@@ -349,6 +349,11 @@ class DLQService:
         )
 
         # Create DLQEntry for PostgreSQL
+        # Ensure datetimes are naive UTC for SQLAlchemy/Postgres TIMESTAMP WITHOUT TIME ZONE
+        first_failed_dt = datetime.fromisoformat(dlq_data["first_failed_at"])
+        if first_failed_dt.tzinfo is not None:
+            first_failed_dt = first_failed_dt.astimezone(UTC).replace(tzinfo=None)
+
         dlq_entry = DLQEntry(
             id=dlq_id,
             message_data=dlq_data["message"],
@@ -356,8 +361,8 @@ class DLQService:
             error_traceback=dlq_data.get("error_traceback", ""),
             error_type=type(error).__name__,
             retry_count=dlq_data["retry_count"],
-            first_failed_at=datetime.fromisoformat(dlq_data["first_failed_at"]),
-            last_retry_at=datetime.now(UTC),
+            first_failed_at=first_failed_dt,
+            last_retry_at=datetime.utcnow(),
         )
 
         # Save to database

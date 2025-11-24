@@ -86,6 +86,20 @@ supabase-quick-check: supabase-validate ## Quick health check for Supabase (tabl
 	@echo "✅ Quick check complete"
 
 # ==============================================================================
+# Async Tasks (Celery)
+# ==============================================================================
+
+.PHONY: worker-start worker-test
+
+worker-start: ## Start Celery worker locally
+	@echo "🚀 Starting Celery worker..."
+	@command -v poetry >/dev/null 2>&1 && poetry run celery -A app.worker.celery_app worker --loglevel=info || celery -A app.worker.celery_app worker --loglevel=info
+
+worker-test: ## Run Celery worker tests
+	@echo "🧪 Running Celery tests..."
+	@command -v poetry >/dev/null 2>&1 && poetry run pytest tests/unit/test_celery_config.py -vv || pytest tests/unit/test_celery_config.py -vv
+
+# ==============================================================================
 # Alembic (Migraciones)
 # ==============================================================================
 

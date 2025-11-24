@@ -24,6 +24,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # Import target metadata from app models (after sys.path patch)
 from app.models.lock_audit import Base as LockAuditBase  # type: ignore  # noqa: E402
+from app.models.tenant import Tenant  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.dlq import DLQEntry  # noqa: F401
 
 target_metadata = LockAuditBase.metadata
 
@@ -74,21 +78,44 @@ def run_migrations_online() -> None:
     url = get_database_url()
     configuration["sqlalchemy.url"] = url
 
+    # Handle Supabase/PgBouncer prepared statements issue
+    connect_args = {}
+    if "supabase" in url or os.getenv("DISABLE_STATEMENT_CACHE", "false").lower() == "true":
+        connect_args["statement_cache_size"] = 0
+    
+    print(f"DEBUG: Alembic URL: {url}")
+    print(f"DEBUG: connect_args: {connect_args}")
+
     # Async drivers need async engine
     if "+asyncpg" in url or url.startswith("sqlite+aiosqlite"):
+        # Force Direct Connection for Migrations (Port 5432) if using Supabase
+        # This bypasses PgBouncer Transaction Mode which is incompatible with Alembic/SQLAlchemy prepared statements
+        if "supabase" in url and ":6543" in url:
+             print("DEBUG: Switching to Direct Connection (Port 5432) for migrations...")
+             url = url.replace(":6543", ":5432")
+        
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy.pool import NullPool
+        
+        # Create a dedicated engine for migrations
+        connect_args = {"statement_cache_size": 0}
+        
+        app_engine = create_async_engine(
+            url,
+            connect_args=connect_args,
+            poolclass=NullPool
+        )
+
+        def do_run_migrations_sync(connection):
+            context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+            with context.begin_transaction():
+                context.run_migrations()
+
         async def do_run_migrations() -> None:
-            connectable = async_engine_from_config(
-                configuration,
-                prefix="sqlalchemy.",
-                poolclass=pool.NullPool,
-                future=True,
-            )
-            async with connectable.connect() as connection:
-                await connection.run_sync(
-                    lambda sync_conn: context.configure(connection=sync_conn, target_metadata=target_metadata, compare_type=True)
-                )
-                await connection.run_sync(lambda _: context.begin_transaction())
-                await connection.run_sync(lambda _: context.run_migrations())
+            async with app_engine.connect() as connection:
+                await connection.run_sync(do_run_migrations_sync)
+            
+            await app_engine.dispose()
 
         asyncio.run(do_run_migrations())
     else:

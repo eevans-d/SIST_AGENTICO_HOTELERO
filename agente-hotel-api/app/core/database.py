@@ -47,6 +47,13 @@ if is_supabase:
     )
     # Enforce SSL for Supabase connections
     connect_args["ssl"] = "require"
+    
+    # Use NullPool for Supabase (PgBouncer transaction mode)
+    from sqlalchemy.pool import NullPool
+    engine_kwargs["poolclass"] = NullPool
+    engine_kwargs.pop("pool_size", None)
+    engine_kwargs.pop("max_overflow", None)
+    engine_kwargs.pop("pool_recycle", None)
 
 # Disable prepared statements if Supabase (pgbouncer) or explicitly requested (e.g. for tests)
 if is_supabase or os.getenv("DISABLE_STATEMENT_CACHE", "false").lower() == "true":

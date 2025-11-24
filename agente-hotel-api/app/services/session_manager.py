@@ -542,3 +542,15 @@ class SessionManager:
                 pass
             self._cleanup_task = None
             logger.info("Session cleanup task stopped")
+
+# Singleton instance
+_session_manager_instance: Optional[SessionManager] = None
+
+async def get_session_manager() -> SessionManager:
+    """Get SessionManager singleton."""
+    global _session_manager_instance
+    if _session_manager_instance is None:
+        from app.core.redis_client import get_redis
+        redis_client = await get_redis()
+        _session_manager_instance = SessionManager(redis_client)
+    return _session_manager_instance

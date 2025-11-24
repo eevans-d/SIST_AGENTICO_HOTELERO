@@ -29,6 +29,9 @@ class DLQEntry(Base):
     error_traceback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_type: Mapped[str] = mapped_column(String(255), nullable=False)  # Exception class name
 
+    # Multi-tenancy
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+
     # Retry metadata
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     first_failed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

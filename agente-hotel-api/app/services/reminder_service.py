@@ -3,6 +3,7 @@
 from enum import Enum
 import redis.asyncio as redis
 from ..core.logging import logger
+from app.worker import send_email_task
 
 
 class ReminderType(Enum):
@@ -24,4 +25,16 @@ class ReminderService:
 async def send_reminder(reminder_data: dict):
     template = REMINDER_TEMPLATES.get(reminder_data["type"], "")
     message = template.format(**reminder_data.get("template_data", {}))
-    logger.info(f"Sending reminder: {message}")
+    
+    guest_email = reminder_data.get("guest_email")
+    if guest_email:
+        logger.info(f"Queueing reminder email for {guest_email}")
+        send_email_task.delay(
+            to_email=guest_email,
+            subject="Recordatorio de Reserva",
+            body=message
+        )
+    else:
+        logger.warning("No guest_email provided in reminder_data, skipping email.")
+
+    logger.info(f"Reminder processed: {message}")

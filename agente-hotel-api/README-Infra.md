@@ -364,6 +364,7 @@ redis-cli
   - `mysql`: Base de datos para QloApps.
   - `redis`: Cache y locks.
   - `prometheus`, `grafana`, `alertmanager`: Stack de monitorización.
+  - **celery-worker**: Background task processing (email reminders, async jobs) using Redis as broker/backend
 
 ## Redes
 

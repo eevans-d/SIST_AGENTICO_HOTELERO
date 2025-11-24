@@ -8,9 +8,7 @@ operaciones críticas en el sistema hotelero.
 
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Index
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from app.models.lock_audit import Base
 
 
 class AuditLog(Base):
