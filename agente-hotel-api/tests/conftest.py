@@ -222,3 +222,54 @@ async def test_client(test_app, mock_performance_optimizer, mock_database_tuner,
 
     # Limpiar overrides después de tests
     test_app.dependency_overrides.clear()
+
+
+# ==============================================================================
+# Test Database Fixtures (SQLite in-memory for integration tests)
+# ==============================================================================
+
+@pytest_asyncio.fixture
+async def test_db_engine():
+    """
+    Provides a test database engine using SQLite in-memory.
+    Overrides the production database for integration tests.
+    
+    This ensures tests are fast, isolated, and don't affect production data.
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from app.models.lock_audit import Base
+    
+    # Use in-memory SQLite for tests
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        echo=False,
+    )
+    
+    # Create all tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    yield engine
+    
+    # Cleanup
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_db_session(test_db_engine):
+    """
+    Provides a test database session.
+    
+    This session is isolated and will be rolled back after each test.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    
+    async_session = sessionmaker(
+        test_db_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    async with async_session() as session:
+        yield session
+        # Rollback any uncommitted changes
+        await session.rollback()

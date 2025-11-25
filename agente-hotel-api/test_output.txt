@@ -1,44 +1,1845 @@
-F                                                                        [100%]
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0
+benchmark: 4.0.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /home/eevan/ProyectosIA/SIST_AGENTICO_HOTELERO/agente-hotel-api
+configfile: pytest.ini
+plugins: locust-2.42.1, anyio-4.10.0, asyncio-0.23.8, mock-3.15.1, cov-5.0.0, benchmark-4.0.0
+asyncio: mode=Mode.AUTO
+collected 5 items
+
+tests/integration/test_multi_tenancy_isolation.py FFFFF                  [100%]
+
 =================================== FAILURES ===================================
-___________________________ test_auth_db_integration ___________________________
+__________ TestMultiTenancyIsolation.test_audit_log_tenant_isolation ___________
 
-    @pytest.mark.asyncio
-    async def test_auth_db_integration():
-        """
-        Test authentication flow with real database and mocked Redis.
-        """
-        # 1. Setup
-        # Mock Redis to avoid dependency
-        mock_redis = MagicMock()
-        mock_redis.setex = MagicMock()
-        mock_redis.get = MagicMock(return_value=None)
-    
-        # Patch get_redis to return our mock
-        with patch("app.security.advanced_jwt_auth.get_redis", new=MagicMock(return_value=mock_redis)) as mock_get_redis:
-            mock_get_redis.return_value = mock_redis
-    
-            auth_service = AdvancedJWTAuth()
->           await auth_service.initialize()
+self = <sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_cursor object at 0x771ec0885720>
+operation = 'select pg_catalog.version()', parameters = ()
 
-tests/integration/test_auth_db.py:28: 
+    async def _prepare_and_execute(self, operation, parameters):
+        adapt_connection = self._adapt_connection
+    
+        async with adapt_connection._execute_mutex:
+            if not adapt_connection._started:
+                await adapt_connection._start_transaction()
+    
+            if parameters is None:
+                parameters = ()
+    
+            try:
+>               prepared_stmt, attributes = await adapt_connection._prepare(
+                    operation, self._invalidate_schema_cache_asof
+                )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:521: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:768: in _prepare
+    prepared_stmt = await self._connection.prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:636: in prepare
+    return await self._prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:654: in _prepare
+    stmt = await self._get_statement(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:433: in _get_statement
+    statement = await self._protocol.prepare(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = <app.security.advanced_jwt_auth.AdvancedJWTAuth object at 0x73d0ee9b7e00>
+>   ???
+E   asyncpg.exceptions.DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_1__" already exists
+E   HINT:  
+E   NOTE: pgbouncer with pool_mode set to "transaction" or
+E   "statement" does not support prepared statements properly.
+E   You have two options:
+E   
+E   * if you are using pgbouncer for connection pooling to a
+E     single server, switch to the connection pool functionality
+E     provided by asyncpg, it is a much better option for this
+E     purpose;
+E   
+E   * if you have no option of avoiding the use of pgbouncer,
+E     then you can set statement_cache_size to 0 when creating
+E     the asyncpg connection object.
 
-    async def initialize(self):
-        """Initialize Redis connection and load revoked tokens"""
+asyncpg/protocol/protocol.pyx:166: DuplicatePreparedStatementError
+
+The above exception was the direct cause of the following exception:
+
+self = <sqlalchemy.engine.base.Connection object at 0x771ec08728d0>
+dialect = <sqlalchemy.dialects.postgresql.asyncpg.PGDialect_asyncpg object at 0x771ec387a5d0>
+context = <sqlalchemy.dialects.postgresql.asyncpg.PGExecutionContext_asyncpg object at 0x771ec0871790>
+statement = 'select pg_catalog.version()', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
         try:
->           self.redis_client = await get_redis()
-                                ^^^^^^^^^^^^^^^^^
-E           TypeError: object MagicMock can't be used in 'await' expression
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
 
-app/security/advanced_jwt_auth.py:167: TypeError
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec06c0230>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_1__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_1__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_multi_tenancy_isolation.TestMultiTenancyIsolation object at 0x771ec36108f0>
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x771ec3611910>
+audit_log_data_tenant_a = {'details': {'booking_id': 'HTL-A-123', 'room_type': 'double'}, 'event_type': 'reservation_created', 'ip_address': '192.168.1.100', 'resource': '/api/reservations/123', ...}
+audit_log_data_tenant_b = {'details': {'booking_id': 'HTL-B-456', 'room_type': 'suite'}, 'event_type': 'reservation_created', 'ip_address': '192.168.1.101', 'resource': '/api/reservations/456', ...}
+tenant_a_id = 'hotel-test-a', tenant_b_id = 'hotel-test-b'
+
+    @pytest.mark.asyncio
+    async def test_audit_log_tenant_isolation(
+        self,
+        db_session,
+        audit_log_data_tenant_a,
+        audit_log_data_tenant_b,
+        tenant_a_id,
+        tenant_b_id,
+    ):
+        """
+        Verifica que los audit logs de diferentes tenants están aislados.
+    
+        Test:
+        1. Crea audit logs para tenant A y tenant B
+        2. Consulta logs filtrando por tenant_id
+        3. Verifica que cada tenant solo ve sus propios logs
+        """
+        # Crear audit log para tenant A
+        log_a = AuditLog(**audit_log_data_tenant_a)
+        db_session.add(log_a)
+    
+        # Crear audit log para tenant B
+        log_b = AuditLog(**audit_log_data_tenant_b)
+        db_session.add(log_b)
+    
+>       await db_session.commit()
+
+tests/integration/test_multi_tenancy_isolation.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/session.py:1014: in commit
+    await greenlet_spawn(self.sync_session.commit)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:203: in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+<string>:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+<string>:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:60: in save_obj
+    for (
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:223: in _organize_states_for_save
+    for state, dict_, mapper, connection in _connections_for_states(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1759: in _connections_for_states
+    connection = uowtransaction.transaction.connection(base_mapper)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in connection
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1039: in connection
+    return self._connection_for_bind(bind, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1175: in _connection_for_bind
+    conn = self._parent._connection_for_bind(
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1189: in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3277: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:143: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3301: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:447: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:1264: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:711: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py:306: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:388: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:673: in __init__
+    self.__connect()
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:913: in __connect
+    )._exec_w_sync_on_first_run(self.dbapi_connection, self)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:483: in _exec_w_sync_on_first_run
+    self(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:497: in __call__
+    fn(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:1997: in go
+    return once_fn(*arg, **kw)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py:767: in first_connect
+    dialect.initialize(c)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3260: in initialize
+    super().initialize(connection)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:527: in initialize
+    self.server_version_info = self._get_server_version_info(
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3530: in _get_server_version_info
+    v = connection.exec_driver_sql("select pg_catalog.version()").scalar()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec06c0230>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_1__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_1__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+E                   
+E                   [SQL: select pg_catalog.version()]
+E                   (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
 ---------------------------- Captured stdout setup -----------------------------
-2025-11-24 04:01:19 [info     ] prometheus_metrics_initialized total_metrics=55
-2025-11-24 04:01:19 [info     ] alert_manager.initialized      cooldown_seconds=1800 timeout_seconds=30.0
-2025-11-24 04:01:20 [warning  ] Performance optimization services not available
------------------------------- Captured log call -------------------------------
-ERROR    app.security.advanced_jwt_auth:advanced_jwt_auth.py:170 Failed to initialize JWT Auth Redis: object MagicMock can't be used in 'await' expression
+2025-11-25 03:02:54 [info     ] prometheus_metrics_initialized total_metrics=51
+2025-11-25 03:02:54 [info     ] alert_manager.initialized      cooldown_seconds=1800 timeout_seconds=30.0
+2025-11-25 03:02:54 [warning  ] Performance optimization services not available
+__________ TestMultiTenancyIsolation.test_dlq_entry_tenant_isolation ___________
+
+self = <test_multi_tenancy_isolation.TestMultiTenancyIsolation object at 0x771ec3610aa0>
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x771ec080a900>
+dlq_entry_data_tenant_a = {'error_message': 'PMS connection timeout', 'message_id': 'msg-a-001', 'payload': {'intent': 'check_availability', 'user_id': '+34600111222'}, 'retry_count': 3, ...}
+dlq_entry_data_tenant_b = {'error_message': 'PMS connection timeout', 'message_id': 'msg-b-001', 'payload': {'intent': 'check_availability', 'user_id': '+34600333444'}, 'retry_count': 3, ...}
+tenant_a_id = 'hotel-test-a', tenant_b_id = 'hotel-test-b'
+
+    @pytest.mark.asyncio
+    async def test_dlq_entry_tenant_isolation(
+        self,
+        db_session,
+        dlq_entry_data_tenant_a,
+        dlq_entry_data_tenant_b,
+        tenant_a_id,
+        tenant_b_id,
+    ):
+        """
+        Verifica que las entradas DLQ de diferentes tenants están aisladas.
+    
+        Test:
+        1. Crea DLQ entries para tenant A y tenant B
+        2. Consulta entries filtrando por tenant_id
+        3. Verifica que cada tenant solo ve sus propias entries
+        """
+        # Crear DLQ entry para tenant A
+>       entry_a = DLQEntry(**dlq_entry_data_tenant_a)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_multi_tenancy_isolation.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:4: in __init__
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py:571: in _initialize_instance
+    with util.safe_reraise():
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state.py:569: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <DLQEntry(id=None, error_type=None, retry_count=None, created_at=None)>
+kwargs = {'error_message': 'PMS connection timeout', 'message_id': 'msg-a-001', 'payload': {'intent': 'check_availability', 'user_id': '+34600111222'}, 'retry_count': 3, ...}
+cls_ = <class 'app.models.dlq.DLQEntry'>, k = 'message_id'
+
+    def _declarative_constructor(self: Any, **kwargs: Any) -> None:
+        """A simple constructor that allows initialization from kwargs.
+    
+        Sets attributes on the constructed instance using the names and
+        values in ``kwargs``.
+    
+        Only keys that are present as
+        attributes of the instance's class are allowed. These could be,
+        for example, any mapped columns or relationships.
+        """
+        cls_ = type(self)
+        for k in kwargs:
+            if not hasattr(cls_, k):
+>               raise TypeError(
+                    "%r is an invalid keyword argument for %s" % (k, cls_.__name__)
+                )
+E               TypeError: 'message_id' is an invalid keyword argument for DLQEntry
+
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/decl_base.py:2179: TypeError
+__________ TestMultiTenancyIsolation.test_lock_audit_tenant_isolation __________
+
+self = <sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_cursor object at 0x771ec0542140>
+operation = 'select pg_catalog.version()', parameters = ()
+
+    async def _prepare_and_execute(self, operation, parameters):
+        adapt_connection = self._adapt_connection
+    
+        async with adapt_connection._execute_mutex:
+            if not adapt_connection._started:
+                await adapt_connection._start_transaction()
+    
+            if parameters is None:
+                parameters = ()
+    
+            try:
+>               prepared_stmt, attributes = await adapt_connection._prepare(
+                    operation, self._invalidate_schema_cache_asof
+                )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:521: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:768: in _prepare
+    prepared_stmt = await self._connection.prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:636: in prepare
+    return await self._prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:654: in _prepare
+    stmt = await self._get_statement(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:433: in _get_statement
+    statement = await self._protocol.prepare(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   asyncpg.exceptions.DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_2__" already exists
+E   HINT:  
+E   NOTE: pgbouncer with pool_mode set to "transaction" or
+E   "statement" does not support prepared statements properly.
+E   You have two options:
+E   
+E   * if you are using pgbouncer for connection pooling to a
+E     single server, switch to the connection pool functionality
+E     provided by asyncpg, it is a much better option for this
+E     purpose;
+E   
+E   * if you have no option of avoiding the use of pgbouncer,
+E     then you can set statement_cache_size to 0 when creating
+E     the asyncpg connection object.
+
+asyncpg/protocol/protocol.pyx:166: DuplicatePreparedStatementError
+
+The above exception was the direct cause of the following exception:
+
+self = <sqlalchemy.engine.base.Connection object at 0x771ec070aba0>
+dialect = <sqlalchemy.dialects.postgresql.asyncpg.PGDialect_asyncpg object at 0x771ec387a5d0>
+context = <sqlalchemy.dialects.postgresql.asyncpg.PGExecutionContext_asyncpg object at 0x771ec070ab70>
+statement = 'select pg_catalog.version()', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec06c3b60>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_2__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_2__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_multi_tenancy_isolation.TestMultiTenancyIsolation object at 0x771ec3610da0>
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x771ec070ba40>
+lock_audit_data_tenant_a = {'details': {'holder': 'worker-1', 'ttl': 30}, 'event_type': 'lock_acquired', 'lock_key': 'reservation:123', 'tenant_id': 'hotel-test-a'}
+lock_audit_data_tenant_b = {'details': {'holder': 'worker-2', 'ttl': 30}, 'event_type': 'lock_acquired', 'lock_key': 'reservation:456', 'tenant_id': 'hotel-test-b'}
+tenant_a_id = 'hotel-test-a', tenant_b_id = 'hotel-test-b'
+
+    @pytest.mark.asyncio
+    async def test_lock_audit_tenant_isolation(
+        self,
+        db_session,
+        lock_audit_data_tenant_a,
+        lock_audit_data_tenant_b,
+        tenant_a_id,
+        tenant_b_id,
+    ):
+        """
+        Verifica que los lock audits de diferentes tenants están aislados.
+    
+        Test:
+        1. Crea lock audits para tenant A y tenant B
+        2. Consulta audits filtrando por tenant_id
+        3. Verifica que cada tenant solo ve sus propios audits
+        """
+        # Crear lock audit para tenant A
+        audit_a = LockAudit(**lock_audit_data_tenant_a)
+        db_session.add(audit_a)
+    
+        # Crear lock audit para tenant B
+        audit_b = LockAudit(**lock_audit_data_tenant_b)
+        db_session.add(audit_b)
+    
+>       await db_session.commit()
+
+tests/integration/test_multi_tenancy_isolation.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/session.py:1014: in commit
+    await greenlet_spawn(self.sync_session.commit)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:203: in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+<string>:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+<string>:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:60: in save_obj
+    for (
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:223: in _organize_states_for_save
+    for state, dict_, mapper, connection in _connections_for_states(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1759: in _connections_for_states
+    connection = uowtransaction.transaction.connection(base_mapper)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in connection
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1039: in connection
+    return self._connection_for_bind(bind, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1175: in _connection_for_bind
+    conn = self._parent._connection_for_bind(
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1189: in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3277: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:143: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3301: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:447: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:1264: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:711: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py:306: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:388: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:673: in __init__
+    self.__connect()
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:913: in __connect
+    )._exec_w_sync_on_first_run(self.dbapi_connection, self)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:483: in _exec_w_sync_on_first_run
+    self(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:497: in __call__
+    fn(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:1997: in go
+    return once_fn(*arg, **kw)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py:767: in first_connect
+    dialect.initialize(c)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3260: in initialize
+    super().initialize(connection)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:527: in initialize
+    self.server_version_info = self._get_server_version_info(
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3530: in _get_server_version_info
+    v = connection.exec_driver_sql("select pg_catalog.version()").scalar()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec06c3b60>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_2__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_2__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+E                   
+E                   [SQL: select pg_catalog.version()]
+E                   (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+_______ TestMultiTenancyIsolation.test_cross_tenant_query_returns_empty ________
+
+self = <sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_cursor object at 0x771ec04c4280>
+operation = 'select pg_catalog.version()', parameters = ()
+
+    async def _prepare_and_execute(self, operation, parameters):
+        adapt_connection = self._adapt_connection
+    
+        async with adapt_connection._execute_mutex:
+            if not adapt_connection._started:
+                await adapt_connection._start_transaction()
+    
+            if parameters is None:
+                parameters = ()
+    
+            try:
+>               prepared_stmt, attributes = await adapt_connection._prepare(
+                    operation, self._invalidate_schema_cache_asof
+                )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:521: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:768: in _prepare
+    prepared_stmt = await self._connection.prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:636: in prepare
+    return await self._prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:654: in _prepare
+    stmt = await self._get_statement(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:433: in _get_statement
+    statement = await self._protocol.prepare(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   asyncpg.exceptions.DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_3__" already exists
+E   HINT:  
+E   NOTE: pgbouncer with pool_mode set to "transaction" or
+E   "statement" does not support prepared statements properly.
+E   You have two options:
+E   
+E   * if you are using pgbouncer for connection pooling to a
+E     single server, switch to the connection pool functionality
+E     provided by asyncpg, it is a much better option for this
+E     purpose;
+E   
+E   * if you have no option of avoiding the use of pgbouncer,
+E     then you can set statement_cache_size to 0 when creating
+E     the asyncpg connection object.
+
+asyncpg/protocol/protocol.pyx:166: DuplicatePreparedStatementError
+
+The above exception was the direct cause of the following exception:
+
+self = <sqlalchemy.engine.base.Connection object at 0x771ec041cbc0>
+dialect = <sqlalchemy.dialects.postgresql.asyncpg.PGDialect_asyncpg object at 0x771ec387a5d0>
+context = <sqlalchemy.dialects.postgresql.asyncpg.PGExecutionContext_asyncpg object at 0x771ec041e690>
+statement = 'select pg_catalog.version()', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec04c1220>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_3__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_3__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_multi_tenancy_isolation.TestMultiTenancyIsolation object at 0x771ec36110a0>
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x771ec070a210>
+audit_log_data_tenant_a = {'details': {'booking_id': 'HTL-A-123', 'room_type': 'double'}, 'event_type': 'reservation_created', 'ip_address': '192.168.1.100', 'resource': '/api/reservations/123', ...}
+tenant_a_id = 'hotel-test-a', tenant_b_id = 'hotel-test-b'
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_query_returns_empty(
+        self,
+        db_session,
+        audit_log_data_tenant_a,
+        tenant_a_id,
+        tenant_b_id,
+    ):
+        """
+        Verifica que consultar con tenant_id incorrecto no retorna datos de otro tenant.
+    
+        Test:
+        1. Crea audit log para tenant A
+        2. Consulta con tenant_id de tenant B
+        3. Verifica que no se retornan datos
+        """
+        # Crear audit log solo para tenant A
+        log_a = AuditLog(**audit_log_data_tenant_a)
+        db_session.add(log_a)
+>       await db_session.commit()
+
+tests/integration/test_multi_tenancy_isolation.py:240: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/session.py:1014: in commit
+    await greenlet_spawn(self.sync_session.commit)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:203: in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+<string>:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+<string>:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:60: in save_obj
+    for (
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:223: in _organize_states_for_save
+    for state, dict_, mapper, connection in _connections_for_states(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1759: in _connections_for_states
+    connection = uowtransaction.transaction.connection(base_mapper)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in connection
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1039: in connection
+    return self._connection_for_bind(bind, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1175: in _connection_for_bind
+    conn = self._parent._connection_for_bind(
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1189: in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3277: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:143: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3301: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:447: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:1264: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:711: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py:306: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:388: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:673: in __init__
+    self.__connect()
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:913: in __connect
+    )._exec_w_sync_on_first_run(self.dbapi_connection, self)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:483: in _exec_w_sync_on_first_run
+    self(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:497: in __call__
+    fn(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:1997: in go
+    return once_fn(*arg, **kw)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py:767: in first_connect
+    dialect.initialize(c)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3260: in initialize
+    super().initialize(connection)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:527: in initialize
+    self.server_version_info = self._get_server_version_info(
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3530: in _get_server_version_info
+    v = connection.exec_driver_sql("select pg_catalog.version()").scalar()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec04c1220>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_3__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_3__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+E                   
+E                   [SQL: select pg_catalog.version()]
+E                   (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+__________ TestMultiTenancyIsolation.test_tenant_id_index_performance __________
+
+self = <sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_cursor object at 0x771ec04c6620>
+operation = 'select pg_catalog.version()', parameters = ()
+
+    async def _prepare_and_execute(self, operation, parameters):
+        adapt_connection = self._adapt_connection
+    
+        async with adapt_connection._execute_mutex:
+            if not adapt_connection._started:
+                await adapt_connection._start_transaction()
+    
+            if parameters is None:
+                parameters = ()
+    
+            try:
+>               prepared_stmt, attributes = await adapt_connection._prepare(
+                    operation, self._invalidate_schema_cache_asof
+                )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:521: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:768: in _prepare
+    prepared_stmt = await self._connection.prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:636: in prepare
+    return await self._prepare(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:654: in _prepare
+    stmt = await self._get_statement(
+.venv/lib/python3.12/site-packages/asyncpg/connection.py:433: in _get_statement
+    statement = await self._protocol.prepare(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   asyncpg.exceptions.DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_4__" already exists
+E   HINT:  
+E   NOTE: pgbouncer with pool_mode set to "transaction" or
+E   "statement" does not support prepared statements properly.
+E   You have two options:
+E   
+E   * if you are using pgbouncer for connection pooling to a
+E     single server, switch to the connection pool functionality
+E     provided by asyncpg, it is a much better option for this
+E     purpose;
+E   
+E   * if you have no option of avoiding the use of pgbouncer,
+E     then you can set statement_cache_size to 0 when creating
+E     the asyncpg connection object.
+
+asyncpg/protocol/protocol.pyx:166: DuplicatePreparedStatementError
+
+The above exception was the direct cause of the following exception:
+
+self = <sqlalchemy.engine.base.Connection object at 0x771ec04ae270>
+dialect = <sqlalchemy.dialects.postgresql.asyncpg.PGDialect_asyncpg object at 0x771ec387a5d0>
+context = <sqlalchemy.dialects.postgresql.asyncpg.PGExecutionContext_asyncpg object at 0x771ec04ae1e0>
+statement = 'select pg_catalog.version()', parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec04c1f40>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_4__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_4__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_multi_tenancy_isolation.TestMultiTenancyIsolation object at 0x771ec3611340>
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x771ec041d9d0>
+tenant_a_id = 'hotel-test-a'
+
+    @pytest.mark.asyncio
+    async def test_tenant_id_index_performance(
+        self,
+        db_session,
+        tenant_a_id,
+    ):
+        """
+        Verifica que los índices de tenant_id están funcionando correctamente.
+    
+        Test:
+        1. Crea múltiples audit logs para tenant A
+        2. Ejecuta query con EXPLAIN ANALYZE
+        3. Verifica que se usa el índice idx_audit_tenant_timestamp
+        """
+        # Crear múltiples audit logs
+        for i in range(10):
+            log = AuditLog(
+                event_type=f"test_event_{i}",
+                user_id=f"+3460011{i:04d}",
+                tenant_id=tenant_a_id,
+                severity="info",
+            )
+            db_session.add(log)
+    
+>       await db_session.commit()
+
+tests/integration/test_multi_tenancy_isolation.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/sqlalchemy/ext/asyncio/session.py:1014: in commit
+    await greenlet_spawn(self.sync_session.commit)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:203: in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2032: in commit
+    trans.commit(_to_root=True)
+<string>:2: in commit
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1313: in commit
+    self._prepare_impl()
+<string>:2: in _prepare_impl
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1288: in _prepare_impl
+    self.session.flush()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4345: in flush
+    self._flush(objects)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4480: in _flush
+    with util.safe_reraise():
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:224: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4441: in _flush
+    flush_context.execute()
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:466: in execute
+    rec.execute(self)
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:642: in execute
+    util.preloaded.orm_persistence.save_obj(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:60: in save_obj
+    for (
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:223: in _organize_states_for_save
+    for state, dict_, mapper, connection in _connections_for_states(
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1759: in _connections_for_states
+    connection = uowtransaction.transaction.connection(base_mapper)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in connection
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1039: in connection
+    return self._connection_for_bind(bind, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1175: in _connection_for_bind
+    conn = self._parent._connection_for_bind(
+<string>:2: in _connection_for_bind
+    ???
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:1189: in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3277: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:143: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:3301: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:447: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:1264: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:711: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py:306: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:388: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:673: in __init__
+    self.__connect()
+.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py:913: in __connect
+    )._exec_w_sync_on_first_run(self.dbapi_connection, self)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:483: in _exec_w_sync_on_first_run
+    self(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/event/attr.py:497: in __call__
+    fn(*args, **kw)
+.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:1997: in go
+    return once_fn(*arg, **kw)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py:767: in first_connect
+    dialect.initialize(c)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3260: in initialize
+    super().initialize(connection)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:527: in initialize
+    self.server_version_info = self._get_server_version_info(
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py:3530: in _get_server_version_info
+    v = connection.exec_driver_sql("select pg_catalog.version()").scalar()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1779: in exec_driver_sql
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2355: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:951: in do_execute
+    cursor.execute(statement, parameters)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:580: in execute
+    self._adapt_connection.await_(
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:132: in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/util/_concurrency_py3k.py:196: in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:558: in _prepare_and_execute
+    self._handle_exception(error)
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:508: in _handle_exception
+    self._adapt_connection._handle_exception(error)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AdaptedConnection <asyncpg.connection.Connection object at 0x771ec04c1f40>>
+error = DuplicatePreparedStatementError('prepared statement "__asyncpg_stmt_4__" already exists')
+
+    def _handle_exception(self, error):
+        if self._connection.is_closed():
+            self._transaction = None
+            self._started = False
+    
+        if not isinstance(error, AsyncAdapt_asyncpg_dbapi.Error):
+            exception_mapping = self.dbapi._asyncpg_error_translate
+    
+            for super_ in type(error).__mro__:
+                if super_ in exception_mapping:
+                    translated_error = exception_mapping[super_](
+                        "%s: %s" % (type(error), error)
+                    )
+                    translated_error.pgcode = translated_error.sqlstate = (
+                        getattr(error, "sqlstate", None)
+                    )
+>                   raise translated_error from error
+E                   sqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.DuplicatePreparedStatementError'>: prepared statement "__asyncpg_stmt_4__" already exists
+E                   HINT:  
+E                   NOTE: pgbouncer with pool_mode set to "transaction" or
+E                   "statement" does not support prepared statements properly.
+E                   You have two options:
+E                   
+E                   * if you are using pgbouncer for connection pooling to a
+E                     single server, switch to the connection pool functionality
+E                     provided by asyncpg, it is a much better option for this
+E                     purpose;
+E                   
+E                   * if you have no option of avoiding the use of pgbouncer,
+E                     then you can set statement_cache_size to 0 when creating
+E                     the asyncpg connection object.
+E                   
+E                   [SQL: select pg_catalog.version()]
+E                   (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py:792: ProgrammingError
 =============================== warnings summary ===============================
 .venv/lib/python3.12/site-packages/starlette/formparsers.py:12
   /home/eevan/ProyectosIA/SIST_AGENTICO_HOTELERO/agente-hotel-api/.venv/lib/python3.12/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
@@ -53,7 +1854,7 @@ app/__init__.py                                    0      0   100%
 app/core/circuit_breaker.py                       51     33    35%   41-46, 49-64, 67, 72-77, 80-87
 app/core/constants.py                            102      0   100%
 app/core/correlation.py                           12      6    50%   17, 22, 30-33
-app/core/database.py                              36     10    72%   53, 66-73, 88-89
+app/core/database.py                              46      8    83%   63, 79-86
 app/core/logging.py                                6      0   100%
 app/core/middleware.py                           105     84    20%   27-31, 34-56, 61-78, 82-103, 107-109, 120-122, 125-151, 162-213
 app/core/prometheus.py                           160     39    76%   469-477, 491-499, 517, 529-530, 543-548, 561-563, 576-587, 600-601, 611, 621, 711, 715
@@ -69,8 +1870,9 @@ app/exceptions/whatsapp_exceptions.py             35     19    46%   20-24, 28, 
 app/main.py                                      302    205    32%   40-42, 49-51, 73-75, 86, 109-403, 412, 436, 441-445, 459-470, 489, 511, 518, 525, 532, 553
 app/main_enhanced.py                             195    195     0%   6-393
 app/models/admin_schemas.py                      174     57    67%   61-63, 112-117, 154-156, 191-193, 227-232, 262-266, 272-274, 298-300, 305-309, 337-339, 344-347, 373-378, 436-438, 467-473
-app/models/dlq.py                                 21      2    90%   46, 53
-app/models/lock_audit.py                          13      1    92%   12
+app/models/audit_log.py                           20      2    90%   103, 130
+app/models/dlq.py                                 22      1    95%   56
+app/models/lock_audit.py                          14      1    93%   12
 app/models/pms_schemas.py                         58      8    86%   30-33, 63-66
 app/models/schemas.py                             11      0   100%
 app/models/tenant.py                              30      2    93%   48-49
@@ -83,7 +1885,6 @@ app/monitoring/dlq_metrics.py                      8      0   100%
 app/monitoring/health_service.py                 499    394    21%   102-125, 131-177, 189-198, 203-217, 222-293, 298-327, 339-392, 404-406, 411-419, 425-487, 492-515, 527-545, 550-634, 640-658, 670-687, 699-721, 733-753, 765-810, 822-842, 854-872, 884-902, 915-920, 925-932, 938, 971-989, 995, 1006, 1017, 1028-1060, 1065-1095, 1100-1126, 1131-1164, 1169-1207, 1212-1223, 1228-1259, 1265-1268, 1273-1300, 1305-1318, 1328-1331
 app/monitoring/performance_service.py            403    297    26%   118-135, 140-240, 246-257, 263-298, 303-355, 360-389, 394-429, 437-452, 458-490, 495-506, 511-545, 552-662, 667-677, 682-703, 708-724, 729-754, 759-798, 803-812, 819, 826-834, 839-862, 872-889, 899-951, 957-960, 965-981, 986-998, 1008-1012
 app/monitoring/tracing_service.py                447    337    25%   125-156, 168-229, 236-262, 274-294, 299-306, 311-318, 323-325, 331-343, 355-373, 378-449, 467-513, 523-544, 573-629, 633, 637, 643-653, 658-667, 675-683, 688-747, 752-758, 763-799, 804-839, 845-859, 865-868, 873-890, 895-913, 923-926, 932-933, 938-939, 944-945
-app/repositories/user_repository.py               40     28    30%   17-19, 23-25, 29-31, 35-39, 43-53, 57-66
 app/routers/admin.py                             199    134    33%   31, 37, 48-64, 74-92, 98-100, 109-126, 132-147, 152-169, 175-195, 203-204, 211-213, 220-222, 234-239, 251-259, 266-284, 291-302, 323-328, 385-437
 app/routers/health.py                             64     43    33%   25, 35-94, 103
 app/routers/metrics.py                            33     21    36%   34-54, 72-91
@@ -91,8 +1892,6 @@ app/routers/monitoring.py                        236    160    32%   50-67, 76-8
 app/routers/nlp.py                               266    167    37%   26-96, 116-118, 122-124, 128-131, 198-201, 224-261, 272-292, 305-322, 333-351, 364-400, 410-431, 447-492, 501-516, 524-535
 app/routers/performance.py                       251    189    25%   55-88, 101-120, 131-137, 151-179, 190-202, 217-248, 259-272, 288-326, 335-341, 350-380, 391-418, 429-465, 479-506, 517-535, 550-577, 590-640
 app/routers/webhooks.py                          272    240    12%   34, 42-68, 80-82, 114-456, 478-575
-app/security/advanced_jwt_auth.py                289    180    38%   168, 175-176, 180, 192-197, 201, 206-217, 221-222, 233-254, 259-265, 277-366, 371-414, 419-441, 446-472, 479-506, 510, 516-529, 533-538, 542, 549-559, 569-572
-app/security/password_policy.py                   85     57    33%   34-35, 83-108, 127-161, 173-191, 214-254, 266, 279, 296
 app/services/__init__.py                           4      2    50%   13-15
 app/services/alert_service.py                     58     41    29%   65-132, 151-159, 171-175, 187-191, 200-205
 app/services/audio_cache_optimizer.py            222    160    28%   70-84, 88-111, 116-123, 128-135, 140-144, 149, 154, 159, 164, 168-170, 174-181, 189-228, 241-259, 266-285, 292-312, 329-348, 354-374, 381-390, 396-403, 409-421
@@ -110,13 +1909,13 @@ app/services/cache_optimizer.py                  389    309    21%   111-120, 12
 app/services/conversation_context.py             113    113     0%   6-331
 app/services/conversational_memory.py            214    214     0%   11-541
 app/services/database_tuner.py                   353    274    22%   101-112, 116-118, 122-143, 147-189, 193-212, 216-271, 277-292, 296-311, 315-332, 336-345, 349-379, 383-417, 421-459, 463-509, 513-572, 576-591, 595-611, 615-630, 634-673, 677-725, 734
-app/services/dlq_service.py                      163    137    16%   74-83, 106-163, 172-199, 211-331, 344-375, 379-380, 385-404, 413-436, 440-446, 455-457, 463-476
+app/services/dlq_service.py                      166    140    16%   74-83, 106-163, 172-199, 211-331, 344-380, 384-385, 390-409, 418-441, 445-451, 460-462, 468-481
 app/services/dynamic_tenant_service.py           106     76    28%   36-40, 43-46, 59-109, 117-140, 143, 150, 160-191
 app/services/enhanced_nlp_engine.py              224    224     0%   6-588
 app/services/entity_extractors.py                141    141     0%   7-402
 app/services/feature_flag_service.py              50     37    26%   42-45, 56-90, 94-100, 110-113
 app/services/gmail_client.py                     180    180     0%   3-349
-app/services/lock_service.py                     142    122    14%   35-63, 66, 72-122, 126-162, 167-193, 210-283, 287-292, 303-319
+app/services/lock_service.py                     153    129    16%   36-64, 67, 73-123, 127-163, 168-194, 211-284, 288-293, 297-299, 310-326, 342-345
 app/services/message_gateway.py                  168    143    15%   24-27, 58-73, 99-168, 180, 203-237, 262-279, 307-410, 437-503, 514-527
 app/services/metrics_service.py                   81     47    42%   97-98, 102, 106, 110-112, 116-120, 123-128, 131-132, 138-141, 144-147, 150, 154-157, 160-168, 171-174, 177-180
 app/services/monitoring_service.py                 6      6     0%   7-21
@@ -134,20 +1933,25 @@ app/services/performance_scheduler.py            375    362     3%   21-767
 app/services/pms_adapter.py                      452    395    13%   35-39, 44-51, 56-63, 84-121, 128-129, 133-140, 144-152, 155-166, 169-173, 176-186, 208-329, 349-447, 451-491, 503-519, 532-555, 574-656, 669-718, 734-755, 764-785, 797-804, 808-819, 832-839, 852-871, 875-885, 896, 902, 913-914, 926-970
 app/services/qloapps_client.py                   119     92    23%   32-37, 51, 54, 57, 85-117, 139-156, 168-171, 221-259, 304-327, 348-351, 386-390, 403-409, 425-426, 430-431, 443-449, 457-458, 462-463, 476-482, 488
 app/services/qr_service.py                       182    156    14%   19, 36-63, 93-157, 173-229, 242-300, 313-354, 366-401, 410-437, 447-449
-app/services/reminder_service.py                  14     14     0%   3-27
+app/services/reminder_service.py                  20     20     0%   3-40
 app/services/resource_monitor.py                 355    252    29%   151-160, 165-169, 173-184, 188-203, 207-269, 273-306, 310-329, 333-369, 373-405, 409-445, 449-479, 483-499, 505-537, 541-558, 562-588, 594-631, 635-687, 691-706, 710-726, 730-754, 763
 app/services/review_service.py                   235    174    26%   67-83, 92-95, 98-132, 162-208, 221-272, 285-346, 359-387, 396-398, 414-422, 426-436, 440-450, 454-465, 469-475, 479-480, 484-502, 506-522, 526-541, 558, 562-565, 569-573, 577-578, 586
-app/services/session_manager.py                  194    167    14%   94-141, 154-156, 180-261, 301-340, 371-377, 404-412, 416-427, 435, 448-462, 469-489, 493-527, 531-533, 537-544
+app/services/session_manager.py                  201    172    14%   94-141, 154-156, 180-261, 301-340, 371-377, 404-412, 416-427, 435, 448-462, 469-489, 493-527, 531-533, 537-544, 552-556
 app/services/template_service.py                  82     58    29%   238, 242, 246-252, 259-260, 264-266, 270-289, 293-313, 317-328, 332, 348-351, 359-361
 app/services/tenant_context.py                    21     12    43%   24-30, 33-37
 app/services/whatsapp_client.py                  696    627    10%   38-42, 49-53, 60-64, 75-81, 106, 124-155, 159, 162, 172-200, 204-206, 211-220, 228, 235-266, 277-304, 313-321, 325-327, 345-396, 442-517, 555-611, 646-696, 726-881, 908-935, 952-1028, 1036-1058, 1092-1169, 1192-1360, 1386-1435, 1457-1503
 app/utils/business_hours.py                       39     31    21%   43-66, 89-109, 128-131
 app/utils/locale_utils.py                         33     27    18%   9-13, 22-41, 49-60
 app/utils/room_images.py                          39     30    23%   59-85, 104, 120-134, 149-152, 162
+app/worker.py                                     18     18     0%   1-29
 ----------------------------------------------------------------------------
-TOTAL                                          16215  12551    23%
+TOTAL                                          15878  12324    22%
 
-FAIL Required test coverage of 25% not reached. Total coverage: 22.60%
+FAIL Required test coverage of 25% not reached. Total coverage: 22.38%
 =========================== short test summary info ============================
-FAILED tests/integration/test_auth_db.py::test_auth_db_integration - TypeErro...
-1 failed, 1 warning in 3.90s
+FAILED tests/integration/test_multi_tenancy_isolation.py::TestMultiTenancyIsolation::test_audit_log_tenant_isolation
+FAILED tests/integration/test_multi_tenancy_isolation.py::TestMultiTenancyIsolation::test_dlq_entry_tenant_isolation
+FAILED tests/integration/test_multi_tenancy_isolation.py::TestMultiTenancyIsolation::test_lock_audit_tenant_isolation
+FAILED tests/integration/test_multi_tenancy_isolation.py::TestMultiTenancyIsolation::test_cross_tenant_query_returns_empty
+FAILED tests/integration/test_multi_tenancy_isolation.py::TestMultiTenancyIsolation::test_tenant_id_index_performance
+======================== 5 failed, 1 warning in 18.23s =========================
