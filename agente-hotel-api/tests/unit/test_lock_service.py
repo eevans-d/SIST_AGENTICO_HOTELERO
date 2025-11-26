@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, AsyncMock
 from app.services.lock_service import LockService
 
 
@@ -7,6 +8,8 @@ from app.services.lock_service import LockService
 async def test_lock_acquire_and_conflict_detection():
     """Verifica detección de conflictos de rangos de fechas para la misma habitación."""
     service = LockService()  # In-memory Redis fallback
+    # Mock the audit function to avoid DB calls
+    service._audit_lock_event = AsyncMock()
 
     key1 = await service.acquire_lock(
         room_id="101",
@@ -43,6 +46,9 @@ async def test_lock_acquire_and_conflict_detection():
 async def test_lock_extension_and_release():
     """Valida extensiones máximas y liberación de lock."""
     service = LockService()
+    # Mock the audit function to avoid DB calls
+    service._audit_lock_event = AsyncMock()
+    
     key = await service.acquire_lock(
         room_id="202",
         check_in="2025-11-15T10:00:00Z",
