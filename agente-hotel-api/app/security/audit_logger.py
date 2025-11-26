@@ -15,6 +15,7 @@ from ipaddress import ip_address, ip_network
 
 from prometheus_client import Counter, Histogram
 from ..core.settings import get_settings
+from ..core.tenant_context import get_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ class SecurityEvent:
     risk_score: int = 0  # 0-100
     location: Optional[Dict[str, str]] = None
     correlation_id: Optional[str] = None
+    tenant_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -177,11 +179,19 @@ class SecurityAuditLogger:
             raise
 
     async def log_security_event(self, event: SecurityEvent) -> bool:
-        """Log security event"""
-
-        start_time = asyncio.get_event_loop().time()
+        """Log a security event"""
 
         try:
+            start_time = asyncio.get_event_loop().time()
+
+            # Populate tenant_id if missing
+            if not event.tenant_id:
+                event.tenant_id = get_tenant_id()
+
+            # Enrich event with location data if IP present and location missing
+            if event.ip_address and not event.location:
+                event.location = await self._get_ip_geolocation(event.ip_address)
+
             # Calculate risk score
             event.risk_score = self._calculate_risk_score(event)
 

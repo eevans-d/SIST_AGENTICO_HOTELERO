@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - degradación cuando no está i
 from .logging import logger
 from ..services.metrics_service import metrics_service
 from .settings import settings
+from .tenant_middleware import TenantMiddleware
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

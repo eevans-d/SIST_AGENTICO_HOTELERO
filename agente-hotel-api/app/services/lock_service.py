@@ -11,6 +11,7 @@ from ..core.logging import logger
 from ..core.database import AsyncSessionFactory
 from ..models.lock_audit import LockAudit
 from ..core.redis_client import get_redis_client
+from ..core.tenant_context import get_tenant_id
 
 # Métricas para lock service
 lock_operations_total = Counter(
@@ -64,7 +65,9 @@ class LockService:
             self.redis = redis_client
 
     def _get_lock_key(self, room_id: str, check_in: str, check_out: str) -> str:
-        return f"lock:room:{room_id}:{check_in}:{check_out}"
+        tenant_id = get_tenant_id()
+        prefix = f"tenant:{tenant_id}:" if tenant_id else ""
+        return f"{prefix}lock:room:{room_id}:{check_in}:{check_out}"
 
     async def acquire_lock(
         self, room_id: str, check_in: str, check_out: str, session_id: str, user_id: str, ttl: int = 1200
@@ -226,8 +229,11 @@ class LockService:
             # If dates are invalid, assume no conflict (fail open)
             return False
 
-        # Scan all locks for this room
-        pattern = f"lock:room:{room_id}:*"
+        # Scan all locks for this room (respecting tenant context)
+        tenant_id = get_tenant_id()
+        prefix = f"tenant:{tenant_id}:" if tenant_id else ""
+        pattern = f"{prefix}lock:room:{room_id}:*"
+        
         async for key in self.redis.scan_iter(pattern):
             lock_data_raw = await self.redis.get(key)
             if not lock_data_raw:
@@ -313,6 +319,7 @@ class LockService:
                     lock_key=lock_key,
                     event_type=event_type,
                     details=details,
+                    tenant_id=get_tenant_id()
                 )
                 session.add(audit_entry)
                 await session.commit()

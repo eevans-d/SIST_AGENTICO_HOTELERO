@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
 from app.core.settings import get_settings
+from app.core.tenant_context import set_tenant_id, reset_tenant_id
 from app.models.dlq import DLQEntry
 from app.models.unified_message import UnifiedMessage
 from app.monitoring.dlq_metrics import (
@@ -260,8 +261,14 @@ class DLQService:
             if orch is None:
                 raise RuntimeError("Orchestrator not initialized")
 
-            # Retry processing
-            await orch.process_message(message)
+            # Set tenant context for retry
+            tenant_token = set_tenant_id(message.tenant_id)
+            try:
+                # Retry processing
+                await orch.process_message(message)
+            finally:
+                # Reset tenant context
+                reset_tenant_id(tenant_token)
 
             # Success - remove from DLQ
             await self.redis.delete(message_key)

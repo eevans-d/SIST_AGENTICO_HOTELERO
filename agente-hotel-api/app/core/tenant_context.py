@@ -5,16 +5,21 @@ This module provides a context variable to store the current tenant ID
 for the request lifecycle, accessible throughout the application.
 """
 
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import Optional
 
 # Context variable to store the current tenant ID
 _tenant_id_context: ContextVar[Optional[str]] = ContextVar("tenant_id", default=None)
 
 
-def set_tenant_id(tenant_id: Optional[str]) -> None:
-    """Set the tenant ID for the current context."""
-    _tenant_id_context.set(tenant_id)
+def set_tenant_id(tenant_id: Optional[str]) -> Token:
+    """Set the tenant ID for the current context and return the token."""
+    return _tenant_id_context.set(tenant_id)
+
+
+def reset_tenant_id(token: Token) -> None:
+    """Reset the tenant ID context using the provided token."""
+    _tenant_id_context.reset(token)
 
 
 def get_tenant_id() -> Optional[str]:
