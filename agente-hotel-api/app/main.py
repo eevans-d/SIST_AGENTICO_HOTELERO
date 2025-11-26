@@ -28,6 +28,7 @@ from app.core.middleware import (
     global_exception_handler,
     SecurityHeadersMiddleware,
     RequestSizeLimitMiddleware,
+    TenantMiddleware,
 )
 
 # Importar todos los routers
@@ -492,6 +493,7 @@ def _rl_handler(request: Request, exc: Exception) -> Response:
 app.add_exception_handler(RateLimitExceeded, _rl_handler)
 app.add_middleware(RequestSizeLimitMiddleware, max_size=1_000_000, max_media_size=10_000_000)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TenantMiddleware, default_tenant="default")  # Multi-tenancy support
 app.middleware("http")(correlation_id_middleware)
 app.middleware("http")(tracing_enrichment_middleware)  # H1: Enrich spans with business context
 app.middleware("http")(logging_and_metrics_middleware)

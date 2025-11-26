@@ -211,3 +211,72 @@ async def tracing_enrichment_middleware(request: Request, call_next):
             span.set_attribute("http.error_type", "server_error")
     
     return response
+
+
+class TenantMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to resolve and set the tenant ID for each request.
+    
+    Tenant resolution order:
+    1. X-Tenant-ID header (explicit tenant selection)
+    2. JWT token claims (tenant_id field)
+    3. Default tenant from settings
+    
+    The resolved tenant_id is stored in:
+    - request.state.tenant_id (for request-scoped access)
+    - tenant_context (for global access via contextvars)
+    """
+    
+    def __init__(self, app, default_tenant: str = "default"):
+        super().__init__(app)
+        self.default_tenant = default_tenant
+    
+    async def dispatch(self, request: Request, call_next):
+        from .tenant_context import set_tenant_id, clear_tenant_id
+        
+        tenant_id = None
+        
+        # 1. Check X-Tenant-ID header
+        tenant_id = request.headers.get("X-Tenant-ID") or request.headers.get("x-tenant-id")
+        
+        # 2. If not in header, try to extract from JWT token
+        if not tenant_id:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                try:
+                    # Import here to avoid circular dependencies
+                    from ..services.auth_service import decode_token
+                    token = auth_header.split(" ")[1]
+                    payload = decode_token(token)
+                    tenant_id = payload.get("tenant_id")
+                except Exception as e:
+                    # Log but don't fail - we'll use default tenant
+                    logger.debug(
+                        "tenant_extraction_from_jwt_failed",
+                        error=str(e),
+                        correlation_id=getattr(request.state, "correlation_id", None),
+                    )
+        
+        # 3. Fall back to default tenant
+        if not tenant_id:
+            tenant_id = self.default_tenant
+        
+        # Set tenant_id in request state and context
+        request.state.tenant_id = tenant_id
+        set_tenant_id(tenant_id)
+        
+        logger.debug(
+            "tenant_resolved",
+            tenant_id=tenant_id,
+            correlation_id=getattr(request.state, "correlation_id", None),
+            path=request.url.path,
+        )
+        
+        try:
+            response = await call_next(request)
+            # Add tenant ID to response headers for debugging
+            response.headers["X-Tenant-ID"] = tenant_id
+            return response
+        finally:
+            # Clean up context after request
+            clear_tenant_id()

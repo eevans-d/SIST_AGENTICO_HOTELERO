@@ -195,18 +195,33 @@ class Settings(BaseSettings):
         description="Allowed Host headers in production. Configure with real domains."
     )
 
-    @field_validator("metrics_allowed_ips")
+    @field_validator("metrics_allowed_ips", mode="before")
     @classmethod
-    def validate_metrics_ips(cls, v: list[str]) -> list[str]:
-        """Validate IP addresses in allowlist"""
+    def parse_metrics_ips(cls, v):
+        """Parse and validate IP addresses from string or list"""
         import ipaddress
+        import json
+        
+        # Handle string input (from env vars)
+        if isinstance(v, str):
+            # Try parsing as JSON array first
+            try:
+                v = json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                # Fall back to comma-separated string
+                v = [ip.strip() for ip in v.split(",") if ip.strip()]
+        
+        # Ensure we have a list
+        if not isinstance(v, list):
+            v = [v]
+        
+        # Validate each IP
         validated_ips = []
-
         for ip_str in v:
             try:
                 # Validate IPv4 or IPv6
-                ipaddress.ip_address(ip_str)
-                validated_ips.append(ip_str)
+                ipaddress.ip_address(str(ip_str).strip())
+                validated_ips.append(str(ip_str).strip())
             except ValueError:
                 raise ValueError(
                     f"Invalid IP address in metrics_allowed_ips: {ip_str}"

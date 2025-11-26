@@ -14,6 +14,9 @@ class TestOptimizedWhisperSTT:
     async def test_transcribe_returns_mock_response(self):
         """Test que OptimizedWhisperSTT retorna respuesta mock"""
         stt = OptimizedWhisperSTT()
+        # Force mock mode
+        stt._model_loaded = "mock"
+        
         audio_file = Path("/fake/path/audio.wav")
 
         result = await stt.transcribe(audio_file)

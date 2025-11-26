@@ -1,8 +1,9 @@
 # Agente Hotelero - Estado Actual y Próximos Pasos
 
-**Fecha:** 2025-11-23  
-**Estado:** ✅ Limpieza de Repositorio - Fase 1 Completada  
-**Última Actualización:** Eliminación de duplicados críticos y archivos de riesgo
+**Fecha:** 2025-11-26  
+**Estado:** ✅ Multi-Tenancy - Fundamentos Implementados  
+**Última Actualización:** Middleware de tenant resolution y validador de configuración
+
 
 ---
 
@@ -62,6 +63,28 @@
   - `.env.supabase`, `.env.supabase.template`, `.env.test`
 - ✅ **Corrección Post-Auditoría:** Duplicado `operations-manual.md` resuelto (eliminado stub 75 líneas, mantenido completo 547 líneas)
 
+### 8. Implementación Multi-Tenancy - Fundamentos (2025-11-26)
+- ✅ **Validador de Configuración Corregido:**
+  - `metrics_allowed_ips` ahora acepta string, lista o JSON desde variables de entorno
+  - Soporta formatos: `"127.0.0.1"`, `"127.0.0.1,::1"`, `'["127.0.0.1"]'`
+  - Resuelve problema de inicio de aplicación con configuración flexible
+- ✅ **Módulo de Contexto de Tenant:**
+  - Creado `app/core/tenant_context.py` para gestión thread-safe
+  - Funciones: `set_tenant_id()`, `get_tenant_id()`, `clear_tenant_id()`
+  - Usa `contextvars` para aislamiento entre requests
+- ✅ **TenantMiddleware Implementado:**
+  - Resolución automática de tenant en orden: Header → JWT → Default
+  - Soporta `X-Tenant-ID` header (case-insensitive)
+  - Extrae `tenant_id` de claims JWT automáticamente
+  - Limpieza automática de contexto post-request
+- ✅ **Integración en Aplicación:**
+  - Middleware añadido a `app/main.py`
+  - Configurado con tenant por defecto "default"
+- ✅ **Tests Unitarios:**
+  - 5 tests creados en `tests/unit/test_tenant_middleware.py`
+  - Cobertura: headers, fallback, aislamiento de contexto
+  - **Estado:** 5/5 tests pasando ✓
+
 ---
 
 ## 📋 Estado Actual del Sistema
@@ -114,35 +137,47 @@ agente-hotel-api/
 
 ## 🎯 Próximos Pasos Inmediatos
 
-### Prioridad 1: Conectar Aplicación con Supabase
-**Objetivo:** Hacer que la API local use Supabase en lugar de Postgres local
+### Prioridad 1: Actualizar Servicios para Filtrar por Tenant ID
+**Objetivo:** Modificar queries de base de datos para incluir filtro automático por `tenant_id`
 
 **Tareas:**
-1. Actualizar `app/core/settings.py` para soportar Supabase
-2. Crear `.env.development` con connection string de Supabase
-3. Verificar que `tenants` y `audit_logs` se usan correctamente
-4. Ejecutar tests de integración con Supabase
+1. Identificar servicios que acceden a tablas con `tenant_id` (audit_logs, lock_audit, dlq_permanent_failures)
+2. Actualizar queries para incluir: `.filter(Model.tenant_id == get_tenant_id())`
+3. Crear helper/decorator para aplicar filtro automáticamente
+4. Actualizar tests de servicios afectados
 
-**Comando de Prueba:**
-```bash
-export $(grep -v '^#' agente-hotel-api/.env.supabase | xargs)
-cd agente-hotel-api
-poetry run pytest tests/integration/ -v
+**Archivos a Modificar:**
+- `app/services/*.py` (servicios que usan tablas multi-tenant)
+- `tests/unit/test_*_service.py` (tests de servicios)
+
+### Prioridad 2: Implementar Row Level Security (RLS) en Supabase
+**Objetivo:** Reforzar aislamiento de tenants a nivel de base de datos
+
+**Tareas:**
+1. Crear script `scripts/enable_rls.sql` con políticas
+2. Habilitar RLS en tablas: `audit_logs`, `lock_audit`, `dlq_permanent_failures`
+3. Definir políticas: `tenant_id = current_setting('app.current_tenant')`
+4. Aplicar políticas en Supabase y verificar
+
+**Script de Ejemplo:**
+```sql
+-- Habilitar RLS
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Política de lectura
+CREATE POLICY tenant_isolation_select ON audit_logs
+  FOR SELECT USING (tenant_id = current_setting('app.current_tenant', true));
 ```
 
-### Prioridad 2: Configurar Autenticación con Supabase Auth
-**Objetivo:** Migrar de JWT custom a Supabase Auth
+### Prioridad 3: Tests de Integración Multi-Tenancy
+**Objetivo:** Verificar aislamiento end-to-end entre tenants
 
 **Tareas:**
-1. Investigar integración de `supabase-py` con FastAPI
-2. Actualizar endpoints de auth para usar `auth.users` de Supabase
-3. Configurar políticas RLS para proteger datos por usuario
-4. Actualizar `app/services/auth_service.py`
+1. Crear `tests/integration/test_multi_tenancy_isolation.py`
+2. Test: Crear registro con Tenant A, verificar no visible desde Tenant B
+3. Test: Verificar que RLS bloquea acceso cross-tenant
+4. Test: Verificar métricas y logs incluyen `tenant_id`
 
-### Prioridad 3: Migrar Sesiones de Redis a Supabase (Opcional)
-**Objetivo:** Persistir sesiones de conversación en Postgres
-
-**Nota:** Actualmente las sesiones están en Redis (TTL 30min). Evaluar si conviene migrarlas a una tabla `conversation_sessions` en Supabase para persistencia a largo plazo.
 
 ---
 
