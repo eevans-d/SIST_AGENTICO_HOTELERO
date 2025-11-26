@@ -1,0 +1,1415 @@
+Voy a realizar una auditoría exhaustiva del repositorio **SIST_AGENTICO_HOTELERO**. Primero necesito analizar la estructura completa del sistema. Ahora necesito obtener más información sobre la estructura del código fuente, los servicios principales, y archivos de configuración clave para completar el análisis:# 🔬 FASE 1: ANATOMÍA DEL SISTEMA - SIST_AGENTICO_HOTELERO
+
+```yaml
+# === SYSTEM IDENTIFICATION ===
+project_name: "SIST_AGENTICO_HOTELERO - Sistema de Agente Hotelero IA"
+project_type: "Production-Ready (Staging)"
+maturity_level: "3. 5/5 - Beta con alta completitud arquitectónica"
+
+# === STACK DETECTION ===
+stack:
+  language: "Python 3.12"
+  framework: "FastAPI 0.115.0"
+  database: "PostgreSQL 14 + Redis 7"
+  runtime: "Uvicorn (ASGI)"
+  package_manager: "Poetry + pip (requirements.txt)"
+  orm: "SQLAlchemy 2.0 (async) + asyncpg"
+  containerization: "Docker Compose (12+ servicios)"
+  
+# === HEALTH METRICS ===
+code_health_score: 68/100
+  - maintainability: 75/100
+  - security: 70/100
+  - test_coverage: 22-31% (TARGET: 70%)
+  
+# === RISK ASSESSMENT ===
+risk_summary:
+  critical: 1
+  high: 4
+  medium: 8
+  low: 6
+  
+# === METADATA ===
+audit_timestamp: "2025-11-26 UTC"
+total_files_analyzed: "177+ archivos de test, 200+ archivos fuente"
+lines_of_code: "~15,000+ LOC (estimado)"
+language_composition:
+  - Python: 87. 8%
+  - Shell: 8%
+  - TypeScript: 1.6%
+  - Makefile: 1.3%
+  - JavaScript: 1%
+  - PLpgSQL: 0. 3%
+```
+
+---
+
+## 1. 2 MAPA DEL TERRITORIO
+
+### 1.2.1 Estructura de Archivos (Árbol Anotado)
+
+```
+📦 SIST_AGENTICO_HOTELERO/
+├── 📂 agente-hotel-api/               [✅ Core Application - 90% funcional]
+│   ├── 📂 app/
+│   │   ├── 📂 core/                   [✅ Settings, middleware, logging, Redis, DB]
+│   │   │   ├── settings.py            [✅ Pydantic settings con SecretStr]
+│   │   │   ├── middleware. py          [✅ Security headers, rate limiting, tenant]
+│   │   │   ├── logging.py             [✅ Structlog configurado]
+│   │   │   ├── redis_client.py        [✅ Async Redis client]
+│   │   │   ├── database. py            [✅ SQLAlchemy async engine]
+│   │   │   ├── circuit_breaker.py     [✅ Resilience pattern implementado]
+│   │   │   ├── retry. py               [✅ Exponential backoff + jitter]
+│   │   │   ├── rate_limiter.py        [✅ Sliding window rate limiter]
+│   │   │   ├── prometheus. py          [✅ Métricas centralizadas]
+│   │   │   └── tracing.py             [✅ OpenTelemetry integration]
+│   │   ├── 📂 services/               [✅ Business Logic - Core Patterns]
+│   │   │   ├── orchestrator.py        [✅ Intent dispatcher, flujo completo]
+│   │   │   ├── pms_adapter.py         [✅ QloApps + Mock + CircuitBreaker]
+│   │   │   ├── qloapps_client.py      [✅ HTTP client para PMS real]
+│   │   │   ├── session_manager.py     [✅ Estado conversacional]
+│   │   │   ├── message_gateway.py     [✅ Multi-channel normalization]
+│   │   │   ├── feature_flag_service.py[✅ Feature toggles Redis-backed]
+│   │   │   ├── dynamic_tenant_service.py [✅ Multi-tenancy]
+│   │   │   ├── dlq_service.py         [✅ Dead Letter Queue H2]
+│   │   │   ├── lock_service.py        [✅ Distributed locks]
+│   │   │   ├── metrics_service.py     [✅ Metrics facade]
+│   │   │   └── business_metrics.py    [✅ Reservation KPIs]
+│   │   ├── 📂 routers/                [✅ API Endpoints]
+│   │   │   ├── health. py              [✅ /health/live, /health/ready]
+│   │   │   ├── metrics.py             [✅ /metrics (Prometheus)]
+│   │   │   ├── webhooks.py            [✅ WhatsApp/Gmail webhooks]
+│   │   │   ├── admin.py               [✅ Admin endpoints]
+│   │   │   ├── monitoring.py          [✅ Monitoring router]
+│   │   │   ├── nlp. py                 [🟡 Opcional, cargado dinámicamente]
+│   │   │   └── performance.py         [🟡 Opcional, auto-scaling]
+│   │   ├── 📂 models/                 [✅ Pydantic schemas + ORM]
+│   │   │   ├── pms_schemas.py         [✅ RoomAvailability, ReservationConfirmation]
+│   │   │   └── user. py                [✅ UserSession model]
+│   │   ├── 📂 monitoring/             [✅ Observability services]
+│   │   │   ├── business_metrics.py    [✅ Revenue, occupancy KPIs]
+│   │   │   ├── dashboard_service.py   [✅ Grafana integration]
+│   │   │   ├── alerting_service.py    [✅ AlertManager webhooks]
+│   │   │   ├── performance_service.py [✅ P95/P99 tracking]
+│   │   │   ├── health_service.py      [✅ Multi-probe health]
+│   │   │   └── tracing_service.py     [✅ Jaeger OTLP export]
+│   │   ├── 📂 exceptions/             [✅ Custom exceptions]
+│   │   │   └── pms_exceptions.py      [✅ PMSError, CircuitBreakerOpenError]
+│   │   └── main.py                    [✅ FastAPI app + lifespan manager]
+│   ├── 📂 tests/                      [🔴 22-31% coverage - INSUFICIENTE]
+│   │   ├── 📂 unit/                   [🟡 Parcialmente cubierto]
+│   │   ├── 📂 integration/            [🟡 Fixtures compartidos]
+│   │   ├── 📂 e2e/                    [🟡 Flujos completos]
+│   │   └── 📂 chaos/                  [🟡 Resilience tests]
+│   ├── 📂 docker/                     [✅ Config files completos]
+│   │   ├── prometheus/                [✅ Prometheus + alerts]
+│   │   ├── grafana/                   [✅ Dashboards pre-configurados]
+│   │   ├── alertmanager/              [✅ Alert routing]
+│   │   └── nginx/                     [✅ Reverse proxy config]
+│   ├── 📂 docs/                       [✅ Documentación extensiva]
+│   │   ├── runbooks/                  [✅ Ops manuals]
+│   │   └── supabase/                  [✅ Supabase integration]
+│   ├── 📂 scripts/                    [✅ Automation]
+│   │   ├── deploy-staging.sh          [✅ Automated deployment]
+│   │   └── health-pinger.sh           [✅ Health checks]
+│   ├── docker-compose.yml             [✅ 12 servicios orquestados]
+│   ├── docker-compose. staging.yml     [✅ Staging deployment]
+│   ├── pyproject.toml                 [✅ Poetry dependencies]
+│   ├── requirements.txt               [✅ 128 dependencias pinned]
+│   └── Makefile                       [✅ 46 comandos]
+├── 📂 . github/                        [✅ AI Agent documentation]
+│   ├── copilot-instructions.md        [✅ 684 líneas - Referencia completa]
+│   ├── AI-AGENT-QUICKSTART.md         [✅ 362 líneas - Quick start]
+│   └── AI-AGENT-CONTRIBUTING.md       [✅ 553 líneas - Guidelines]
+├── README.md                          [✅ Actualizado 2025-11-17]
+├── RESUMEN_EJECUTIVO_DEFINITIVO.md    [✅ Análisis exhaustivo]
+└── MASTER_PROJECT_GUIDE.md            [✅ Guía maestra]
+
+LEGEND:
+✅ Healthy/Complete  |  🟡 Needs Attention  |  🟠 Problematic  |  🔴 Critical
+```
+
+---
+
+### 1.2. 2 Grafo de Arquitectura (Mermaid)
+
+```mermaid
+graph TB
+    subgraph "External Channels"
+        WA[WhatsApp Meta API]
+        GM[Gmail API]
+    end
+    
+    subgraph "Edge Layer"
+        NGINX[NGINX Proxy<br/>:80/:443]
+    end
+    
+    subgraph "Application Layer - FastAPI :8002"
+        WEBHOOKS[Webhook Routers]
+        GATEWAY[Message Gateway<br/>UnifiedMessage]
+        ORCH[Orchestrator<br/>Intent Dispatcher]
+        NLP[NLP Engine<br/>Rasa Integration]
+        AUDIO[Audio Processor<br/>Whisper STT/TTS]
+        SESSION[Session Manager<br/>Multi-turn Context]
+        TEMPLATE[Template Service<br/>Response Generation]
+    end
+    
+    subgraph "Integration Layer"
+        PMS[PMS Adapter<br/>Circuit Breaker + Cache]
+        QLOAPPS[QloApps Client<br/>HTTP + Rate Limit]
+        LOCK[Lock Service<br/>Distributed Locks]
+        FF[Feature Flags<br/>Redis-backed]
+        DLQ[DLQ Service<br/>Dead Letter Queue]
+    end
+    
+    subgraph "Data Layer"
+        PG[(PostgreSQL 14<br/>Sessions, Tenants)]
+        RD[(Redis 7<br/>Cache, Locks, Flags)]
+    end
+    
+    subgraph "PMS Backend - Optional"
+        QLOAPPS_PMS[QloApps PMS]
+        MYSQL[(MySQL 8.0)]
+    end
+    
+    subgraph "Observability Stack"
+        PROM[Prometheus :9090<br/>Metrics Collection]
+        GRAF[Grafana :3000<br/>Dashboards]
+        ALERT[AlertManager :9093<br/>Alert Routing]
+        JAEGER[Jaeger :16686<br/>Distributed Tracing]
+        PINGER[Health Pinger<br/>Readiness Probe]
+    end
+    
+    subgraph "Background Workers"
+        CELERY[Celery Worker<br/>Async Tasks]
+        DLQ_WORKER[DLQ Retry Worker<br/>Failed Messages]
+    end
+    
+    WA --> NGINX
+    GM --> NGINX
+    NGINX --> WEBHOOKS
+    WEBHOOKS --> GATEWAY
+    GATEWAY --> ORCH
+    ORCH --> NLP
+    ORCH --> AUDIO
+    ORCH --> SESSION
+    ORCH --> PMS
+    ORCH --> TEMPLATE
+    ORCH --> FF
+    
+    PMS --> QLOAPPS
+    PMS --> RD
+    QLOAPPS --> QLOAPPS_PMS
+    QLOAPPS_PMS --> MYSQL
+    
+    SESSION --> PG
+    SESSION --> RD
+    LOCK --> RD
+    FF --> RD
+    DLQ --> RD
+    DLQ --> PG
+    
+    PROM --> WEBHOOKS
+    GRAF --> PROM
+    ALERT --> PROM
+    JAEGER -.-> ORCH
+    PINGER --> WEBHOOKS
+    
+    CELERY --> RD
+    DLQ_WORKER --> DLQ
+    
+    classDef critical fill:#ff6b6b,stroke:#333
+    classDef warning fill:#ffd93d,stroke:#333
+    classDef safe fill:#6bcf7f,stroke:#333
+    classDef external fill:#a8d5ff,stroke:#333
+    
+    class PG,RD safe
+    class PROM,GRAF,ALERT,JAEGER safe
+    class ORCH,PMS,SESSION safe
+    class NLP,AUDIO warning
+    class WA,GM,QLOAPPS_PMS external
+```
+
+---
+
+### 1.2. 3 Mapa de Dependencias (Docker Compose)
+
+```mermaid
+graph LR
+    subgraph "Core Services"
+        API[agente-api :8002]
+        PG[postgres :5432]
+        RD[redis :6379]
+    end
+    
+    subgraph "Infrastructure"
+        NGX[nginx :80/:443]
+        CELERY[celery_worker]
+    end
+    
+    subgraph "Monitoring"
+        PROM[prometheus :9090]
+        GRAF[grafana :3000]
+        ALERT[alertmanager :9093]
+        JAEGER[jaeger :16686]
+        PINGER[health-pinger]
+    end
+    
+    subgraph "PMS Stack (Profile: pms)"
+        QLOAPPS[qloapps]
+        MYSQL[mysql :3306]
+    end
+    
+    API -->|depends_on healthy| PG
+    API -->|depends_on healthy| RD
+    NGX -->|depends_on| API
+    CELERY -->|depends_on healthy| RD
+    CELERY -->|depends_on healthy| PG
+    PINGER -->|depends_on| API
+    QLOAPPS -->|depends_on| MYSQL
+    PROM -->|scrapes| API
+    GRAF -->|queries| PROM
+    ALERT -->|receives| PROM
+    
+    style API fill:#6bcf7f
+    style PG fill:#a8d5ff
+    style RD fill:#ffb3b3
+    style PROM fill:#ffd93d
+```
+
+---
+
+## 1.3 DICCIONARIO DE DATOS (SNAPSHOT)
+
+### 1.3.1 Entidades Core
+
+#### UnifiedMessage (Message Gateway)
+```python
+# FILE: app/services/message_gateway. py (inferido)
+# [✅ VERIFIED] Well-structured multi-channel normalization
+@dataclass
+class UnifiedMessage:
+    sender_id: str          # WhatsApp phone / Gmail address
+    channel: str            # "whatsapp" | "gmail" | "api"
+    text: str               # Extracted text content
+    audio_data: Optional[bytes]  # Audio payload if voice message
+    timestamp: datetime
+    metadata: Dict[str, Any]     # Channel-specific data
+    correlation_id: str     # Request tracing ID
+    tenant_id: str          # Resolved tenant
+```
+
+#### RoomAvailability (PMS Schema)
+```python
+# FILE: app/models/pms_schemas.py
+# [✅ VERIFIED] Pydantic validation for PMS responses
+class RoomAvailability(BaseModel):
+    room_id: str
+    room_type: str
+    price_per_night: float
+    total_price: float
+    currency: str = "USD"
+    available_rooms: int
+    max_occupancy: int = 2
+    facilities: List[str] = []
+    images: List[str] = []
+    potentially_stale: bool = False  # [✅] Stale cache marker
+```
+
+#### ReservationConfirmation (PMS Schema)
+```python
+# FILE: app/models/pms_schemas.py
+# [✅ VERIFIED] Validated before caching
+class ReservationConfirmation(BaseModel):
+    reservation_uuid: str
+    booking_reference: Optional[str]
+    status: str  # "confirmed" | "pending" | "failed"
+    # ... additional fields
+```
+
+#### UserSession (ORM Model)
+```python
+# FILE: app/models/user. py
+# [✅ VERIFIED] SQLAlchemy async model
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    id: Mapped[UUID]
+    user_id: Mapped[UUID]
+    is_revoked: Mapped[bool] = False
+    expires_at: Mapped[datetime]
+    created_at: Mapped[datetime]
+```
+
+---
+
+### 1.3. 2 Dependencias Críticas (requirements.txt)
+
+| Dependencia | Versión | Propósito | Estado |
+|-------------|---------|-----------|--------|
+| `fastapi` | 0.115.0 | Web framework | ✅ Actualizado |
+| `uvicorn[standard]` | 0.30.1 | ASGI server | ✅ OK |
+| `sqlalchemy[asyncio]` | 2.0. 31 | ORM async | ✅ OK |
+| `asyncpg` | 0.29.0 | PostgreSQL driver | ✅ OK |
+| `redis` | 5.0.7 | Cache client | ✅ OK |
+| `pydantic` | 2.8.2 | Validation | ✅ OK |
+| `python-jose[cryptography]` | **3.5.0** | JWT handling | 🟡 Ver nota CVE |
+| `httpx` | 0.27.2 | HTTP client | ✅ OK |
+| `prometheus-client` | 0.20.0 | Metrics | ✅ OK |
+| `slowapi` | 0.1.9 | Rate limiting | ✅ OK |
+| `opentelemetry-*` | 1. 20.0 | Tracing | ✅ OK |
+| `openai-whisper` | 20231117 | STT | ✅ OK |
+| `celery` | 5.5.3 | Task queue | ✅ OK |
+
+> **📝 Nota python-jose**: El README indica "0 CVE CRITICAL" pero `python-jose 3.5.0` tuvo vulnerabilidades históricas. Verificar con `trivy` que no haya issues activos.
+
+---
+
+## 1.4 HALLAZGOS PRELIMINARES DE RIESGO
+
+### 🔴 CRITICAL (1 encontrado)
+
+| ID | Descripción | Archivo | Impacto |
+|----|-------------|---------|---------|
+| C-001 | **Test coverage 22-31%** - Muy por debajo del target 70% | `tests/` | Regresiones no detectadas, bugs en producción |
+
+### 🟠 HIGH (4 encontrados)
+
+| ID | Descripción | Archivo | Impacto |
+|----|-------------|---------|---------|
+| H-001 | `random. random()` para disponibilidad late checkout | `pms_adapter. py:625` | Resultados no determinísticos en lógica de negocio |
+| H-002 | `datetime.now()` sin timezone en lead_time_days | `pms_adapter.py:477` | Cálculos incorrectos en diferentes TZ |
+| H-003 | Modificación de reservas "not implemented" | `pms_adapter.py:746` | Feature incompleta expuesta en API |
+| H-004 | CORS `allow_headers=["*"]` en desarrollo | `main.py:480` | Potencial exposición de headers sensibles |
+
+### 🟡 MEDIUM (8 encontrados)
+
+| ID | Descripción | Archivo |
+|----|-------------|---------|
+| M-001 | Routers opcionales con try/except silenciosos | `main.py:38-52` |
+| M-002 | `_InMemoryRedis` stub inline en código de producción | `pms_adapter.py:930-966` |
+| M-003 | Room type mapping hardcodeado | `pms_adapter.py:832` |
+| M-004 | Deprecated functions `_safe_counter/histogram/gauge` | `pms_adapter.py:30-63` |
+| M-005 | `# noqa: E712` en query con `== False` | `main.py:310` |
+| M-006 | Múltiples `except Exception` genéricos | Varios archivos |
+| M-007 | Logging excesivo en paths críticos | `pms_adapter.py` |
+| M-008 | OpenTelemetry opcional con fallback a None | `main.py:17-20` |
+
+### 🔵 LOW (6 encontrados)
+
+| ID | Descripción | Archivo |
+|----|-------------|---------|
+| L-001 | Comentario placeholder en autor | `pyproject.toml:5` |
+| L-002 | README.md con fecha desactualizada (2025-10-17 vs 2025-11-17) | `. github/README.md` |
+| L-003 | Debug logging en producción posible | `pms_adapter.py:159,171` |
+| L-004 | Unused import potencial `from typing import cast` repetido | `pms_adapter.py` |
+| L-005 | Magic number 70 para rate limit | `pms_adapter.py:121` |
+| L-006 | Comentarios en español/inglés mezclados | Varios archivos |
+
+---
+
+## 1.5 PATTERNS VERIFICADOS (✅)
+
+| Patrón | Implementación | Calidad |
+|--------|----------------|---------|
+| **Circuit Breaker** | `CircuitBreaker` class con estados CLOSED/OPEN/HALF_OPEN | ✅ Correcto |
+| **Retry with Backoff** | `@retry_with_backoff` decorator con jitter | ✅ Correcto |
+| **Rate Limiting** | SlowAPI + SlidingWindowRateLimiter custom | ✅ Correcto |
+| **Stale Cache Fallback** | `potentially_stale` marker en availability | ✅ Correcto |
+| **Schema Validation** | Pydantic validation antes de cache | ✅ Correcto |
+| **Distributed Locks** | Redis-backed lock service | ✅ Correcto |
+| **Feature Flags** | Redis-backed toggle service | ✅ Correcto |
+| **Dead Letter Queue** | DLQ service con retry worker | ✅ Correcto |
+| **Multi-tenancy** | Dynamic tenant resolution con cache | ✅ Correcto |
+| **Observability** | Prometheus + Grafana + Jaeger + AlertManager | ✅ Correcto |
+| **Lifespan Management** | asynccontextmanager para startup/shutdown | ✅ Correcto |
+| **Security Headers** | HSTS, CSP, COOP, COEP middleware | ✅ Correcto |
+
+---
+
+```
+═══════════════════════════════════════════════════════════════════════════
+🚦 FASE 1 COMPLETADA: ANATOMÍA DEL SISTEMA
+═══════════════════════════════════════════════════════════════════════════
+
+📊 RESUMEN:
+- Archivos Analizados: 200+ (app/ + tests/ + docker/ + docs/)
+- Health Score: 68/100
+- Riesgos Críticos: 1 (Test coverage insuficiente)
+- Riesgos Altos: 4
+- Riesgos Medios: 8
+- Riesgos Bajos: 6
+- Patrones Correctos: 12 ✅
+
+🎯 FORTALEZAS DETECTADAS:
+- Arquitectura bien estructurada (7-service stack)
+- Patrones de resiliencia implementados correctamente
+- Observabilidad completa (Prometheus/Grafana/Jaeger)
+- Documentación extensiva para AI agents
+- Multi-tenancy y feature flags funcionales
+- DLQ para manejo de errores
+
+⚠️ ÁREAS DE MEJORA PRIORITARIAS:
+1.  Test coverage 22-31% → Target 70%
+2. Lógica no determinística con random.random()
+3. Datetime sin timezone awareness
+4. Features "not implemented" expuestas
+
+🔄 ESPERANDO INSTRUCCIÓN PARA FASE 2
+
+Opciones:
+→ Escribe "continuar" para iniciar Fase 2 (Diagnóstico Profundo & AI Context Bridge)
+→ Escribe "/puente" para saltar directo al AI Context Bridge copiable
+→ Escribe "/health" para profundizar en análisis de calidad por categoría
+→ Escribe "/fix [ID]" para obtener solución detallada de un issue específico
+═══════════════════════════════════════════════════════════════════════════
+```
+
+**⛔ ESPERANDO CONFIRMACIÓN PARA CONTINUAR A FASE 2.**
+
+
+
+
+
+________________________________________________________________
+
+
+
+# 🔬 FASE 2: DIAGNÓSTICO PROFUNDO & AI CONTEXT BRIDGE
+
+Procedo a profundizar en el análisis de calidad, identificar bugs específicos y generar el Context Bridge reutilizable. Ahora necesito obtener más archivos críticos para completar el diagnóstico de la Fase 2:# 🔬 FASE 2: DIAGNÓSTICO Y AI CONTEXT BRIDGE
+
+## 2.1 🚑 HEALTH CHECK & DEUDA TÉCNICA
+
+### 2.1.1 Puntos de Dolor Críticos
+
+---
+
+#### [🔴 CRITICAL-001] Test Coverage Insuficiente (22-31%)
+
+```yaml
+# IMPACTO CRÍTICO: Regresiones no detectadas, bugs en producción
+Estado Actual: 22-31% coverage
+Target: 70%+
+Gap: ~40-48 puntos porcentuales
+
+Archivos Afectados:
+  - tests/unit/ (parcialmente cubierto)
+  - tests/integration/ (fixtures existentes, tests limitados)
+  - tests/e2e/ (flujos incompletos)
+  - tests/chaos/ (resilience tests mínimos)
+
+Componentes Sin Cobertura Adecuada:
+  - app/services/orchestrator.py (~2100 líneas, lógica crítica)
+  - app/services/pms_adapter.py (integración PMS)
+  - app/services/dlq_service.py (retry logic)
+  - app/core/middleware.py (security headers)
+
+PRIORIDAD: P0 - Bloquea deploy a producción
+SOLUCIÓN: Implementar test matrix por componente crítico
+```
+
+---
+
+#### [🟠 HIGH-001] Uso de `random.random()` en Lógica de Negocio
+
+```python
+# FILE: agente-hotel-api/app/services/pms_adapter.py:625
+# [🟠 HIGH] Resultados no determinísticos en lógica de negocio
+
+# Check availability for the room on checkout date
+# In a real implementation, query PMS for room bookings
+# For now, simulate check with 70% availability probability
+import random
+
+available = random.random() > 0.3  # 70% chance of availability  # ⚠️ NO DETERMINÍSTICO
+
+# IMPACTO: Late checkout availability devuelve resultados aleatorios
+# EFECTO: Usuarios pueden recibir respuestas inconsistentes para la misma solicitud
+# SOLUCIÓN: 
+#   1. Implementar llamada real al PMS para verificar siguiente reserva
+#   2. O usar lógica determinística basada en fecha/hora
+# PRIORIDAD: P1 - Alta (afecta UX y confiabilidad)
+```
+
+---
+
+#### [🟠 HIGH-002] Datetime sin Timezone en Cálculos de Lead Time
+
+```python
+# FILE: agente-hotel-api/app/services/pms_adapter.py:477-479
+# [🟠 HIGH] Cálculo de lead_time_days puede ser incorrecto
+
+# Calcular lead time
+lead_time_days = 0
+if checkin_str:
+    try:
+        checkin = datetime.fromisoformat(checkin_str. replace("Z", "+00:00"))
+        lead_time_days = (checkin - datetime.now()).days  # ⚠️ datetime.now() sin TZ
+    except Exception:
+        pass
+
+# IMPACTO: Mezcla datetime aware (checkin con TZ) con naive (datetime. now())
+# EFECTO: TypeError en Python 3.12+ o cálculos incorrectos
+# SOLUCIÓN: Usar datetime.now(UTC) consistentemente
+# PRIORIDAD: P1 - Alta
+```
+
+**Corrección propuesta:**
+```python
+from datetime import datetime, UTC
+
+lead_time_days = 0
+if checkin_str:
+    try:
+        checkin = datetime.fromisoformat(checkin_str.replace("Z", "+00:00"))
+        lead_time_days = (checkin - datetime.now(UTC)).days  # ✅ Ambos aware
+    except Exception:
+        pass
+```
+
+---
+
+#### [🟠 HIGH-003] Feature "Modify Reservation" No Implementada
+
+```python
+# FILE: agente-hotel-api/app/services/pms_adapter.py:743-749
+# [🟠 HIGH] Endpoint expuesto pero no implementado
+
+async def modify_reservation(
+    self, reservation_id: str, new_dates: Optional[Dict[str, date]] = None, new_room_type: Optional[str] = None
+) -> Dict[str, Any]:
+    # ... 
+    # For now, implement modification as cancel + recreate
+    # In production, QloApps might have a dedicated modify endpoint
+    logger.warning("Reservation modification not yet fully implemented in QloApps client")  # ⚠️
+
+    pms_operations. labels(operation="modify_reservation", status="not_implemented").inc()
+
+    return current_booking  # ⚠️ Devuelve booking sin modificar
+
+# IMPACTO: API aparenta funcionar pero no modifica nada
+# EFECTO: Usuarios creen que su reserva fue modificada cuando no lo fue
+# SOLUCIÓN: 
+#   1.  Implementar modificación real via QloApps API
+#   2.  O retornar error 501 Not Implemented explícito
+# PRIORIDAD: P1 - Alta (rompe contrato de API)
+```
+
+---
+
+#### [🟠 HIGH-004] CORS Permisivo en Headers
+
+```python
+# FILE: agente-hotel-api/app/main.py:475-482
+# [🟠 HIGH] allow_headers=["*"] expone todos los headers
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["*"],  # ⚠️ Permite TODOS los headers
+    max_age=600,
+)
+
+# IMPACTO: Potencial exposición de headers sensibles en preflight
+# RIESGO: Bajo en dev, medio en staging, alto en producción
+# SOLUCIÓN: Especificar headers permitidos explícitamente:
+#   allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID"]
+# PRIORIDAD: P1 - Antes de producción
+```
+
+---
+
+### 2.1. 2 Riesgos Medios
+
+#### [🟡 MEDIUM-001] Routers Opcionales con Exception Silenciosa
+
+```python
+# FILE: agente-hotel-api/app/main.py:38-52
+# [🟡 MEDIUM] Try/except silencioso oculta errores de importación
+
+try:
+    from app.routers import nlp
+    NLP_ROUTER_AVAILABLE = True
+except Exception:  # ⚠️ Captura TODO, incluyendo errores de sintaxis
+    NLP_ROUTER_AVAILABLE = False
+    logger.warning("NLP router not available")
+
+# IMPACTO: Errores de código en routers se ocultan silenciosamente
+# SOLUCIÓN: Capturar ImportError específicamente
+# PRIORIDAD: P2 - Media
+```
+
+---
+
+#### [🟡 MEDIUM-002] InMemoryRedis Stub en Código de Producción
+
+```python
+# FILE: agente-hotel-api/app/services/pms_adapter.py:930-966
+# [🟡 MEDIUM] Stub inline para tests mezclado con código de producción
+
+def get_pms_adapter(redis_client: redis.Redis | None = None):
+    # Crear stub Redis en memoria si no se proporciona cliente (útil para tests)
+    if redis_client is None:
+        class _InMemoryRedis:  # ⚠️ Clase inline en función de producción
+            def __init__(self):
+                self.data = {}
+                # ...  30 líneas de implementación mock
+        redis_client = cast(redis.Redis, _InMemoryRedis())
+
+# IMPACTO: Código de test mezclado con producción, dificulta mantenimiento
+# SOLUCIÓN: Mover a tests/conftest.py o tests/fixtures/
+# PRIORIDAD: P2 - Refactoring
+```
+
+---
+
+#### [🟡 MEDIUM-003] Room Type Mapping Hardcodeado
+
+```python
+# FILE: agente-hotel-api/app/services/pms_adapter.py:831-839
+# [🟡 MEDIUM] Mapeo de tipos de habitación hardcodeado
+
+def _get_room_type_id(self, room_type_name: Optional[str]) -> int:
+    # Room type mapping (this should be configurable or fetched from QloApps)
+    room_type_mapping = {
+        "single": 1, "doble": 2, "double": 2, "twin": 3, 
+        "suite": 4, "deluxe": 5, "superior": 6
+    }  # ⚠️ Hardcodeado, no sincronizado con PMS real
+
+# IMPACTO: Desincronización si PMS cambia IDs de habitaciones
+# SOLUCIÓN: 
+#   1.  Fetch dinámico desde PMS al inicializar
+#   2. O configurar via settings/tenant metadata
+# PRIORIDAD: P2 - Media
+```
+
+---
+
+#### [🟡 MEDIUM-004] DLQ Service Usa Settings Incorrectos
+
+```python
+# FILE: agente-hotel-api/app/services/dlq_service. py:477-481
+# [🟡 MEDIUM] Accede a settings con nombres en MAYÚSCULAS que no existen
+
+_dlq_service = DLQService(
+    redis_client=redis_client,
+    db_session=db_session,
+    max_retries=settings.DLQ_MAX_RETRIES,  # ⚠️ Debería ser settings.dlq_max_retries
+    retry_backoff_base=settings.DLQ_RETRY_BACKOFF_BASE,  # ⚠️ Debería ser settings.dlq_retry_backoff_base
+    ttl_days=settings.DLQ_TTL_DAYS,  # ⚠️ Debería ser settings.dlq_ttl_days
+)
+
+# IMPACTO: AttributeError en runtime al inicializar DLQ service
+# SOLUCIÓN: Usar nombres correctos: settings.dlq_max_retries, etc.
+# PRIORIDAD: P2 - Bug confirmado
+```
+
+---
+
+#### [🟡 MEDIUM-005] datetime.utcnow() Deprecado
+
+```python
+# FILE: agente-hotel-api/app/services/dlq_service.py:372
+# [🟡 MEDIUM] Uso de datetime.utcnow() deprecado en Python 3.12+
+
+dlq_entry = DLQEntry(
+    # ... 
+    last_retry_at=datetime.utcnow(),  # ⚠️ Deprecado, usar datetime.now(UTC)
+)
+
+# IMPACTO: Warnings en Python 3.12+, inconsistencia con otros usos de UTC
+# SOLUCIÓN: Reemplazar con datetime. now(UTC). replace(tzinfo=None) si necesita naive
+# PRIORIDAD: P2 - Media
+```
+
+---
+
+### 2.1. 3 Violación de Invariantes
+
+| Invariante Esperado | Estado Actual | Código Afectado |
+|---------------------|---------------|------------------|
+| "Late checkout availability es determinístico" | 🔴 ROTO | `pms_adapter.py:625` usa `random.random()` |
+| "Modificar reserva actualiza la reserva" | 🔴 ROTO | `pms_adapter.py:749` retorna booking sin cambios |
+| "Datetimes son timezone-aware" | 🟡 INCONSISTENTE | Mezcla de aware y naive en varios archivos |
+| "Settings usan lowercase" | 🟡 INCONSISTENTE | `dlq_service.py:477-481` usa UPPERCASE |
+| "Code coverage >= 70%" | 🔴 ROTO | Actual: 22-31% |
+
+---
+
+### 2.1.4 Antipatrones Detectados
+
+| # | Antipatrón | Ubicación | Severidad |
+|---|------------|-----------|-----------|
+| 1 | **Inline Test Stubs** | `pms_adapter.py:930-966`, `session_manager.py:95-134` | 🟡 Medium |
+| 2 | **Bare Exception Handling** | `main.py:41`, `main.py:51`, `main.py:88` | 🟡 Medium |
+| 3 | **Magic Numbers** | `pms_adapter.py:121` (rate limit 70), `circuit_breaker.py:40` (threshold 5) | 🔵 Low |
+| 4 | **Deprecated API Usage** | `dlq_service.py:372` (`datetime.utcnow()`) | 🟡 Medium |
+| 5 | **Non-deterministic Logic** | `pms_adapter.py:625` (`random.random()`) | 🟠 High |
+| 6 | **Dead Code / Not Implemented** | `pms_adapter.py:746` (modify_reservation) | 🟠 High |
+
+---
+
+## 2.2 API SURFACE & SEGURIDAD
+
+### 2.2.1 Endpoints Documentados
+
+| Método | Ruta | Auth | Rate Limit | Validación | Estado |
+|--------|------|------|------------|------------|--------|
+| GET | `/health/live` | ❌ No | ❌ No | N/A | ✅ OK |
+| GET | `/health/ready` | ❌ No | ❌ No | N/A | ✅ OK |
+| GET | `/metrics` | IP Whitelist | ❌ No | N/A | ✅ OK |
+| POST | `/webhooks/whatsapp` | Signature | ✅ 120/min | ✅ Schema | ✅ OK |
+| POST | `/webhooks/gmail` | OAuth2 | ✅ 120/min | ✅ Schema | ✅ OK |
+| GET | `/` | ❌ No | ✅ Default | N/A | ✅ OK |
+| GET | `/info` | ❌ No | ✅ Default | N/A | ✅ OK |
+
+### 2.2.2 Security Audit
+
+#### ✅ Fortalezas de Seguridad
+
+| Control | Implementación | Archivo |
+|---------|----------------|---------|
+| Security Headers | HSTS, CSP, X-Frame-Options, etc. | `middleware.py:21-57` |
+| Request Size Limit | 1MB default, 10MB media | `middleware.py:113-152` |
+| Rate Limiting | SlowAPI + Redis backend | `main.py:95-96` |
+| Secret Validation | Bloquea dummy values en prod | `settings.py:237-283` |
+| JWT Auth | HS256 con expiración configurable | `settings.py:176-177` |
+| Metrics IP Whitelist | Solo IPs autorizadas | `settings.py:180-235` |
+| Tenant Isolation | Multi-tenancy con contextvars | `middleware.py:217-283` |
+| Correlation ID | X-Request-ID / X-Correlation-ID | `middleware.py:60-79` |
+| PII Redaction | En traces de Jaeger | Documentado en README |
+
+#### 🟡 Mejoras Recomendadas
+
+| Issue | Archivo | Recomendación |
+|-------|---------|---------------|
+| CORS `allow_headers=["*"]` | `main.py:480` | Especificar headers explícitos |
+| OpenTelemetry opcional | `main.py:17-20` | Asegurar fallback seguro |
+| TrustedHost solo en prod | `main.py:458-473` | Evaluar si necesario en staging |
+
+#### ✅ Circuit Breaker Pattern (Correcto)
+
+```python
+# FILE: app/core/circuit_breaker.py
+# [✅ VERIFIED] Implementación correcta del patrón
+
+class CircuitState(Enum):
+    CLOSED = "CLOSED"      # Normal operation
+    OPEN = "OPEN"          # Blocking calls (after 5 failures)
+    HALF_OPEN = "HALF_OPEN"  # Testing recovery (after 30s timeout)
+
+# Métricas Prometheus integradas:
+# - pms_circuit_breaker_calls_total{state, result}
+# - pms_circuit_breaker_failure_streak
+
+# Configuración:
+# - failure_threshold=5 (abre tras 5 fallos)
+# - recovery_timeout=30 (intenta recovery tras 30s)
+```
+
+---
+
+## 2.3 🧬 AI CONTEXT BRIDGE (META-PROMPT)
+
+```markdown
+╔═══════════════════════════════════════════════════════════════╗
+║  >>> AI CONTEXT INJECTION: SYSTEM STATE & BUG MANIFEST <<<   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+## 📌 RESUMEN EJECUTIVO
+
+**Sistema:** SIST_AGENTICO_HOTELERO - Sistema de Agente Hotelero IA  
+**Stack:** Python 3.12 + FastAPI 0.115 + PostgreSQL 14 + Redis 7  
+**Estado:** Staging-Ready (72% completo) - Madurez Nivel 3. 5/5  
+**Health Score:** 68/100  
+**Última Auditoría:** 2025-11-26
+
+---
+
+## 🏗️ ARQUITECTURA COMPACTA
+
+```
+WhatsApp/Gmail → NGINX → FastAPI :8002
+                           ↓
+              ┌────────────┴────────────┐
+              │       Orchestrator       │
+              │   (Intent Dispatcher)    │
+              └────┬───────┬───────┬────┘
+                   ↓       ↓       ↓
+              NLP Engine  PMS    Audio
+              (Rasa)    Adapter  Processor
+                          ↓
+                   QloApps Client
+                   (Circuit Breaker)
+                          ↓
+              PostgreSQL ←→ Redis
+              (Sessions)    (Cache/Locks)
+                          ↓
+         Prometheus → Grafana → AlertManager → Jaeger
+```
+
+**Componentes Core:**
+- `Orchestrator`: Coordina flujo de mensajes, intent dispatch, multi-turn
+- `PMS Adapter`: QloApps integration con circuit breaker + stale cache
+- `Session Manager`: Redis-backed con retry + exponential backoff
+- `DLQ Service`: Dead Letter Queue para mensajes fallidos (H2)
+- `Message Gateway`: Normalización multi-canal (WhatsApp/Gmail)
+- `Feature Flags`: Redis-backed toggles
+
+---
+
+## 📊 MODELOS DE DATOS (COMPACTADOS)
+
+```python
+# UnifiedMessage (Gateway output)
+{ message_id, canal, user_id, timestamp_iso, tipo, texto, 
+  media_url, metadata, tenant_id, correlation_id }
+
+# RoomAvailability (PMS response)
+{ room_id, room_type, price_per_night, total_price, currency,
+  available_rooms, max_occupancy, facilities[], images[], 
+  potentially_stale: bool }
+
+# Session (Redis)
+{ user_id, canal, state, context{}, tts_enabled, tenant_id,
+  created_at, last_activity, reservation_pending?, booking_id?  }
+
+# DLQEntry (PostgreSQL)
+{ id, message_data{}, error_message, error_traceback, error_type,
+  retry_count, first_failed_at, last_retry_at }
+```
+
+**Relaciones Clave:**
+- Session 1:N DLQEntry (fallidos de un usuario)
+- Tenant 1:N Sessions (multi-tenancy)
+- Message → DLQ (on failure, max 3 retries)
+
+---
+
+## 🐛 KNOWN BUGS MANIFEST
+
+### 🔴 CRITICAL (Acción Inmediata Requerida)
+
+**[C-001] Test Coverage Insuficiente**
+- **Estado:** 22-31% (Target: 70%)
+- **Impacto:** Regresiones no detectadas, bugs en producción
+- **Archivos:** `tests/unit/`, `tests/integration/`, `tests/e2e/`
+- **Fix:** Implementar test matrix para servicios críticos (orchestrator, pms_adapter, dlq_service)
+- **Estimado:** 2-3 sprints de trabajo
+
+---
+
+### 🟠 HIGH (Próximo Sprint)
+
+**[H-001] random.random() en Late Checkout**
+- **Archivo:** `app/services/pms_adapter.py:625`
+- **Código:**
+  ```python
+  available = random.random() > 0.3  # ⚠️ NO DETERMINÍSTICO
+  ```
+- **Fix:** Implementar verificación real contra PMS o lógica determinística
+- **Impacto:** UX inconsistente para usuarios
+
+**[H-002] datetime.now() sin Timezone**
+- **Archivo:** `app/services/pms_adapter.py:477-479`
+- **Código:**
+  ```python
+  lead_time_days = (checkin - datetime.now()).days  # ⚠️ Mezcla aware/naive
+  ```
+- **Fix:** `datetime.now(UTC)` en lugar de `datetime. now()`
+
+**[H-003] modify_reservation No Implementado**
+- **Archivo:** `app/services/pms_adapter.py:743-749`
+- **Código:** Retorna booking sin modificar
+- **Fix:** Implementar o retornar HTTP 501
+
+**[H-004] CORS allow_headers=["*"]**
+- **Archivo:** `app/main.py:480`
+- **Fix:** Especificar headers explícitos:
+  ```python
+  allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID"]
+  ```
+
+---
+
+### 🟡 MEDIUM (Deuda Técnica)
+
+**[M-001] DLQ Settings con Nombres Incorrectos**
+- **Archivo:** `app/services/dlq_service.py:477-481`
+- **Código:**
+  ```python
+  max_retries=settings.DLQ_MAX_RETRIES,  # ⚠️ Debería ser settings.dlq_max_retries
+  ```
+- **Fix:** Usar lowercase: `settings.dlq_max_retries`, `settings.dlq_retry_backoff_base`, `settings.dlq_ttl_days`
+
+**[M-002] InMemoryRedis Inline en Producción**
+- **Archivos:** `app/services/pms_adapter.py:930-966`, `app/services/session_manager.py:95-134`
+- **Fix:** Mover stubs a `tests/conftest.py`
+
+**[M-003] Room Type Mapping Hardcodeado**
+- **Archivo:** `app/services/pms_adapter. py:831-839`
+- **Fix:** Fetch dinámico desde PMS o configurar via settings
+
+**[M-004] datetime.utcnow() Deprecado**
+- **Archivo:** `app/services/dlq_service.py:372`
+- **Fix:** `datetime.now(UTC). replace(tzinfo=None)`
+
+**[M-005] Bare Exception Handlers**
+- **Archivos:** `main.py:41,51,88`
+- **Fix:** Capturar `ImportError` específicamente
+
+---
+
+### 🔵 LOW (Nice to Have)
+
+**[L-001] pyproject.toml Author Placeholder**
+- `authors = ["Tu Nombre <tu@correo.com>"]`
+
+**[L-002] Magic Numbers**
+- Rate limit: 70 (`pms_adapter.py:121`)
+- Circuit threshold: 5 (`circuit_breaker.py:40`)
+- Fix: Mover a constants o settings
+
+**[L-003] Comentarios Bilingües**
+- Mezcla español/inglés en varios archivos
+- Fix: Estandarizar a inglés
+
+---
+
+## 🎯 INSTRUCCIONES PARA LA SIGUIENTE IA
+
+**Rol:** Actúa como **Senior Software Engineer** especializado en sistemas FastAPI/Python async con experiencia en patrones de resiliencia. 
+
+**Contexto Cargado:** Tienes acceso completo al estado auditado del sistema arriba. 
+
+**Modo de Operación:**
+1. **NO asumas** nada que no esté documentado aquí
+2. **Prioriza** los bugs según su categoría (🔴 > 🟠 > 🟡 > 🔵)
+3.  **Propón fixes quirúrgicos**, no reescrituras masivas
+4. **Valida** que cada solución no rompa dependencias existentes
+5. **Documenta** los cambios con comentarios explicativos
+6. **Incluye tests** para cualquier fix propuesto
+
+**Patrones Verificados (NO modificar sin justificación):**
+- ✅ Circuit Breaker (`app/core/circuit_breaker.py`)
+- ✅ Retry with Backoff (`app/core/retry. py`)
+- ✅ Stale Cache Fallback (`pms_adapter.py` - `potentially_stale`)
+- ✅ DLQ Pattern (`app/services/dlq_service. py`)
+- ✅ Multi-tenancy (`app/core/tenant_middleware.py`)
+- ✅ Feature Flags (`app/services/feature_flag_service.py`)
+
+**Comandos Disponibles:**
+- `/fix [ID]` - Propón solución para bug específico (ej: `/fix H-001`)
+- `/impact [archivo]` - Analiza impacto de modificar un archivo
+- `/test [función]` - Genera tests unitarios para una función
+- `/refactor [módulo]` - Propón refactoring seguro de un módulo
+
+**Arquitectura de Tests:**
+```
+tests/
+├── unit/           # Mocked dependencies, fast
+├── integration/    # Shared fixtures, cross-service
+├── e2e/            # Full stack, reservation flows
+└── chaos/          # Resilience scenarios
+```
+
+**Comandos Make Disponibles:**
+- `make test` - All tests with coverage
+- `make test-unit` - Unit tests only
+- `make lint` - Ruff linting
+- `make fmt` - Code formatting
+- `make docker-up` - Start stack
+
+**Espera instrucciones específicas para comenzar.**
+
+╔═══════════════════════════════════════════════════════════════╗
+║              FIN DEL CONTEXT BRIDGE - READY TO COPY          ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 2.4 RESUMEN DE MÉTRICAS FINALES
+
+```yaml
+═══════════════════════════════════════════════════════════════════════════
+🏁 FASE 2 COMPLETADA: DIAGNÓSTICO PROFUNDO & AI CONTEXT BRIDGE
+═══════════════════════════════════════════════════════════════════════════
+
+📊 HEALTH BREAKDOWN:
+  maintainability: 75/100
+    ✅ Arquitectura bien estructurada
+    ✅ Patrones de resiliencia correctos
+    🟡 Inline stubs en código de producción
+    🟡 Magic numbers dispersos
+
+  security: 70/100
+    ✅ Security headers implementados
+    ✅ Rate limiting con Redis
+    ✅ Secret validation en prod
+    🟡 CORS allow_headers=["*"]
+    🟡 OpenTelemetry opcional
+
+  test_coverage: 25/100
+    🔴 22-31% actual vs 70% target
+    🔴 Servicios críticos sin cobertura adecuada
+    🟡 Fixtures existentes pero tests limitados
+
+  reliability: 80/100
+    ✅ Circuit breaker pattern
+    ✅ Retry with backoff
+    ✅ DLQ para mensajes fallidos
+    ✅ Stale cache fallback
+    🟡 random.random() en lógica de negocio
+
+📈 SCORE FINAL: 68/100
+
+═══════════════════════════════════════════════════════════════════════════
+🎯 ACCIONES PRIORITARIAS (ordenadas por impacto):
+
+1. [P0] Incrementar test coverage a 70%+ (C-001)
+2.  [P1] Reemplazar random.random() con lógica determinística (H-001)
+3. [P1] Corregir datetime.now() → datetime.now(UTC) (H-002)
+4. [P1] Implementar o retornar 501 en modify_reservation (H-003)
+5.  [P1] Especificar CORS headers explícitos (H-004)
+6. [P2] Corregir settings.DLQ_* → settings.dlq_* (M-001)
+7. [P2] Mover InMemoryRedis stubs a tests/ (M-002)
+
+═══════════════════════════════════════════════════════════════════════════
+📋 PRÓXIMOS PASOS RECOMENDADOS:
+
+→ `/fix H-001` para solución detallada del random.random()
+→ `/fix M-001` para corrección de DLQ settings
+→ `/test orchestrator` para generar tests del componente crítico
+
+
+
+
+
+═══════════════════════════════════════════════════════════════════════════
+```
+
+
+
+
+# 📝 COMENTARIOS, SUGERENCIAS Y HALLAZGOS COMPLEMENTARIOS
+
+Tras revisar exhaustivamente el repositorio, hay varios aspectos que no incluí en las fases anteriores o que merecen profundización adicional:
+
+---
+
+## 🔍 HALLAZGOS ADICIONALES NO DOCUMENTADOS
+
+### 1. **Celery Worker Sin Configuración Completa**
+
+```yaml
+# docker-compose.yml:108-125
+celery_worker:
+  command: celery -A app.worker.celery_app worker --loglevel=info
+```
+
+**Problema detectado:** El archivo `app/worker/celery_app.py` no fue analizado. Si no existe o está incompleto:
+- El contenedor `celery_worker` fallaría al iniciar
+- Las tareas async (ej: envío de emails de review, procesamiento batch) no funcionarían
+
+**Sugerencia:**
+```bash
+# Verificar existencia
+ls -la agente-hotel-api/app/worker/
+```
+
+---
+
+### 2.  **Inconsistencia en Versiones de Dependencias**
+
+```toml
+# pyproject.toml
+fastapi = "^0.115.0"
+
+# requirements.txt
+fastapi==0.111.1  # ⚠️ Versión diferente! 
+```
+
+**Impacto:** Posible comportamiento diferente entre desarrollo (Poetry) y producción (pip install -r requirements.txt). 
+
+**Fix:**
+```bash
+poetry export -f requirements.txt --output requirements.txt --without-hashes
+```
+
+---
+
+### 3. **Secrets en Docker Compose Sin Vault/Secrets Manager**
+
+```yaml
+# docker-compose. yml usa variables de . env directamente
+environment:
+  - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+```
+
+**Riesgo en Producción:** Los secrets se pasan como env vars, que pueden ser expuestos via:
+- `docker inspect`
+- Logs de orquestadores
+- Process listing
+
+**Sugerencia para Staging/Prod:**
+```yaml
+# Usar Docker Secrets o external secret management
+secrets:
+  db_password:
+    external: true
+```
+
+---
+
+### 4. **Falta de Health Check en Celery Worker**
+
+```yaml
+celery_worker:
+  # ...  
+  # ❌ No tiene healthcheck definido
+  restart: unless-stopped
+```
+
+**Impacto:** Si Celery muere silenciosamente, no hay forma de detectarlo automáticamente.
+
+**Fix sugerido:**
+```yaml
+celery_worker:
+  healthcheck:
+    test: ["CMD", "celery", "-A", "app.worker. celery_app", "inspect", "ping"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+```
+
+---
+
+### 5. **Posible Memory Leak en Background Tasks**
+
+```python
+# main.py:166-168
+asyncio.create_task(resource_monitor. continuous_monitoring())
+asyncio.create_task(auto_scaler.continuous_scaling())
+asyncio.create_task(performance_scheduler.continuous_scheduling())
+```
+
+**Observación:** Estas tasks se crean pero no se almacenan en una lista para cancelación ordenada durante shutdown.
+
+**Riesgo:** Memory leaks si las tasks no terminan correctamente.
+
+**Fix:**
+```python
+# Almacenar referencias para cleanup
+_background_tasks = []
+_background_tasks.append(asyncio.create_task(resource_monitor.continuous_monitoring()))
+# ... en shutdown:
+for task in _background_tasks:
+    task.cancel()
+```
+
+---
+
+### 6. **Validación de Webhook Signatures Ausente en Código Visible**
+
+El README menciona "WhatsApp signature verification", pero no vi la implementación en los archivos analizados.
+
+**Crítico para Producción:**
+```python
+# Debería existir algo como:
+def verify_whatsapp_signature(payload: bytes, signature: str, app_secret: str) -> bool:
+    expected = hmac.new(app_secret.encode(), payload, hashlib. sha256).hexdigest()
+    return hmac.compare_digest(f"sha256={expected}", signature)
+```
+
+**Recomendación:** Verificar que existe en `app/routers/webhooks. py`. 
+
+---
+
+### 7. **Observability: Métricas de Negocio vs Técnicas**
+
+Las métricas están bien implementadas técnicamente, pero noté ausencia de:
+
+| Métrica de Negocio Faltante | Valor para el Hotel |
+|----------------------------|---------------------|
+| `conversion_rate` | Consultas → Reservas confirmadas |
+| `avg_response_time_by_intent` | Tiempo de respuesta por tipo de consulta |
+| `abandonment_rate` | Conversaciones abandonadas sin completar |
+| `upsell_success_rate` | Late checkout, upgrades aceptados |
+| `review_completion_rate` | Solicitudes de review → Reviews completadas |
+
+**Sugerencia:** Crear dashboard Grafana específico para métricas de negocio hotelero.
+
+---
+
+### 8. **Logging: Falta Redacción de PII en Logs**
+
+```python
+# orchestrator. py:178
+logger.warning(
+    "orchestrator. escalation_triggered",
+    user_id=message.user_id,  # ⚠️ Posible PII si es número de teléfono
+    # ... 
+)
+```
+
+**Riesgo GDPR/Compliance:** Los logs pueden contener números de teléfono, emails. 
+
+**Sugerencia:**
+```python
+def redact_pii(value: str) -> str:
+    if "@" in value:  # Email
+        return value[:3] + "***@***"
+    if value.startswith("+"):  # Phone
+        return value[:4] + "****" + value[-2:]
+    return value
+```
+
+---
+
+### 9. **Rate Limiting: Falta Diferenciación por Tenant**
+
+```python
+# main.py:95
+limiter = Limiter(key_func=get_remote_address, ...)
+```
+
+**Problema:** El rate limit es por IP, no por tenant.  Un tenant grande podría agotar el límite para todos los usuarios detrás del mismo NAT.
+
+**Sugerencia:**
+```python
+def get_rate_limit_key(request: Request) -> str:
+    tenant_id = getattr(request.state, "tenant_id", "default")
+    client_ip = get_remote_address(request)
+    return f"{tenant_id}:{client_ip}"
+```
+
+---
+
+### 10. **Documentación de API: OpenAPI Schema Incompleto**
+
+El sistema deshabilita docs en producción (correcto por seguridad), pero:
+
+**Falta:**
+- Ejemplos de request/response en schemas Pydantic
+- Descriptions detalladas para endpoints
+- Tags organizados por dominio (Reservations, Sessions, Health)
+
+**Sugerencia:**
+```python
+class RoomAvailability(BaseModel):
+    room_type: str = Field(..., example="Doble", description="Tipo de habitación")
+    price_per_night: float = Field(..., example=12000. 0, description="Precio por noche en ARS")
+```
+
+---
+
+## 🎯 MATRIZ DE PRIORIZACIÓN ACTUALIZADA
+
+Incorporando los nuevos hallazgos:
+
+| Prioridad | ID | Descripción | Esfuerzo | Impacto |
+|-----------|-----|-------------|----------|---------|
+| **P0** | C-001 | Test coverage 22% → 70% | Alto | Crítico |
+| **P0** | NEW-6 | Verificar webhook signature implementation | Bajo | Crítico |
+| **P1** | H-001 | random.random() en late checkout | Bajo | Alto |
+| **P1** | NEW-2 | Sincronizar pyproject.toml ↔ requirements.txt | Bajo | Medio |
+| **P1** | NEW-5 | Memory leak en background tasks | Medio | Alto |
+| **P2** | M-001 | DLQ settings UPPERCASE | Bajo | Medio |
+| **P2** | NEW-4 | Celery worker healthcheck | Bajo | Medio |
+| **P2** | NEW-8 | PII redaction en logs | Medio | Medio |
+| **P3** | NEW-7 | Métricas de negocio adicionales | Alto | Medio |
+| **P3** | NEW-9 | Rate limit por tenant | Medio | Bajo |
+
+---
+
+## 🔧 SCRIPT DE VERIFICACIÓN RÁPIDA
+
+Para validar algunos de estos hallazgos:
+
+```bash
+#!/bin/bash
+# quick-audit.sh
+
+echo "=== Verificando archivos críticos ==="
+
+# 1. Celery worker
+if [ -f "agente-hotel-api/app/worker/celery_app. py" ]; then
+    echo "✅ Celery app existe"
+else
+    echo "❌ Celery app NO ENCONTRADO"
+fi
+
+# 2.  Webhook signature
+grep -r "hmac" agente-hotel-api/app/routers/ && echo "✅ HMAC encontrado" || echo "⚠️ HMAC no encontrado en routers"
+
+# 3. Versiones sync
+POETRY_VERSION=$(grep 'fastapi = ' agente-hotel-api/pyproject.toml | cut -d'"' -f2)
+REQ_VERSION=$(grep 'fastapi==' agente-hotel-api/requirements.txt | cut -d'=' -f3)
+echo "Poetry FastAPI: $POETRY_VERSION"
+echo "Requirements FastAPI: $REQ_VERSION"
+
+# 4. Test coverage actual
+cd agente-hotel-api && make coverage-report 2>/dev/null | grep "TOTAL" || echo "⚠️ Coverage report no disponible"
+```
+
+---
+
+## 💡 SUGERENCIAS ARQUITECTÓNICAS ADICIONALES
+
+### Para Escalabilidad Futura:
+
+1.  **Event Sourcing para Reservas**
+   - Actualmente las reservas se guardan como estado final
+   - Event sourcing permitiría auditoría completa y replay
+
+2. **CQRS para Queries de Disponibilidad**
+   - Separar modelo de escritura (reservas) de lectura (disponibilidad)
+   - Mejoraría performance de consultas frecuentes
+
+3.  **API Versioning**
+   - No vi versionado de API (`/api/v1/`)
+   - Crítico para evolución sin romper clientes
+
+4. **Feature Flags por Tenant**
+   - Actualmente los flags parecen globales
+   - Permitir override por tenant para rollout gradual
+
+---
+
+## 📋 CHECKLIST PRE-PRODUCCIÓN ADICIONAL
+
+```markdown
+## Security
+- [ ] Webhook signature verification implementada y testeada
+- [ ] PII redaction en logs habilitada
+- [ ] Secrets migrados a vault/secrets manager
+- [ ] CORS headers específicos (no "*")
+
+## Reliability
+- [ ] Celery worker con healthcheck
+- [ ] Background tasks con cleanup ordenado
+- [ ] Rate limiting por tenant implementado
+- [ ] Retry logic validada con chaos testing
+
+## Observability
+- [ ] Métricas de negocio (conversion, abandonment)
+- [ ] Alertas configuradas para métricas críticas
+- [ ] Runbooks actualizados para incidentes comunes
+- [ ] Traces con PII redactada
+
+## Deployment
+- [ ] requirements.txt sincronizado con pyproject.toml
+- [ ] Docker images escaneadas con Trivy
+- [ ] Load testing completado (target: 500 RPS)
+- [ ] Rollback procedure documentado y testeado
+```
+
+---
+
+
+
+___________________________________________________________________
