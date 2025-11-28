@@ -6,7 +6,7 @@ Actualización de la Fase E.5 del motor NLP con mejoras significativas.
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import json
 
@@ -186,7 +186,7 @@ class EnhancedNLPEngine:
             else:
                 self.model_versions[language_code] = "unknown"
 
-            self.models_loaded_at[language_code] = datetime.utcnow()
+            self.models_loaded_at[language_code] = datetime.now(timezone.utc)
 
             logger.info(
                 f"Rasa model for language {language_code} loaded successfully",
@@ -541,7 +541,7 @@ class EnhancedNLPEngine:
         for lang, agent in self.agents.items():
             info["models"][lang] = {
                 "model_version": self.model_versions.get(lang, "unknown"),
-                "model_loaded_at": self.models_loaded_at.get(lang, datetime.utcnow()).isoformat(),
+                "model_loaded_at": self.models_loaded_at.get(lang, datetime.now(timezone.utc)).isoformat(),
                 "agent_loaded": agent is not None,
             }
 
@@ -573,7 +573,7 @@ class EnhancedNLPEngine:
         return {
             "status": "success",
             "models_loaded": list(self.agents.keys()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
 

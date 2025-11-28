@@ -5,7 +5,7 @@ Comprehensive health monitoring with dependency tracking and intelligent diagnos
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Callable
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -242,7 +242,7 @@ class AdvancedHealthService:
                     status=HealthStatus.CRITICAL,
                     check_type=check_config["type"],
                     duration_ms=0,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     error=str(e),
                 )
 
@@ -273,7 +273,7 @@ class AdvancedHealthService:
             business_metrics=business_metrics,
             performance_indicators=performance_indicators,
             alerts_active=alerts_active,
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
 
         # Store in history
@@ -317,7 +317,7 @@ class AdvancedHealthService:
                 status=overall_status,
                 check_type=CheckType.LIVENESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Liveness check completed",
                 details={"component_checks": len(checks)},
             )
@@ -329,7 +329,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.LIVENESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -378,7 +378,7 @@ class AdvancedHealthService:
                 status=overall_status,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message=message,
                 details={
                     "dependencies_checked": len(dependency_results),
@@ -394,14 +394,14 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
     async def get_health_history(self, hours: int = 24) -> List[SystemHealth]:
         """Get health check history"""
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         return [health for health in self.health_history if health.last_updated > cutoff_time]
 
@@ -470,7 +470,7 @@ class AdvancedHealthService:
 
         # Generate diagnostic summary
         diagnosis = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "overall_status": latest_health.overall_status,
             "issues_found": len(issues),
             "issues": issues,
@@ -496,7 +496,7 @@ class AdvancedHealthService:
             result = await asyncio.wait_for(check_config["function"](), timeout=check_config["timeout"])
 
             # Update last run time
-            check_config["last_run"] = datetime.utcnow()
+            check_config["last_run"] = datetime.now(timezone.utc)
 
             return result
 
@@ -507,7 +507,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=check_config["type"],
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error="Health check timeout",
             )
         except Exception as e:
@@ -517,7 +517,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=check_config["type"],
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -537,7 +537,7 @@ class AdvancedHealthService:
                     type=self.dependency_checks[name]["type"],
                     status=HealthStatus.CRITICAL,
                     endpoint=self.dependency_checks[name]["endpoint"],
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(timezone.utc),
                     response_time_ms=0,
                     error_count=1,
                 )
@@ -556,7 +556,7 @@ class AdvancedHealthService:
         # Check circuit breaker state
         if circuit_breaker["state"] == "open":
             # Check if recovery timeout has passed
-            if (datetime.utcnow() - circuit_breaker["last_failure"]).total_seconds() > circuit_breaker[
+            if (datetime.now(timezone.utc) - circuit_breaker["last_failure"]).total_seconds() > circuit_breaker[
                 "recovery_timeout"
             ]:
                 circuit_breaker["state"] = "half_open"
@@ -566,7 +566,7 @@ class AdvancedHealthService:
                     type=dep_config["type"],
                     status=HealthStatus.CRITICAL,
                     endpoint=dep_config["endpoint"],
-                    last_check=datetime.utcnow(),
+                    last_check=datetime.now(timezone.utc),
                     response_time_ms=0,
                     error_count=circuit_breaker["failure_count"],
                     metadata={"circuit_breaker_open": True},
@@ -595,7 +595,7 @@ class AdvancedHealthService:
                 type=dep_config["type"],
                 status=result.get("status", HealthStatus.HEALTHY),
                 endpoint=dep_config["endpoint"],
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 response_time_ms=response_time_ms,
                 error_count=0,
                 success_rate=success_rate,
@@ -612,7 +612,7 @@ class AdvancedHealthService:
 
             # Update circuit breaker
             circuit_breaker["failure_count"] += 1
-            circuit_breaker["last_failure"] = datetime.utcnow()
+            circuit_breaker["last_failure"] = datetime.now(timezone.utc)
 
             if circuit_breaker["failure_count"] >= circuit_breaker["failure_threshold"]:
                 circuit_breaker["state"] = "open"
@@ -622,7 +622,7 @@ class AdvancedHealthService:
                 type=dep_config["type"],
                 status=HealthStatus.CRITICAL,
                 endpoint=dep_config["endpoint"],
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 response_time_ms=response_time_ms,
                 error_count=circuit_breaker["failure_count"],
                 metadata={"error": str(e)},
@@ -641,7 +641,7 @@ class AdvancedHealthService:
 
         try:
             # Simple health indicators
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             duration_ms = (time.time() - start_time) * 1000
 
             return HealthCheckResult(
@@ -660,7 +660,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.LIVENESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -678,7 +678,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.LIVENESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Basic connectivity is working",
             )
 
@@ -689,7 +689,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.LIVENESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -711,7 +711,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Database is ready",
                 details={"connection_pool_size": 10},  # Example
             )
@@ -723,7 +723,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -744,7 +744,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Redis is ready",
             )
 
@@ -755,7 +755,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.READINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -794,7 +794,7 @@ class AdvancedHealthService:
                 status=status,
                 check_type=CheckType.PERFORMANCE,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message=f"System performance check completed (mock data). Issues: {len(issues)}",
                 details={
                     "cpu_percent": cpu_percent,
@@ -812,7 +812,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.PERFORMANCE,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -832,7 +832,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.BUSINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Reservation system is healthy",
                 details={"active_reservations": 45, "processing_time_avg": 2.3, "error_rate": 0.02},
             )
@@ -844,7 +844,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.BUSINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -862,7 +862,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.BUSINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Guest communication system is healthy",
                 details={"whatsapp_status": "active", "email_status": "active", "response_time_avg": 45.2},
             )
@@ -874,7 +874,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.BUSINESS,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -892,7 +892,7 @@ class AdvancedHealthService:
                 status=HealthStatus.HEALTHY,
                 check_type=CheckType.SECURITY,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 message="Security status is healthy",
                 details={"failed_login_rate": 0.01, "rate_limit_violations": 2, "security_alerts": 0},
             )
@@ -904,7 +904,7 @@ class AdvancedHealthService:
                 status=HealthStatus.CRITICAL,
                 check_type=CheckType.SECURITY,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 error=str(e),
             )
 
@@ -1273,7 +1273,7 @@ class AdvancedHealthService:
         while True:
             try:
                 # Run health checks based on their intervals
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
 
                 for name, check_config in self.health_checks.items():
                     if not check_config["enabled"]:

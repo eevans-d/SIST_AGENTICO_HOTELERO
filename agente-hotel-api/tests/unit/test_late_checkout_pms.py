@@ -50,9 +50,15 @@ class TestCheckLateCheckoutAvailability:
 
     @pytest.mark.asyncio
     async def test_returns_available_when_no_next_booking(self, pms_adapter):
-        """Should return available=True when room has no next booking."""
-        # Mock availability check to return True
-        with patch("random.random", return_value=0.8):  # > 0.3 means available
+        """Should return available=True when current time is before 14:00."""
+        # Mock datetime.now to return a time before 14:00 (e.g., 10:00)
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
         assert result["available"] is True
@@ -63,9 +69,15 @@ class TestCheckLateCheckoutAvailability:
 
     @pytest.mark.asyncio
     async def test_returns_not_available_when_next_booking_exists(self, pms_adapter):
-        """Should return available=False when room has next booking."""
-        # Mock availability check to return False
-        with patch("random.random", return_value=0.1):  # < 0.3 means not available
+        """Should return available=False when current time is 14:00 or later."""
+        # Mock datetime.now to return a time at or after 14:00 (e.g., 15:00)
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 15, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
         assert result["available"] is False
@@ -76,7 +88,13 @@ class TestCheckLateCheckoutAvailability:
     @pytest.mark.asyncio
     async def test_calculates_fee_as_50_percent_daily_rate(self, pms_adapter):
         """Should calculate fee as 50% of daily rate."""
-        with patch("random.random", return_value=0.5):
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
         assert result["fee"] == 100.0  # 50% of 200.0
@@ -85,7 +103,13 @@ class TestCheckLateCheckoutAvailability:
     @pytest.mark.asyncio
     async def test_caches_result_for_5_minutes(self, pms_adapter, mock_redis):
         """Should cache result for 5 minutes."""
-        with patch("random.random", return_value=0.5):
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
         # Verify cache was set with 300 second TTL
@@ -143,7 +167,13 @@ class TestCheckLateCheckoutAvailability:
     @pytest.mark.asyncio
     async def test_supports_different_checkout_times(self, pms_adapter):
         """Should support different requested checkout times."""
-        with patch("random.random", return_value=0.5):
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result1 = await pms_adapter.check_late_checkout_availability("123", "13:00")
             result2 = await pms_adapter.check_late_checkout_availability("123", "15:00")
             result3 = await pms_adapter.check_late_checkout_availability("123", "16:00")
@@ -256,6 +286,9 @@ class TestLateCheckoutBusinessLogic:
     @pytest.mark.asyncio
     async def test_fee_is_always_50_percent_of_daily_rate(self, pms_adapter):
         """Fee should always be 50% of daily rate regardless of requested time."""
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        
         # Test with different room rates
         test_rates = [100.0, 200.0, 500.0, 1000.0]
 
@@ -268,7 +301,11 @@ class TestLateCheckoutBusinessLogic:
                 "guest_name": "John Doe",
             }
 
-            with patch("random.random", return_value=0.5):
+            with patch("app.services.pms_adapter.datetime") as mock_datetime:
+                mock_datetime.now.return_value = mock_now
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.strptime = datetime.strptime
+                mock_datetime.UTC = timezone.utc
                 result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
             expected_fee = rate * 0.5
@@ -278,7 +315,13 @@ class TestLateCheckoutBusinessLogic:
     @pytest.mark.asyncio
     async def test_standard_checkout_is_always_12pm(self, pms_adapter):
         """Standard checkout should always be 12:00."""
-        with patch("random.random", return_value=0.5):
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
+        with patch("app.services.pms_adapter.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            mock_datetime.strptime = datetime.strptime
+            mock_datetime.UTC = timezone.utc
             result = await pms_adapter.check_late_checkout_availability("123", "14:00")
 
         assert result["standard_checkout"] == "12:00"
@@ -286,10 +329,16 @@ class TestLateCheckoutBusinessLogic:
     @pytest.mark.asyncio
     async def test_supports_checkout_times_after_noon(self, pms_adapter):
         """Should support various checkout times after standard 12pm."""
+        from datetime import datetime, timezone
+        mock_now = datetime(2025, 10, 15, 10, 0, 0, tzinfo=timezone.utc)
         checkout_times = ["13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
 
         for time in checkout_times:
-            with patch("random.random", return_value=0.5):
+            with patch("app.services.pms_adapter.datetime") as mock_datetime:
+                mock_datetime.now.return_value = mock_now
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.strptime = datetime.strptime
+                mock_datetime.UTC = timezone.utc
                 result = await pms_adapter.check_late_checkout_availability("123", time)
 
             assert result["requested_time"] == time

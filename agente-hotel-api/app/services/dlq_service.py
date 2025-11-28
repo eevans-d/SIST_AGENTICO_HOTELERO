@@ -369,7 +369,7 @@ class DLQService:
             error_type=type(error).__name__,
             retry_count=dlq_data["retry_count"],
             first_failed_at=first_failed_dt,
-            last_retry_at=datetime.utcnow(),
+            last_retry_at=datetime.now(UTC),
         )
 
         # Save to database
@@ -475,14 +475,14 @@ async def init_dlq_service(redis_client: redis.Redis, db_session: AsyncSession) 
     _dlq_service = DLQService(
         redis_client=redis_client,
         db_session=db_session,
-        max_retries=settings.DLQ_MAX_RETRIES,
-        retry_backoff_base=settings.DLQ_RETRY_BACKOFF_BASE,
-        ttl_days=settings.DLQ_TTL_DAYS,
+        max_retries=settings.dlq_max_retries,
+        retry_backoff_base=settings.dlq_retry_backoff_base,
+        ttl_days=settings.dlq_ttl_days,
     )
     logger.info(
         "dlq_service_initialized",
-        max_retries=settings.DLQ_MAX_RETRIES,
-        backoff_base=settings.DLQ_RETRY_BACKOFF_BASE,
-        ttl_days=settings.DLQ_TTL_DAYS,
+        max_retries=settings.dlq_max_retries,
+        backoff_base=settings.dlq_retry_backoff_base,
+        ttl_days=settings.dlq_ttl_days,
     )
     return _dlq_service

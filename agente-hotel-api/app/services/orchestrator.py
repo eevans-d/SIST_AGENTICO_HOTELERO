@@ -1252,7 +1252,263 @@ class Orchestrator:
             return SimpleNamespace(**merged)
         return result
 
+    # =========================================================================
+    # HELPER METHODS - Extracted to reduce handle_unified_message complexity
+    # =========================================================================
+
+    async def _process_audio_message(self, message: UnifiedMessage) -> None:
+        """
+        Process audio message: transcribe via STT and update message text.
+        Handles DLQ enqueuing on failure with graceful degradation.
+        """
+        media_url = getattr(message, "media_url", None)
+        if not media_url:
+            logger.warning(
+                "audio_message_without_media_url",
+                user_id=getattr(message, "user_id", None),
+                message_id=getattr(message, "message_id", None),
+            )
+            message.texto = message.texto or ""
+            message.metadata["confidence_stt"] = message.metadata.get("confidence_stt", 0.0)
+            message.metadata["language_stt"] = message.metadata.get("language_stt")
+            return
+
+        try:
+            # Compatibility: some tests patch transcribe_audio
+            transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
+            if callable(transcribe_fn):
+                maybe_coro = transcribe_fn(media_url)
+                if asyncio.iscoroutine(maybe_coro):
+                    stt_result = await maybe_coro
+                else:
+                    stt_result = maybe_coro
+            else:
+                stt_result = await self.audio_processor.transcribe_whatsapp_audio(media_url)
+
+            if not isinstance(stt_result, dict):
+                stt_result = {}
+
+            message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
+            message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
+            if lang := stt_result.get("language"):
+                message.metadata["language_stt"] = lang
+
+        except Exception as audio_error:
+            logger.error(
+                "audio_processing_failed",
+                error=str(audio_error),
+                user_id=message.user_id,
+                message_id=message.message_id,
+            )
+            if self.dlq_service:
+                await self.dlq_service.enqueue_failed_message(
+                    message=message,
+                    error=audio_error,
+                    reason="audio_processing_failure"
+                )
+            message.texto = ""
+            message.metadata["audio_error"] = str(audio_error)
+
+    def _get_fallback_intent(self, text: str, detected_language: str) -> dict:
+        """
+        Rule-based fallback intent detection when NLP fails.
+        Returns NLP-like result dict with intent and confidence.
+        """
+        text_lower = text.lower()
+        
+        # Keyword mappings for multilingual fallback
+        FALLBACK_KEYWORDS = {
+            "check_availability": [
+                "disponibilidad", "disponible", "habitacion", "cuarto",  # Spanish
+                "availability", "available", "room", "rooms",  # English
+                "disponibilidade", "quarto", "quartos",  # Portuguese
+            ],
+            "make_reservation": [
+                "reservar", "reserva", "reservacion",  # Spanish
+                "book", "booking", "reserve", "reservation",  # English
+            ],
+            "pricing_info": [
+                "precio", "costo", "tarifa", "valor",  # Spanish
+                "price", "cost", "rate", "pricing",  # English
+                "preço", "custo",  # Portuguese
+            ],
+            "hotel_location": [
+                "ubicacion", "ubicación", "dirección", "direccion", "llegar", "mapa",  # Spanish
+                "location", "address", "map", "directions", "where",  # English
+                "localização", "endereço", "direções",  # Portuguese
+            ],
+        }
+        
+        for intent_name, keywords in FALLBACK_KEYWORDS.items():
+            if any(word in text_lower for word in keywords):
+                return {
+                    "intent": {"name": intent_name, "confidence": 0.5},
+                    "entities": {},
+                    "language": detected_language,
+                }
+        
+        return {
+            "intent": {"name": "unknown", "confidence": 0.0},
+            "entities": {},
+            "language": detected_language,
+        }
+
+    async def _process_nlp(self, message: UnifiedMessage, span) -> tuple[dict, str]:
+        """
+        Process message text through NLP with fallback handling.
+        Returns (nlp_result, intent_name) tuple.
+        """
+        from opentelemetry import trace
+        from ..core.tracing import enrich_span_with_business_context
+        
+        text = message.texto or ""
+        
+        try:
+            detected_language = await self.nlp_engine.detect_language(text)
+            nlp_result = await self.nlp_engine.process_text(text, language=detected_language)
+            intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
+            confidence = nlp_result.get("intent", {}).get("confidence", 0.0)
+            
+            if span and span.is_recording():
+                enrich_span_with_business_context(
+                    span,
+                    intent=intent_name,
+                    confidence=confidence,
+                    language=detected_language,
+                )
+            
+            message.metadata["detected_language"] = detected_language
+            try:
+                self.template_service.set_language(detected_language)
+            except Exception:
+                pass
+            
+            return nlp_result, intent_name
+            
+        except Exception as nlp_error:
+            logger.warning(
+                "nlp_failed_using_fallback",
+                error=str(nlp_error),
+                user_id=message.user_id,
+                message_id=message.message_id,
+            )
+            metrics_service.record_nlp_fallback("nlp_service_failure")
+            nlp_fallbacks.inc()
+            
+            if self.dlq_service:
+                await self.dlq_service.enqueue_failed_message(
+                    message=message,
+                    error=nlp_error,
+                    reason="nlp_processing_failure"
+                )
+            
+            detected_language = await self.nlp_engine.detect_language(text)
+            message.metadata["detected_language"] = detected_language
+            try:
+                self.template_service.set_language(detected_language)
+            except Exception:
+                pass
+            
+            nlp_result = self._get_fallback_intent(text, detected_language)
+            intent_name = nlp_result["intent"]["name"]
+            
+            return nlp_result, intent_name
+
+    def _build_response(self, response_data: dict, message: UnifiedMessage) -> dict:
+        """
+        Build final response dict from handler response data.
+        Maps response_type to appropriate output structure.
+        """
+        response_type = response_data.get("response_type", "text")
+        
+        # Response builders by type
+        RESPONSE_BUILDERS = {
+            "text": lambda: {
+                "response_type": "text",
+                "content": response_data.get("content", ""),
+                "original_message": message,
+            },
+            "audio": lambda: {
+                "response_type": "audio",
+                "content": {
+                    "text": response_data.get("content", ""),
+                    "audio_data": response_data.get("audio_data"),
+                },
+                "original_message": message,
+            },
+            "audio_with_image": lambda: {
+                "response_type": "audio_with_image",
+                "content": response_data.get("content", ""),
+                "audio_data": response_data.get("audio_data"),
+                "image_url": response_data.get("image_url"),
+                "image_caption": response_data.get("image_caption"),
+                "original_message": message,
+            },
+            "interactive_buttons": lambda: {
+                "response_type": "interactive_buttons",
+                "content": response_data.get("content", {}),
+                "original_message": message,
+            },
+            "interactive_list": lambda: {
+                "response_type": "interactive_list",
+                "content": response_data.get("content", {}),
+                "original_message": message,
+            },
+            "location": lambda: {
+                "response_type": "location",
+                "content": response_data.get("content", {}),
+                "original_message": message,
+            },
+            "audio_with_location": lambda: {
+                "response_type": "audio_with_location",
+                "content": {
+                    "text": response_data.get("content", {}).get("text", ""),
+                    "audio_data": response_data.get("content", {}).get("audio_data"),
+                    "location": response_data.get("content", {}).get("location", {}),
+                },
+                "original_message": message,
+            },
+            "text_with_image": lambda: {
+                "response_type": "text_with_image",
+                "content": response_data.get("content", ""),
+                "image_url": response_data.get("image_url"),
+                "image_caption": response_data.get("image_caption"),
+                "original_message": message,
+                "response": response_data.get("content", ""),
+            },
+            "interactive_buttons_with_image": lambda: {
+                "response_type": "interactive_buttons_with_image",
+                "content": response_data.get("content", {}),
+                "image_url": response_data.get("image_url"),
+                "image_caption": response_data.get("image_caption"),
+                "original_message": message,
+            },
+            "image_with_text": lambda: {
+                "response_type": "image_with_text",
+                "content": response_data.get("content", ""),
+                "image_path": response_data.get("image_path"),
+                "image_caption": response_data.get("image_caption"),
+                "original_message": message,
+            },
+            "reaction": lambda: {
+                "response_type": "reaction",
+                "content": response_data.get("content", {}),
+                "original_message": message,
+            },
+        }
+        
+        builder = RESPONSE_BUILDERS.get(response_type)
+        if builder:
+            return builder()
+        
+        logger.warning(f"Unknown response_type: {response_type}, defaulting to text")
+        return {"response": "Lo siento, no puedo procesar tu solicitud en este momento."}
+
     async def handle_unified_message(self, message: UnifiedMessage) -> dict:
+        """
+        Main message processing entry point.
+        Refactored to use helper methods for reduced cyclomatic complexity.
+        """
         start = time.time()
         intent_name = "unknown"
         status = "ok"
@@ -1264,7 +1520,6 @@ class Orchestrator:
         
         span = trace.get_current_span()
         if span and span.is_recording():
-            # Initial context (before NLP)
             enrich_span_with_business_context(
                 span,
                 operation="process_message",
@@ -1277,385 +1532,57 @@ class Orchestrator:
         # Métrica de negocio: contar mensaje por canal
         messages_by_channel.labels(channel=message.canal).inc()
 
-        # H2: Audio processing with DLQ fallback
+        # Step 1: Process audio messages (extracted to helper)
         if message.tipo == "audio":
-            media_url = getattr(message, "media_url", None)
-            if not media_url:
-                # No forzamos error: degradamos con texto vacío y metadatos por defecto
-                logger.warning(
-                    "audio_message_without_media_url",
-                    user_id=getattr(message, "user_id", None),
-                    message_id=getattr(message, "message_id", None),
-                )
-                message.texto = message.texto or ""
-                message.metadata["confidence_stt"] = message.metadata.get("confidence_stt", 0.0)
-                message.metadata["language_stt"] = message.metadata.get("language_stt")
-            else:
-                try:
-                    # Compatibilidad: algunos tests parchean transcribe_audio
-                    transcribe_fn = getattr(self.audio_processor, "transcribe_audio", None)
-                    if callable(transcribe_fn):
-                        maybe_coro = transcribe_fn(media_url)
-                        if asyncio.iscoroutine(maybe_coro):
-                            stt_result = await maybe_coro
-                        else:
-                            stt_result = maybe_coro
-                    else:
-                        stt_result = await self.audio_processor.transcribe_whatsapp_audio(media_url)
-
-                    if not isinstance(stt_result, dict):
-                        stt_result = {}
-
-                    message.texto = stt_result.get("text") or stt_result.get("transcript") or ""
-                    message.metadata["confidence_stt"] = stt_result.get("confidence", 0.0)
-                    if lang := stt_result.get("language"):
-                        message.metadata["language_stt"] = lang
-                
-                except Exception as audio_error:
-                    # H2: Enqueue audio processing failure to DLQ
-                    logger.error(
-                        "audio_processing_failed",
-                        error=str(audio_error),
-                        user_id=message.user_id,
-                        message_id=message.message_id,
-                    )
-                    if self.dlq_service:
-                        await self.dlq_service.enqueue_failed_message(
-                            message=message,
-                            error=audio_error,
-                            reason="audio_processing_failure"
-                        )
-                    # Graceful degradation: continue with empty text
-                    message.texto = ""
-                    message.metadata["audio_error"] = str(audio_error)
+            await self._process_audio_message(message)
 
         try:
-            text = message.texto or ""
-
-            # Graceful degradation: Si NLP falla, usar reglas básicas
-            try:
-                # Detect language from the message if not specified
-                detected_language = await self.nlp_engine.detect_language(text)
-
-                # Process message with detected/specified language
-                nlp_result = await self.nlp_engine.process_text(text, language=detected_language)
-                intent_name = nlp_result.get("intent", {}).get("name", "unknown") or "unknown"
-                confidence = nlp_result.get("intent", {}).get("confidence", 0.0)
-                
-                # H1: Enrich trace with NLP results
-                if span and span.is_recording():
-                    enrich_span_with_business_context(
-                        span,
-                        intent=intent_name,
-                        confidence=confidence,
-                        language=detected_language,
-                    )
-
-                # Store language info in session for continuity
-                message.metadata["detected_language"] = detected_language
-                # Establecer idioma por defecto en TemplateService
-                try:
-                    self.template_service.set_language(detected_language)
-                except Exception:
-                    pass
-
-            except Exception as nlp_error:
-                # H2: Log NLP failure and enqueue to DLQ for retry
-                logger.warning(
-                    "nlp_failed_using_fallback",
-                    error=str(nlp_error),
-                    user_id=message.user_id,
-                    message_id=message.message_id,
-                )
-                metrics_service.record_nlp_fallback("nlp_service_failure")
-                nlp_fallbacks.inc()
-                
-                # H2: Enqueue to DLQ for potential retry when NLP service recovers
-                if self.dlq_service:
-                    await self.dlq_service.enqueue_failed_message(
-                        message=message,
-                        error=nlp_error,
-                        reason="nlp_processing_failure"
-                    )
-
-                # Language detection fallback for rule-based matching
-                detected_language = await self.nlp_engine.detect_language(text)
-                message.metadata["detected_language"] = detected_language
-                # Establecer idioma por defecto en TemplateService (fallback)
-                try:
-                    self.template_service.set_language(detected_language)
-                except Exception:
-                    pass
-
-                # Reglas básicas de fallback (multilingual)
-                text_lower = text.lower()
-                if any(
-                    word in text_lower
-                    for word in [
-                        # Spanish
-                        "disponibilidad",
-                        "disponible",
-                        "habitacion",
-                        "cuarto",
-                        # English
-                        "availability",
-                        "available",
-                        "room",
-                        "rooms",
-                        # Portuguese
-                        "disponibilidade",
-                        "quarto",
-                        "quartos",
-                    ]
-                ):
-                    intent_name = "check_availability"
-                    nlp_result = {
-                        "intent": {"name": "check_availability", "confidence": 0.5},
-                        "entities": [],
-                        "language": detected_language,
-                    }
-                elif any(
-                    word in text_lower
-                    for word in [
-                        "reservar",
-                        "reserva",
-                        "reservacion",  # Spanish
-                        "book",
-                        "booking",
-                        "reserve",
-                        "reservation",  # English
-                        "reservar",
-                        "reserva",  # Portuguese
-                    ]
-                ):
-                    intent_name = "make_reservation"
-                    nlp_result = {
-                        "intent": {"name": "make_reservation", "confidence": 0.5},
-                        "entities": [],
-                        "language": detected_language,
-                    }
-                elif any(
-                    word in text_lower
-                    for word in [
-                        "precio",
-                        "costo",
-                        "tarifa",
-                        "valor",  # Spanish
-                        "price",
-                        "cost",
-                        "rate",
-                        "pricing",  # English
-                        "preço",
-                        "custo",
-                        "tarifa",  # Portuguese
-                    ]
-                ):
-                    intent_name = "pricing_info"
-                    nlp_result = {
-                        "intent": {"name": "pricing_info", "confidence": 0.5},
-                        "entities": [],
-                        "language": detected_language,
-                    }
-                elif any(
-                    word in text_lower
-                    for word in [
-                        "ubicacion",
-                        "ubicación",
-                        "dirección",
-                        "direccion",
-                        "llegar",
-                        "mapa",  # Spanish
-                        "location",
-                        "address",
-                        "map",
-                        "directions",
-                        "where",  # English
-                        "localização",
-                        "endereço",
-                        "mapa",
-                        "direções",  # Portuguese
-                    ]
-                ):
-                    intent_name = "hotel_location"
-                    nlp_result = {
-                        "intent": {"name": "hotel_location", "confidence": 0.5},
-                        "entities": [],
-                        "language": detected_language,
-                    }
-                else:
-                    intent_name = "unknown"
-                    nlp_result = {
-                        "intent": {"name": "unknown", "confidence": 0.0},
-                        "entities": [],
-                        "language": detected_language,
-                    }
-
-                    # Importante: no retornar inmediatamente aquí para permitir que
-                    # el manejo de horarios comerciales (after-hours/urgente) se ejecute
-                    # antes de aplicar el fallback genérico por baja confianza.
-                    # Para mensajes con imagen ya manejamos heurísticas más adelante.
-
-            # Métrica de negocio: registrar intent detectado
+            # Step 2: Process NLP (extracted to helper)
+            nlp_result, intent_name = await self._process_nlp(message, span)
+            
+            # Step 3: Record metrics
             intent_obj = nlp_result.get("intent", {})
             confidence = intent_obj.get("confidence", 0.0)
             confidence_level = (
-                "high"
-                if confidence >= CONFIDENCE_THRESHOLD_LOW
-                else "medium"
-                if confidence >= CONFIDENCE_THRESHOLD_VERY_LOW
+                "high" if confidence >= CONFIDENCE_THRESHOLD_LOW
+                else "medium" if confidence >= CONFIDENCE_THRESHOLD_VERY_LOW
                 else "low"
             )
             intents_detected.labels(intent=intent_name, confidence_level=confidence_level).inc()
 
-            session = await self.session_manager.get_or_create_session(message.user_id, message.canal, tenant_id)
-            # Fallback dinámico según confianza + feature flag
+            # Step 4: Get/create session
+            session = await self.session_manager.get_or_create_session(
+                message.user_id, message.canal, tenant_id
+            )
+            
+            # Step 5: Check feature flags
             ff_service = await get_feature_flag_service()
             enhanced_fallback = await ff_service.is_enabled("nlp.fallback.enhanced", default=True)
-            # Registrar categoría de confianza
             metrics_service.record_nlp_confidence(confidence)
-
-            # Get language from NLP result or message metadata
             response_language = nlp_result.get("language", message.metadata.get("detected_language", "es"))
 
-            # Antes de aplicar el fallback por muy baja confianza, verificar reglas de horarios comerciales
-            # para capturar correctamente: after-hours (no urgente) y urgentes fuera de horario.
+            # Step 6: Check business hours handling
             bh_result = await self._handle_business_hours(nlp_result, session, message)
             if bh_result is not None:
-                # Normalizar a la forma de salida de handle_unified_message
                 if bh_result.get("response_type", "text") == "text":
                     return {"response_type": "text", "content": bh_result.get("content", ""), "original_message": message}
-                else:
-                    return {**bh_result, "original_message": message}
+                return {**bh_result, "original_message": message}
 
+            # Step 7: Handle very low confidence
             if enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_VERY_LOW and message.tipo != "image":
-                # Respuesta de bajo nivel de confianza agresiva
                 metrics_service.record_nlp_fallback("very_low_confidence")
-                nlp_fallbacks.inc()  # Métrica de negocio: fallback detectado
+                nlp_fallbacks.inc()
                 return {"response": self._get_low_confidence_message(response_language)}
             elif enhanced_fallback and confidence < CONFIDENCE_THRESHOLD_LOW:
                 message.metadata["low_confidence"] = True
                 metrics_service.record_nlp_fallback("low_confidence_hint")
 
-            # Graceful degradation: Manejar fallos de PMS
+            # Step 8: Handle intent and build response (uses _build_response helper)
             try:
                 response_data = await self.handle_intent(nlp_result, session, message)
-                response_type = response_data.get("response_type", "text")
-
-                if response_type == "text":
-                    # Respuesta de texto simple: usar formato estructurado
-                    return {
-                        "response_type": "text",
-                        "content": response_data.get("content", ""),
-                        "original_message": message,
-                    }
-
-                elif response_type == "audio":
-                    # Respuesta de audio (texto + audio)
-                    return {
-                        "response_type": "audio",
-                        "content": {
-                            "text": response_data.get("content", ""),
-                            "audio_data": response_data.get("audio_data"),
-                        },
-                        "original_message": message,
-                    }
-
-                elif response_type == "audio_with_image":
-                    # Respuesta combinada de audio + imagen
-                    return {
-                        "response_type": "audio_with_image",
-                        "content": response_data.get("content", ""),
-                        "audio_data": response_data.get("audio_data"),
-                        "image_url": response_data.get("image_url"),
-                        "image_caption": response_data.get("image_caption"),
-                        "original_message": message,
-                    }
-
-                elif response_type == "interactive_buttons":
-                    # Respuesta con botones interactivos
-                    return {
-                        "response_type": "interactive_buttons",
-                        "content": response_data.get("content", {}),
-                        "original_message": message,
-                    }
-
-                elif response_type == "interactive_list":
-                    # Respuesta con lista interactiva
-                    return {
-                        "response_type": "interactive_list",
-                        "content": response_data.get("content", {}),
-                        "original_message": message,
-                    }
-
-                elif response_type == "location":
-                    # Respuesta con ubicación
-                    return {
-                        "response_type": "location",
-                        "content": response_data.get("content", {}),
-                        "original_message": message,
-                    }
-
-                elif response_type == "audio_with_location":
-                    # Respuesta combinada de audio + ubicación
-                    # El router deberá manejar esto enviando primero el audio y luego la ubicación
-                    content = response_data.get("content", {})
-                    return {
-                        "response_type": "audio_with_location",
-                        "content": {
-                            "text": content.get("text", ""),
-                            "audio_data": content.get("audio_data"),
-                            "location": content.get("location", {}),
-                        },
-                        "original_message": message,
-                    }
-
-                elif response_type == "text_with_image":
-                    # Respuesta de texto con imagen opcional
-                    return {
-                        "response_type": "text_with_image",
-                        "content": response_data.get("content", ""),
-                        "image_url": response_data.get("image_url"),
-                        "image_caption": response_data.get("image_caption"),
-                        "original_message": message,
-                        # Campo 'response' por compatibilidad con algunos callers
-                        "response": response_data.get("content", ""),
-                    }
-
-                elif response_type == "interactive_buttons_with_image":
-                    # Respuesta interactiva con imagen: exponer estructura completa para el router
-                    return {
-                        "response_type": "interactive_buttons_with_image",
-                        "content": response_data.get("content", {}),
-                        "image_url": response_data.get("image_url"),
-                        "image_caption": response_data.get("image_caption"),
-                        "original_message": message,
-                    }
-
-                elif response_type == "image_with_text":
-                    # Respuesta de imagen con texto (usado para QR de confirmación)
-                    return {
-                        "response_type": "image_with_text",
-                        "content": response_data.get("content", ""),
-                        "image_path": response_data.get("image_path"),
-                        "image_caption": response_data.get("image_caption"),
-                        "original_message": message,
-                    }
-
-                elif response_type == "reaction":
-                    # Respuesta con reacción a un mensaje
-                    return {
-                        "response_type": "reaction",
-                        "content": response_data.get("content", {}),
-                        "original_message": message,
-                    }
-
-                else:
-                    # Tipo de respuesta desconocido, usar texto por defecto
-                    logger.warning(f"Unknown response_type: {response_type}, defaulting to text")
-                    return {"response": "Lo siento, no puedo procesar tu solicitud en este momento."}
+                return self._build_response(response_data, message)
 
             except (PMSError, CircuitBreakerOpenError) as pms_error:
-                # H2: Log PMS failure and enqueue to DLQ for retry
                 logger.error(
                     "pms_unavailable_degraded_response",
                     error=str(pms_error),
@@ -1665,7 +1592,6 @@ class Orchestrator:
                 )
                 orchestrator_degraded_responses.inc()
                 
-                # H2: Enqueue to DLQ for retry when PMS recovers
                 if self.dlq_service:
                     await self.dlq_service.enqueue_failed_message(
                         message=message,
@@ -1673,22 +1599,24 @@ class Orchestrator:
                         reason="pms_unavailable"
                     )
 
-                # Respuesta degradada según el intent
-                if intent_name == "check_availability":
-                    response_text = "Lo siento, nuestro sistema de disponibilidad está temporalmente fuera de servicio. Por favor, contacta directamente con recepción al [TELÉFONO] o escribe a [EMAIL]."
-                elif intent_name == "make_reservation":
-                    response_text = "No puedo procesar reservas en este momento por mantenimiento del sistema. Por favor, contacta con recepción al [TELÉFONO] o intenta más tarde."
-                else:
-                    response_text = "Disculpa, estoy experimentando dificultades técnicas. ¿Puedes contactar directamente con recepción? Teléfono: [TELÉFONO]"
-
+                # Degraded responses by intent
+                degraded_messages = {
+                    "check_availability": "Lo siento, nuestro sistema de disponibilidad está temporalmente fuera de servicio. Por favor, contacta directamente con recepción al [TELÉFONO] o escribe a [EMAIL].",
+                    "make_reservation": "No puedo procesar reservas en este momento por mantenimiento del sistema. Por favor, contacta con recepción al [TELÉFONO] o intenta más tarde.",
+                }
+                response_text = degraded_messages.get(
+                    intent_name,
+                    "Disculpa, estoy experimentando dificultades técnicas. ¿Puedes contactar directamente con recepción? Teléfono: [TELÉFONO]"
+                )
                 return {"response": response_text}
+
         except Exception as e:
             status = "error"
             orchestrator_errors_total.labels(intent=intent_name, error_type=type(e).__name__).inc()
             if tenant_id:
                 try:
                     metrics_service.inc_tenant_request(tenant_id, error=True)
-                except Exception:  # pragma: no cover
+                except Exception:
                     pass
             raise
         finally:
@@ -1698,7 +1626,7 @@ class Orchestrator:
             if tenant_id:
                 try:
                     metrics_service.inc_tenant_request(tenant_id, error=(status != "ok"))
-                except Exception:  # pragma: no cover
+                except Exception:
                     pass
 
     async def handle_intent(self, nlp_result: dict, session: dict, message: UnifiedMessage) -> dict:
@@ -1717,6 +1645,7 @@ class Orchestrator:
                 "content": { ... contenido específico del tipo ... }
             }
         """
+        print(f"DEBUG: handle_intent called with intent={nlp_result.get('intent')}")
         intent = nlp_result.get("intent")
         if isinstance(intent, dict):
             intent = intent.get("name")

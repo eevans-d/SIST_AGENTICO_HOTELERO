@@ -3,7 +3,7 @@ Custom Dashboard Service
 Role-specific dashboards for hotel operations
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from enum import Enum
 import json
@@ -402,7 +402,7 @@ class CustomDashboardService:
                     "config": widget.config,
                     "data": widget_data,
                     "refresh_interval": widget.refresh_interval,
-                    "last_updated": datetime.utcnow().isoformat(),
+                    "last_updated": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -508,7 +508,7 @@ class CustomDashboardService:
     async def create_custom_dashboard(self, dashboard_config: Dict[str, Any]) -> str:
         """Create a custom dashboard"""
 
-        dashboard_id = dashboard_config.get("id", f"custom_{int(datetime.utcnow().timestamp())}")
+        dashboard_id = dashboard_config.get("id", f"custom_{int(datetime.now(timezone.utc).timestamp())}")
 
         widgets = []
         for widget_config in dashboard_config.get("widgets", []):
@@ -577,7 +577,7 @@ class CustomDashboardService:
     async def _get_revenue_trend_data(self, days: int) -> Dict[str, Any]:
         """Get revenue trend data"""
         # This would generate actual trend data
-        dates = [(datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days, 0, -1)]
+        dates = [(datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days, 0, -1)]
         actual = [14000 + (i * 100) + (i % 7 * 500) for i in range(len(dates))]
         forecast = [actual[-1] + (i * 150) for i in range(1, 8)]
         target = [16000] * len(dates)
@@ -586,7 +586,7 @@ class CustomDashboardService:
 
     async def _get_occupancy_forecast_data(self, days: int) -> Dict[str, Any]:
         """Get occupancy forecast data"""
-        dates = [(datetime.utcnow() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
+        dates = [(datetime.now(timezone.utc) + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
         actual = [75 + (i % 7 * 5) for i in range(7)]
         forecast = [78 + (i % 5 * 3) for i in range(days)]
 
@@ -764,7 +764,7 @@ class CustomDashboardService:
             "layout": dashboard.layout,
             "auto_refresh": dashboard.auto_refresh,
             "theme": dashboard.theme,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         await self.redis.set(dashboard_key, json.dumps(dashboard_data, default=str))

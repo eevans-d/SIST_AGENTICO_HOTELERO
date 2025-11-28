@@ -7,34 +7,9 @@ from app.services.pms_adapter import QloAppsAdapter, PMSError, PMSAuthError, cir
 from app.core.circuit_breaker import CircuitState
 
 
-class FakeRedis:
-    def __init__(self):
-        self.store: dict[str, str] = {}
-
-    async def get(self, key: str):
-        return self.store.get(key)
-
-    async def setex(self, key: str, ttl: int, value: str):
-        self.store[key] = value
-        return True
-
-    async def delete(self, *keys: str):
-        for k in keys:
-            self.store.pop(k, None)
-        return True
-
-    async def scan(self, cursor: int = 0, match: str | None = None, count: int = 100):
-        if match is None:
-            keys = list(self.store.keys())
-        else:
-            keys = [k for k in self.store.keys() if match.replace("*", "") in k]
-        return 0, keys
-
-
 @pytest.mark.asyncio
-async def test_cb_open_no_stale_returns_empty_list(mocker):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_cb_open_no_stale_returns_empty_list(mocker, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     # Force CB OPEN, no stale available
     adapter.circuit_breaker.state = CircuitState.OPEN
@@ -52,9 +27,8 @@ async def test_cb_open_no_stale_returns_empty_list(mocker):
 
 
 @pytest.mark.asyncio
-async def test_error_path_uses_stale_and_marks_stale(mocker):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_error_path_uses_stale_and_marks_stale(mocker, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     key = "availability:2025-11-10:2025-11-12:1:any"
     rooms = [{"room_id": "1", "room_type": "Doble", "price_per_night": 120.0, "currency": "USD"}]
@@ -79,13 +53,12 @@ async def test_error_path_uses_stale_and_marks_stale(mocker):
 
     result = await adapter.check_availability(date(2025, 11, 10), date(2025, 11, 12), guests=1)
     assert isinstance(result, list) and result and result[0].get("potentially_stale") is True
-    assert f"{key}:stale" in redis.store
+    assert f"{key}:stale" in fake_redis.store
 
 
 @pytest.mark.asyncio
-async def test_auth_error_propagates_without_stale(monkeypatch):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_auth_error_propagates_without_stale(monkeypatch, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     async def _fail_auth(**kwargs):  # noqa: ANN001
         raise PMSAuthError("bad token")
@@ -97,13 +70,19 @@ async def test_auth_error_propagates_without_stale(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_reservation_invalidates_availability_cache(monkeypatch, mocker):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_create_reservation_invalidates_availability_cache(monkeypatch, mocker, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     # Stub create_booking
     mock_q = mocker.AsyncMock()
-    mock_q.create_booking = mocker.AsyncMock(return_value={"booking_reference": "BK-1"})
+    mock_q.create_booking = mocker.AsyncMock(return_value={
+        "booking_reference": "BK-1",
+        "status": "confirmed",
+        "total_amount": 200.0,
+        "currency": "USD",
+        "check_in": "2025-12-01",
+        "check_out": "2025-12-03"
+    })
     monkeypatch.setattr(adapter, "qloapps", mock_q)
 
     spy_invalidate = mocker.AsyncMock()
@@ -125,9 +104,8 @@ async def test_create_reservation_invalidates_availability_cache(monkeypatch, mo
 
 
 @pytest.mark.asyncio
-async def test_cancel_reservation_success_invalidates_cache(monkeypatch, mocker):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_cancel_reservation_success_invalidates_cache(monkeypatch, mocker, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     mock_q = mocker.AsyncMock()
     mock_q.cancel_booking = mocker.AsyncMock(return_value=True)
@@ -142,9 +120,8 @@ async def test_cancel_reservation_success_invalidates_cache(monkeypatch, mocker)
 
 
 @pytest.mark.asyncio
-async def test_get_reservation_error_raises_pmserror(monkeypatch):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_get_reservation_error_raises_pmserror(monkeypatch, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     async def _fail_get(_id):  # noqa: ANN001
         raise Exception("db down")
@@ -156,9 +133,8 @@ async def test_get_reservation_error_raises_pmserror(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_late_checkout_cache_hit(monkeypatch):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_late_checkout_cache_hit(monkeypatch, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     # Booking stub
     async def _get_booking(_id):  # noqa: ANN001
@@ -181,16 +157,15 @@ async def test_late_checkout_cache_hit(monkeypatch):
         "next_booking_id": None,
         "message": "Late checkout available",
     }
-    await redis.setex(cache_key, 300, json.dumps(payload))
+    await fake_redis.setex(cache_key, 300, json.dumps(payload))
 
     result = await adapter.check_late_checkout_availability("123", requested_checkout_time="14:00")
     assert result == payload
 
 
 @pytest.mark.asyncio
-async def test_confirm_late_checkout_not_available(monkeypatch):
-    redis = FakeRedis()
-    adapter = QloAppsAdapter(redis)
+async def test_confirm_late_checkout_not_available(monkeypatch, fake_redis):
+    adapter = QloAppsAdapter(redis_client=fake_redis)
 
     async def _not_available(reservation_id: str, requested_checkout_time: str = "14:00"):
         return {"available": False, "fee": 50.0}

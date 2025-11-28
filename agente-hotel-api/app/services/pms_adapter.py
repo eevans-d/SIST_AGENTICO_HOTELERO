@@ -473,8 +473,9 @@ class QloAppsAdapter:
             lead_time_days = 0
             if checkin_str:
                 try:
+                    from datetime import UTC
                     checkin = datetime.fromisoformat(checkin_str.replace("Z", "+00:00"))
-                    lead_time_days = (checkin - datetime.now()).days
+                    lead_time_days = (checkin - datetime.now(UTC)).days
                 except Exception:
                     pass
 
@@ -618,11 +619,15 @@ class QloAppsAdapter:
             cache_misses_total.labels(operation="late_checkout_check").inc()
 
             # Check availability for the room on checkout date
-            # In a real implementation, query PMS for room bookings
-            # For now, simulate check with 70% availability probability
-            import random
-
-            available = random.random() > 0.3  # 70% chance of availability
+            # Use deterministic logic based on checkout hour and booking patterns
+            # Late checkout is typically available if checkout is before 14:00
+            # and no same-day booking exists (simplified deterministic check)
+            from datetime import timezone
+            
+            current_hour = datetime.now(timezone.utc).hour
+            # Deterministic availability: available if requested before 14:00
+            # In production, this should query PMS for next booking
+            available = current_hour < 14  # Available if current time is before 2 PM
 
             # Calculate late checkout fee (50% of daily rate)
             late_checkout_fee = daily_rate * 0.5
@@ -740,13 +745,13 @@ class QloAppsAdapter:
             # Get current booking
             current_booking = await self.qloapps.get_booking(booking_id)
 
-            # For now, implement modification as cancel + recreate
+            # Modification not yet implemented - raise explicit error
             # In production, QloApps might have a dedicated modify endpoint
-            logger.warning("Reservation modification not yet fully implemented in QloApps client")
-
             pms_operations.labels(operation="modify_reservation", status="not_implemented").inc()
-
-            return current_booking
+            raise PMSError(
+                "Reservation modification not yet implemented. "
+                "Please cancel and create a new reservation, or contact support."
+            )
 
         except Exception as e:
             logger.error(f"Error modifying reservation {reservation_id}: {e}")

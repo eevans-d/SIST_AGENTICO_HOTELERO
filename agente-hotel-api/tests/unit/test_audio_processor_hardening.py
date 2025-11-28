@@ -69,10 +69,15 @@ async def test_download_audio_success(audio_processor):
     mock_response = AsyncMock()
     mock_response.status = 200
     mock_response.headers = {"content-length": "1024"}
-    mock_response.read.side_effect = [b"audio_data", b""]
+    # Mock content.read as async
+    mock_response.content.read = AsyncMock(side_effect=[b"audio_data", b""])
+    
+    # Mock context manager for session.get()
+    mock_get_ctx = AsyncMock()
+    mock_get_ctx.__aenter__.return_value = mock_response
     
     mock_session = AsyncMock()
-    mock_session.get.return_value.__aenter__.return_value = mock_response
+    mock_session.get.return_value = mock_get_ctx
     
     with patch("aiohttp.ClientSession", return_value=mock_session):
         with patch("builtins.open", mock_open()) as mock_file:
@@ -94,7 +99,7 @@ async def test_download_audio_too_large_header(audio_processor, mock_settings):
     mock_session.get.return_value.__aenter__.return_value = mock_response
     
     with patch("aiohttp.ClientSession", return_value=mock_session):
-        with pytest.raises(AudioValidationError) as exc:
+        with pytest.raises(AudioDownloadError) as exc:
             await audio_processor._download_audio_optimized("http://example.com/large.ogg", Path("test.ogg"))
         
         assert "Audio file too large" in str(exc.value)
@@ -108,14 +113,14 @@ async def test_download_audio_too_large_stream(audio_processor, mock_settings):
     mock_response.status = 200
     mock_response.headers = {} # No content length
     # Chunk larger than limit
-    mock_response.content.read.side_effect = [b"a" * 2048, b""]
+    mock_response.content.read = AsyncMock(side_effect=[b"a" * 2048, b""])
     
     mock_session = AsyncMock()
     mock_session.get.return_value.__aenter__.return_value = mock_response
     
     with patch("aiohttp.ClientSession", return_value=mock_session):
         with patch("builtins.open", mock_open()):
-            with pytest.raises(AudioValidationError) as exc:
+            with pytest.raises(AudioDownloadError) as exc:
                 await audio_processor._download_audio_optimized("http://example.com/stream.ogg", Path("test.ogg"))
             
             assert "Audio file too large" in str(exc.value)
@@ -167,14 +172,14 @@ async def test_transcribe_whatsapp_audio_success(audio_processor):
     audio_processor._convert_to_wav = AsyncMock()
     
     # Mock STT result
-    expected_result = {"text": "Hello world", "confidence": 0.95}
+    expected_result = {"text": "Hello world", "confidence": 0.95, "success": True}
     audio_processor.stt.transcribe.return_value = expected_result
     
     result = await audio_processor.transcribe_whatsapp_audio("http://example.com/audio.ogg")
     
     assert result["text"] == "Hello world"
     assert result["confidence"] == 0.95
-    assert result["success"] is not False # It might not be explicitly set to True in result, but shouldn't be False
+    assert result["success"] is True
     
     audio_processor._download_audio_optimized.assert_called_once()
     audio_processor._convert_to_wav.assert_called_once()

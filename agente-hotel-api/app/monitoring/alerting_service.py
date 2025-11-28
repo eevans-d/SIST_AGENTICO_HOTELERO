@@ -4,7 +4,7 @@ Intelligent alerting with escalation and business logic
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -400,9 +400,9 @@ class AdvancedAlertingService:
 
         alert = self.active_alerts[alert_id]
         alert.status = AlertStatus.ACKNOWLEDGED
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = datetime.now(timezone.utc)
         alert.acknowledged_by = user_id
-        alert.updated_at = datetime.utcnow()
+        alert.updated_at = datetime.now(timezone.utc)
 
         if comment:
             if not alert.metadata:
@@ -428,9 +428,9 @@ class AdvancedAlertingService:
 
         alert = self.active_alerts[alert_id]
         alert.status = AlertStatus.RESOLVED
-        alert.resolved_at = datetime.utcnow()
+        alert.resolved_at = datetime.now(timezone.utc)
         alert.resolved_by = user_id
-        alert.updated_at = datetime.utcnow()
+        alert.updated_at = datetime.now(timezone.utc)
 
         if comment:
             if not alert.metadata:
@@ -476,7 +476,7 @@ class AdvancedAlertingService:
     async def get_alert_history(self, hours: int = 24, category: AlertCategory = None) -> List[Alert]:
         """Get alert history"""
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         history = [alert for alert in self.alert_history if alert.created_at > cutoff_time]
 
@@ -488,7 +488,7 @@ class AdvancedAlertingService:
     async def get_alert_statistics(self, days: int = 7) -> Dict[str, Any]:
         """Get alert statistics"""
 
-        cutoff_time = datetime.utcnow() - timedelta(days=days)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
         # Get recent alerts
         recent_alerts = [alert for alert in self.alert_history if alert.created_at > cutoff_time]
@@ -544,7 +544,7 @@ class AdvancedAlertingService:
             "end_time": rule_config.get("end_time"),
             "reason": rule_config.get("reason", ""),
             "created_by": rule_config.get("created_by", ""),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
 
         logger.info(f"Created suppression rule: {rule_id}")
@@ -563,7 +563,7 @@ class AdvancedAlertingService:
     ) -> Alert:
         """Create new alert"""
 
-        alert_id = f"alert_{condition.id}_{int(datetime.utcnow().timestamp())}"
+        alert_id = f"alert_{condition.id}_{int(datetime.now(timezone.utc).timestamp())}"
 
         alert = Alert(
             id=alert_id,
@@ -576,8 +576,8 @@ class AdvancedAlertingService:
             metric_name=condition.metric_name,
             current_value=current_value,
             threshold=condition.threshold,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             escalation_level=0,
             notification_history=[],
             metadata={
@@ -612,7 +612,7 @@ class AdvancedAlertingService:
             self.escalation_timers[f"{alert.id}_{rule['level']}"] = {
                 "alert_id": alert.id,
                 "level": rule["level"],
-                "scheduled_at": datetime.utcnow() + timedelta(seconds=delay_seconds),
+                "scheduled_at": datetime.now(timezone.utc) + timedelta(seconds=delay_seconds),
                 "channels": rule["channels"],
                 "executed": False,
             }
@@ -630,7 +630,7 @@ class AdvancedAlertingService:
 
         while True:
             try:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
 
                 for timer_key, timer_data in list(self.escalation_timers.items()):
                     if timer_data["executed"]:
@@ -700,7 +700,7 @@ class AdvancedAlertingService:
                     alert.notification_history = []
 
                 alert.notification_history.append(
-                    {"channel": channel, "message": message, "sent_at": datetime.utcnow().isoformat(), "status": "sent"}
+                    {"channel": channel, "message": message, "sent_at": datetime.now(timezone.utc).isoformat(), "status": "sent"}
                 )
 
             except Exception as e:
@@ -773,7 +773,7 @@ class AdvancedAlertingService:
         """Check if condition is in cooldown period"""
 
         # Check if there's a recent alert for this condition
-        cutoff_time = datetime.utcnow() - timedelta(seconds=cooldown_seconds)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=cooldown_seconds)
 
         for alert in self.active_alerts.values():
             if alert.condition_id == condition_id and alert.created_at > cutoff_time:
@@ -789,7 +789,7 @@ class AdvancedAlertingService:
     def _is_business_hours(self) -> bool:
         """Check if current time is within business hours"""
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hour = now.hour
 
         # Define business hours (can be configurable)

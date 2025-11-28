@@ -18,7 +18,7 @@ async def test_low_confidence_triggers_enhanced_fallback(monkeypatch):
 
     # Mock NLP to return very low confidence
     orch.nlp_engine.detect_language = AsyncMock(return_value="es")
-    orch.nlp_engine.process_message = AsyncMock(
+    orch.nlp_engine.process_text = AsyncMock(
         return_value={"intent": {"name": "unknown", "confidence": 0.0}, "language": "es"}
     )
 

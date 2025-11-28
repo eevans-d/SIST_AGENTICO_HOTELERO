@@ -273,3 +273,41 @@ async def test_db_session(test_db_engine):
         yield session
         # Rollback any uncommitted changes
         await session.rollback()
+
+
+class FakeRedis:
+    """In-memory Redis for testing."""
+
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str):
+        return self.store.get(key)
+
+    async def setex(self, key: str, ttl: int, value: str):
+        self.store[key] = value
+        return True
+
+    async def delete(self, *keys: str):
+        for k in keys:
+            self.store.pop(k, None)
+        return len(keys)
+
+    async def scan(self, cursor: int = 0, match: str | None = None, count: int = 100):
+        keys = list(self.store.keys())
+        if match:
+            # Simple pattern matching for tests
+            import fnmatch
+            keys = [k for k in keys if fnmatch.fnmatch(k, match)]
+        return 0, keys
+
+    async def ping(self):
+        return True
+    
+    async def close(self):
+        pass
+
+
+@pytest.fixture
+def fake_redis():
+    return FakeRedis()

@@ -1,11 +1,13 @@
 # [PROMPT GA-02 + E.1] app/routers/webhooks.py
+# Refactored: 2025-11-28 - Reduced CC from 73 to <20 via response handler extraction
 
 import hmac
 import hashlib
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Query
 from prometheus_client import Counter
 from fastapi.responses import PlainTextResponse
-from typing import Any, cast
+from typing import Any, cast, Optional
+from pathlib import Path
 import json
 import redis.asyncio as redis
 import structlog
@@ -19,9 +21,357 @@ from ..services.session_manager import SessionManager
 from ..services.lock_service import LockService
 from ..services.message_gateway import MessageGateway
 from ..services.whatsapp_client import WhatsAppMetaClient
+from ..services.feature_flag_service import DEFAULT_FLAGS
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 logger = structlog.get_logger(__name__)
+
+
+# =============================================================================
+# RESPONSE HANDLERS - Extracted to reduce cyclomatic complexity
+# =============================================================================
+
+async def _send_interactive_buttons(
+    client: WhatsAppMetaClient, user_id: str, content: dict
+) -> None:
+    """Send interactive message with buttons."""
+    await client.send_interactive_message(
+        to=user_id,
+        header_text=content.get("header_text"),
+        body_text=content.get("body_text", ""),
+        footer_text=content.get("footer_text"),
+        action_buttons=content.get("action_buttons"),
+    )
+
+
+async def _send_interactive_list(
+    client: WhatsAppMetaClient, user_id: str, content: dict
+) -> None:
+    """Send interactive message with list."""
+    await client.send_interactive_message(
+        to=user_id,
+        header_text=content.get("header_text"),
+        body_text=content.get("body_text", ""),
+        footer_text=content.get("footer_text"),
+        list_sections=content.get("list_sections"),
+        list_button_text=content.get("list_button_text"),
+    )
+
+
+async def _send_location(
+    client: WhatsAppMetaClient, user_id: str, location_data: dict
+) -> None:
+    """Send location message with fallback for different method names."""
+    loc_fn = getattr(client, "send_location_message", None) or getattr(
+        client, "send_location", None
+    )
+    if loc_fn:
+        await loc_fn(
+            to=user_id,
+            latitude=location_data.get("latitude", 0),
+            longitude=location_data.get("longitude", 0),
+            name=location_data.get("name"),
+            address=location_data.get("address"),
+        )
+
+
+async def _send_audio_with_location(
+    client: WhatsAppMetaClient, user_id: str, content: dict
+) -> None:
+    """Send audio message followed by location."""
+    # Send audio first
+    if content.get("audio_data"):
+        await client.send_audio_message(to=user_id, audio_data=content.get("audio_data"))
+        # Send text if present
+        if text := content.get("text"):
+            await client.send_message(to=user_id, text=text)
+    
+    # Then send location
+    location = content.get("location", {})
+    if location:
+        await _send_location(client, user_id, location)
+
+
+async def _send_audio_response(
+    client: WhatsAppMetaClient, user_id: str, result: dict, content: Any
+) -> None:
+    """Send audio message with optional text and follow-up."""
+    # Extract audio_data and text based on content type
+    if isinstance(content, dict):
+        audio_data = content.get("audio_data")
+        text = content.get("text", "")
+    else:
+        audio_data = result.get("audio_data")
+        text = content if content else ""
+    
+    # Send audio
+    if audio_data:
+        await client.send_audio_message(to=user_id, audio_data=audio_data)
+    
+    # Send text if present
+    if text:
+        await client.send_message(to=user_id, text=text)
+    
+    # Handle follow-up message
+    if isinstance(content, dict) and (follow_up := content.get("follow_up")):
+        await _handle_follow_up(client, user_id, follow_up)
+
+
+async def _handle_follow_up(
+    client: WhatsAppMetaClient, user_id: str, follow_up: dict
+) -> None:
+    """Handle follow-up messages after audio response."""
+    follow_up_type = follow_up.get("type")
+    follow_up_content = follow_up.get("content", {})
+    
+    if follow_up_type == "interactive_list":
+        await _send_interactive_list(client, user_id, follow_up_content)
+
+
+async def _send_text_with_image(
+    client: WhatsAppMetaClient, user_id: str, result: dict, counter: Counter
+) -> None:
+    """Send text with image, optionally consolidated."""
+    image_url = result.get("image_url")
+    text = result.get("content", "")
+    caption = result.get("image_caption", "")
+    
+    if image_url and DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
+        # Consolidated: single image with combined caption
+        combo_caption = text.strip()
+        if caption:
+            combo_caption = f"{combo_caption}\n\n{caption}" if combo_caption else caption
+        await client.send_image(to=user_id, image_url=image_url, caption=combo_caption)
+        try:
+            counter.inc()
+        except Exception:
+            pass
+    else:
+        # Default: separate text and image
+        if text:
+            await client.send_message(to=user_id, text=text)
+        if image_url:
+            await client.send_image(to=user_id, image_url=image_url, caption=caption)
+
+
+async def _send_audio_with_image(
+    client: WhatsAppMetaClient, user_id: str, result: dict
+) -> None:
+    """Send audio, text, and image in sequence."""
+    # Audio first
+    if audio_data := result.get("audio_data"):
+        await client.send_audio_message(to=user_id, audio_data=audio_data)
+    
+    # Text if exists
+    if text := result.get("content", ""):
+        await client.send_message(to=user_id, text=text)
+    
+    # Image if exists
+    if image_url := result.get("image_url"):
+        caption = result.get("image_caption", "")
+        await client.send_image(to=user_id, image_url=image_url, caption=caption)
+
+
+async def _send_interactive_buttons_with_image(
+    client: WhatsAppMetaClient, user_id: str, result: dict, content: dict
+) -> None:
+    """Send image followed by interactive buttons."""
+    # Image first
+    if image_url := result.get("image_url"):
+        caption = result.get("image_caption", "")
+        await client.send_image(to=user_id, image_url=image_url, caption=caption)
+    
+    # Then buttons
+    await _send_interactive_buttons(client, user_id, content)
+
+
+async def _send_image_with_text(
+    client: WhatsAppMetaClient, user_id: str, result: dict
+) -> None:
+    """Send QR code image with text (for payment confirmations)."""
+    image_path = result.get("image_path")
+    image_caption = result.get("image_caption", "")
+    text_content = result.get("content", "")
+    
+    if not image_path:
+        return
+    
+    # Send text first
+    if text_content:
+        await client.send_message(to=user_id, text=text_content)
+    
+    # Try to send image
+    try:
+        if Path(image_path).exists():
+            # In production, this would be a CDN URL
+            await client.send_message(
+                to=user_id,
+                text=f"📱 {image_caption}\n\n(QR code would be sent here in production)",
+            )
+        else:
+            await client.send_message(
+                to=user_id, text=f"⚠️ Error enviando QR code. {image_caption}"
+            )
+    except Exception as img_error:
+        logger.error("whatsapp.send_qr_image_error", error=str(img_error), image_path=image_path)
+        await client.send_message(
+            to=user_id,
+            text="✅ Tu reserva está confirmada. El QR code se enviará por email.",
+        )
+
+
+# Response type to handler mapping
+RESPONSE_HANDLERS = {
+    "interactive_buttons": lambda c, u, r, cnt: _send_interactive_buttons(c, u, cnt),
+    "interactive_list": lambda c, u, r, cnt: _send_interactive_list(c, u, cnt),
+    "location": lambda c, u, r, cnt: _send_location(c, u, cnt),
+    "audio_with_location": lambda c, u, r, cnt: _send_audio_with_location(c, u, cnt),
+    "audio": lambda c, u, r, cnt: _send_audio_response(c, u, r, cnt),
+    "audio_with_image": lambda c, u, r, cnt: _send_audio_with_image(c, u, r),
+    "interactive_buttons_with_image": lambda c, u, r, cnt: _send_interactive_buttons_with_image(c, u, r, cnt),
+    "image_with_text": lambda c, u, r, cnt: _send_image_with_text(c, u, r),
+}
+
+
+async def _dispatch_response(
+    client: WhatsAppMetaClient,
+    result: dict,
+    original_message: Any,
+    counter: Counter
+) -> None:
+    """
+    Dispatch response to appropriate handler based on response_type.
+    
+    This replaces the long if/elif chain, reducing cyclomatic complexity.
+    """
+    if not original_message:
+        return
+    
+    response_type = result.get("response_type")
+    content = result.get("content", {})
+    user_id = original_message.user_id
+    
+    # Special cases that need custom handling
+    if response_type == "text":
+        text = content.get("text", "") if isinstance(content, dict) else (content or "")
+        await client.send_message(to=user_id, text=text)
+        return
+    
+    if response_type == "text_with_image":
+        await _send_text_with_image(client, user_id, result, counter)
+        return
+    
+    if response_type == "reaction":
+        await client.send_reaction(
+            to=user_id,
+            message_id=content.get("message_id", ""),
+            emoji=content.get("emoji", "👍"),
+        )
+        return
+    
+    # Use handler mapping for other types
+    handler = RESPONSE_HANDLERS.get(response_type)
+    if handler:
+        await handler(client, user_id, result, content)
+
+
+# =============================================================================
+# SERVICE INITIALIZATION HELPERS - Extracted to reduce complexity
+# =============================================================================
+
+class _InMemoryRedis:
+    """Fallback Redis for tests/local when no server available."""
+    
+    def __init__(self):
+        self._store: dict[str, Any] = {}
+
+    async def get(self, key: str):
+        return self._store.get(key)
+
+    async def set(self, key: str, value: Any, ex: int | None = None, nx: bool | None = None):
+        if nx and key in self._store:
+            return False
+        self._store[key] = value
+        return True
+
+    async def setex(self, key: str, ttl: int, value: Any):
+        self._store[key] = value
+        return True
+
+    async def ping(self):
+        return True
+
+
+async def _get_redis_client() -> redis.Redis:
+    """Get Redis client with in-memory fallback."""
+    redis_client = await get_redis()
+    try:
+        await redis_client.ping()  # type: ignore[attr-defined]
+        return cast(redis.Redis, redis_client)
+    except Exception:
+        return cast(redis.Redis, _InMemoryRedis())
+
+
+async def _validate_request(request: Request) -> bytes:
+    """Validate request headers and payload size. Returns body bytes."""
+    ctype = request.headers.get("content-type", "").lower()
+    if ctype and "application/json" not in ctype:
+        logger.warning("whatsapp.webhook.unsupported_media_type", content_type=ctype)
+        raise HTTPException(status_code=415, detail="Unsupported Media Type")
+    
+    body_bytes = await request.body()
+    if len(body_bytes) > 1_000_000:
+        logger.warning("whatsapp.webhook.payload_too_large", size=len(body_bytes))
+        raise HTTPException(status_code=413, detail="Payload too large")
+    
+    return body_bytes
+
+
+def _parse_payload(body_bytes: bytes) -> dict:
+    """Parse and validate JSON payload."""
+    try:
+        payload = json.loads(body_bytes.decode() or "{}")
+        logger.info(
+            "whatsapp.webhook.received",
+            payload_keys=list(payload.keys()),
+            entry_count=len(payload.get("entry", []))
+        )
+        return payload
+    except Exception as e:
+        logger.error("whatsapp.webhook.invalid_json", error=str(e))
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+
+def _build_response_payload(result: dict) -> dict[str, Any]:
+    """Build webhook response payload from orchestrator result."""
+    response_payload: dict[str, Any] = {"status": "ok"}
+    
+    try:
+        if not isinstance(result, dict):
+            return response_payload
+        
+        # Echo text response for test compatibility
+        if "response" in result and isinstance(result.get("response"), str):
+            response_payload["response"] = result["response"]
+        
+        # Echo structured responses for test/integration validation
+        if "response_type" in result:
+            response_payload["response_type"] = result.get("response_type")
+            
+            if "content" in result:
+                response_payload["content"] = result.get("content")
+                # Compatibility: expose text content in 'response' field
+                if result.get("response_type") == "text" and isinstance(result.get("content"), str):
+                    response_payload["response"] = result.get("content")
+            
+            # Optional image/audio fields
+            for extra_key in ("image_url", "image_caption", "audio_data"):
+                if extra_key in result:
+                    response_payload[extra_key] = result.get(extra_key)
+    except Exception:
+        pass
+    
+    return response_payload
 
 # Métrica: consolidación de texto+imagen en un solo mensaje (imagen con caption)
 whatsapp_text_image_consolidated_total = Counter(
@@ -110,63 +460,17 @@ async def handle_whatsapp_webhook(request: Request):
     4. Process via Orchestrator
     5. Return response based on message type
     """
-    # Validaciones básicas de cabeceras/payload
-    ctype = request.headers.get("content-type", "").lower()
-    if ctype and "application/json" not in ctype:
-        logger.warning("whatsapp.webhook.unsupported_media_type", content_type=ctype)
-        raise HTTPException(status_code=415, detail="Unsupported Media Type")
-
-    # Limitar tamaño de payload a 1MB (ya manejado por middleware, pero doble check)
-    body_bytes = await request.body()
-    if len(body_bytes) > 1_000_000:
-        logger.warning("whatsapp.webhook.payload_too_large", size=len(body_bytes))
-        raise HTTPException(status_code=413, detail="Payload too large")
-
-    # Procesa el webhook: normaliza el payload, invoca Orchestrator y devuelve respuesta.
-    try:
-        payload = json.loads(body_bytes.decode() or "{}")
-        logger.info(
-            "whatsapp.webhook.received", payload_keys=list(payload.keys()), entry_count=len(payload.get("entry", []))
-        )
-    except Exception as e:
-        logger.error("whatsapp.webhook.invalid_json", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    # Fallback Redis en memoria para pruebas/local si no hay servidor
-    class _InMemoryRedis:
-        def __init__(self):
-            self._store: dict[str, Any] = {}
-
-        async def get(self, key: str):
-            return self._store.get(key)
-
-        async def set(self, key: str, value: Any, ex: int | None = None, nx: bool | None = None):
-            if nx and key in self._store:
-                return False
-            self._store[key] = value
-            return True
-
-        async def setex(self, key: str, ttl: int, value: Any):
-            self._store[key] = value
-            return True
-
-        async def ping(self):
-            return True
-
-    redis_client = await get_redis()
-    try:
-        await redis_client.ping()  # type: ignore[attr-defined]
-    except Exception:
-        redis_client = _InMemoryRedis()  # type: ignore[assignment]
-
-    # Asegurar tipado para servicios que esperan redis.Redis
-    redis_typed: redis.Redis = cast(redis.Redis, redis_client)
+    # Step 1: Validate request and parse payload
+    body_bytes = await _validate_request(request)
+    payload = _parse_payload(body_bytes)
     
-    # H2: Initialize DLQ service for message retry on failures
+    # Step 2: Initialize services with Redis (fallback to in-memory)
+    redis_typed = await _get_redis_client()
+    
+    # Step 3: Create orchestrator with DLQ support
     from app.services.dlq_service import DLQService
     from app.core.database import AsyncSessionFactory
     
-    # Create DLQ service with its own DB session (will be used asynchronously)
     async with AsyncSessionFactory() as dlq_db_session:
         dlq_service = DLQService(
             redis_client=redis_typed,
@@ -183,277 +487,35 @@ async def handle_whatsapp_webhook(request: Request):
             dlq_service=dlq_service,
         )
     
+    # Step 4: Normalize message
     gateway = MessageGateway()
-
     try:
-        # BLOQUEANTE 3: Pass request_source to prevent channel spoofing
         unified = gateway.normalize_whatsapp_message(
             payload,
             request_source="webhook_whatsapp"
         )
     except (ValueError, Exception):
-        # Payload sin mensajes o error de normalización; acuse de recibo sin procesar
         return {"status": "ok"}
-
-    # Procesar el mensaje con el orquestador
+    
+    # Step 5: Process message and send response
     result = await orchestrator.handle_unified_message(unified)
-
-    # Obtener cliente de WhatsApp para enviar respuestas
     whatsapp_client = WhatsAppMetaClient()
-
+    
     try:
-        # Comprobar el tipo de respuesta para determinar qué método usar
         if "response_type" in result:
-            response_type = result.get("response_type")
-            content = result.get("content", {})
             original_message = result.get("original_message")
-
-            if response_type == "interactive_buttons" and original_message:
-                # Enviar mensaje interactivo con botones
-                await whatsapp_client.send_interactive_message(
-                    to=original_message.user_id,
-                    header_text=content.get("header_text"),
-                    body_text=content.get("body_text", ""),
-                    footer_text=content.get("footer_text"),
-                    action_buttons=content.get("action_buttons"),
-                )
-
-            elif response_type == "interactive_list" and original_message:
-                # Enviar mensaje interactivo con lista
-                await whatsapp_client.send_interactive_message(
-                    to=original_message.user_id,
-                    header_text=content.get("header_text"),
-                    body_text=content.get("body_text", ""),
-                    footer_text=content.get("footer_text"),
-                    list_sections=content.get("list_sections"),
-                    list_button_text=content.get("list_button_text"),
-                )
-
-            elif response_type == "location" and original_message:
-                # Enviar mensaje de ubicación usando el nuevo método send_location
-                content = result.get("content", {})
-                # Compatibilidad: algunos tests esperan send_location_message
-                loc_fn = getattr(whatsapp_client, "send_location_message", None) or getattr(
-                    whatsapp_client, "send_location", None
-                )
-                if loc_fn:
-                    await loc_fn(
-                        to=original_message.user_id,
-                        latitude=content.get("latitude", 0),
-                        longitude=content.get("longitude", 0),
-                        name=content.get("name"),
-                        address=content.get("address"),
-                    )
-
-            elif response_type == "audio_with_location" and original_message:
-                # Enviar primero el mensaje de audio
-                if content.get("audio_data"):
-                    # Enviar el mensaje de audio
-                    await whatsapp_client.send_audio_message(
-                        to=original_message.user_id, audio_data=content.get("audio_data")
-                    )
-
-                    # Si hay texto, enviarlo como mensaje separado
-                    if text := content.get("text"):
-                        await whatsapp_client.send_message(to=original_message.user_id, text=text)
-
-                # Luego enviar la ubicación (compat con send_location_message)
-                location = content.get("location", {})
-                if location:
-                    loc_fn = getattr(whatsapp_client, "send_location_message", None) or getattr(
-                        whatsapp_client, "send_location", None
-                    )
-                    if loc_fn:
-                        await loc_fn(
-                            to=original_message.user_id,
-                            latitude=location.get("latitude", 0),
-                            longitude=location.get("longitude", 0),
-                            name=location.get("name"),
-                            address=location.get("address"),
-                        )
-
-            elif response_type == "audio" and original_message:
-                # Enviar mensaje de audio
-                # Verificar si content es un diccionario o directamente el texto
-                if isinstance(content, dict):
-                    audio_data = content.get("audio_data")
-                    text = content.get("text", "")
-                else:
-                    # El contenido es el texto y audio_data debería estar en un campo separado
-                    audio_data = result.get("audio_data")
-                    text = content
-
-                if audio_data:
-                    await whatsapp_client.send_audio_message(to=original_message.user_id, audio_data=audio_data)
-
-                # Si hay texto, enviarlo como mensaje separado
-                if text:
-                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
-
-                # Manejar mensaje de seguimiento si existe
-                if follow_up := content.get("follow_up"):
-                    follow_up_type = follow_up.get("type")
-                    follow_up_content = follow_up.get("content", {})
-
-                    # Enviamos el mensaje de seguimiento según su tipo
-                    if follow_up_type == "interactive_list":
-                        await whatsapp_client.send_interactive_message(
-                            to=original_message.user_id,
-                            header_text=follow_up_content.get("header_text"),
-                            body_text=follow_up_content.get("body_text", ""),
-                            footer_text=follow_up_content.get("footer_text"),
-                            list_sections=follow_up_content.get("list_sections"),
-                            list_button_text=follow_up_content.get("list_button_text"),
-                        )
-
-            elif response_type == "text" and original_message:
-                # Enviar texto simple
-                if isinstance(content, dict):
-                    text = content.get("text", "")
-                else:
-                    text = content or ""
-                await whatsapp_client.send_message(to=original_message.user_id, text=text)
-
-            # Feature 3: Manejo de response types con imágenes
-            elif response_type == "text_with_image" and original_message:
-                # Consolidación opcional: enviar solo una imagen con caption que incluya el texto
-                from ..services.feature_flag_service import DEFAULT_FLAGS
-                image_url = result.get("image_url")
-                text = result.get("content", "")
-                caption = result.get("image_caption", "")
-
-                if image_url and DEFAULT_FLAGS.get("humanize.consolidate_text.enabled", False):
-                    combo_caption = text.strip()
-                    if caption:
-                        combo_caption = f"{combo_caption}\n\n{caption}" if combo_caption else caption
-                    await whatsapp_client.send_image(
-                        to=original_message.user_id, image_url=image_url, caption=combo_caption
-                    )
-                    try:
-                        whatsapp_text_image_consolidated_total.inc()
-                    except Exception:
-                        # No romper el flujo si Prometheus no está disponible
-                        pass
-                else:
-                    # Comportamiento por defecto
-                    if text:
-                        await whatsapp_client.send_message(to=original_message.user_id, text=text)
-                    if image_url:
-                        await whatsapp_client.send_image(
-                            to=original_message.user_id, image_url=image_url, caption=caption
-                        )
-
-            elif response_type == "audio_with_image" and original_message:
-                # Enviar audio primero
-                audio_data = result.get("audio_data")
-                if audio_data:
-                    await whatsapp_client.send_audio_message(to=original_message.user_id, audio_data=audio_data)
-
-                # Enviar texto si existe
-                text = result.get("content", "")
-                if text:
-                    await whatsapp_client.send_message(to=original_message.user_id, text=text)
-
-                # Enviar imagen si existe
-                image_url = result.get("image_url")
-                if image_url:
-                    caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
-
-            elif response_type == "interactive_buttons_with_image" and original_message:
-                # Enviar imagen primero
-                image_url = result.get("image_url")
-                if image_url:
-                    caption = result.get("image_caption", "")
-                    await whatsapp_client.send_image(to=original_message.user_id, image_url=image_url, caption=caption)
-
-                # Luego enviar botones interactivos
-                await whatsapp_client.send_interactive_message(
-                    to=original_message.user_id,
-                    header_text=content.get("header_text"),
-                    body_text=content.get("body_text", ""),
-                    footer_text=content.get("footer_text"),
-                    action_buttons=content.get("action_buttons"),
-                )
-
-            elif response_type == "reaction" and original_message:
-                # Enviar reacción a un mensaje
-                await whatsapp_client.send_reaction(
-                    to=original_message.user_id,
-                    message_id=content.get("message_id", ""),
-                    emoji=content.get("emoji", "👍"),
-                )
-
-            elif response_type == "image_with_text" and original_message:
-                # FEATURE 5: Enviar imagen con texto (para QR codes de confirmación)
-                image_path = result.get("image_path")
-                image_caption = result.get("image_caption", "")
-                text_content = result.get("content", "")
-
-                if image_path:
-                    # Enviar primero el texto
-                    if text_content:
-                        await whatsapp_client.send_message(to=original_message.user_id, text=text_content)
-
-                    # Luego enviar la imagen con caption
-                    try:
-                        # Para archivos locales, necesitamos convertir a URL
-                        # En producción esto sería una URL de S3 o CDN
-                        from pathlib import Path
-
-                        if Path(image_path).exists():
-                            # Upload to temporary hosting or convert to base64
-                            # Por ahora, enviamos solo el caption como texto
-                            await whatsapp_client.send_message(
-                                to=original_message.user_id,
-                                text=f"📱 {image_caption}\n\n(QR code would be sent here in production)",
-                            )
-                        else:
-                            # Imagen no encontrada, enviar fallback
-                            await whatsapp_client.send_message(
-                                to=original_message.user_id, text=f"⚠️ Error enviando QR code. {image_caption}"
-                            )
-                    except Exception as img_error:
-                        logger.error("whatsapp.send_qr_image_error", error=str(img_error), image_path=image_path)
-                        # Fallback: enviar solo el texto de confirmación
-                        await whatsapp_client.send_message(
-                            to=original_message.user_id,
-                            text="✅ Tu reserva está confirmada. El QR code se enviará por email.",
-                        )
-
+            await _dispatch_response(
+                whatsapp_client, result, original_message, whatsapp_text_image_consolidated_total
+            )
         elif "response" in result and unified:
-            # Respuesta de texto tradicional
             await whatsapp_client.send_message(to=unified.user_id, text=result.get("response", ""))
-
     except Exception as e:
         logger.error("whatsapp.webhook.send_response_error", error=str(e))
     finally:
         await whatsapp_client.close()
-
-    # Siempre devolver OK al webhook para confirmar recepción
-    # Además, si el orquestador devolvió una respuesta textual, incluirla para facilitar validación en tests/integraciones
-    response_payload: dict[str, Any] = {"status": "ok"}
-    try:
-        if isinstance(result, dict):
-            # Eco de respuesta textual (compat tests)
-            if "response" in result and isinstance(result.get("response"), str):
-                response_payload["response"] = result["response"]
-            # Eco de respuestas interactivas/ubicación/audio para validación en tests/integraciones
-            if "response_type" in result:
-                response_payload["response_type"] = result.get("response_type")
-                # Incluir contenido estructurado si existe
-                if "content" in result:
-                    response_payload["content"] = result.get("content")
-                    # Compatibilidad: si es texto, exponer también en campo 'response'
-                    if result.get("response_type") == "text" and isinstance(result.get("content"), str):
-                        response_payload["response"] = result.get("content")
-                # Campos opcionales de imagen/audio
-                for extra_key in ("image_url", "image_caption", "audio_data"):
-                    if extra_key in result:
-                        response_payload[extra_key] = result.get(extra_key)
-    except Exception:
-        pass
-    return response_payload
+    
+    # Step 6: Build and return response
+    return _build_response_payload(result)
 
 
 @router.post("/gmail")

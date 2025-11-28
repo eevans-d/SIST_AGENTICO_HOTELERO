@@ -7,7 +7,7 @@ from email.message import Message
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import decode_header
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import structlog
 
@@ -346,4 +346,4 @@ class GmailIMAPClient:
             return dt.isoformat()
         except Exception:
             # Fallback a timestamp actual
-            return datetime.utcnow().isoformat()
+            return datetime.now(timezone.utc).isoformat()

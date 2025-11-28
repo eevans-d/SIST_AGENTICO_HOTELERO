@@ -5,7 +5,7 @@ Advanced performance tracking and optimization recommendations
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -278,7 +278,7 @@ class PerformanceMonitoringService:
                 type=PerformanceMetricType.LATENCY,
                 value=duration_ms,
                 unit="ms",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 tags=tags or {},
             )
 
@@ -291,7 +291,7 @@ class PerformanceMonitoringService:
                     type=PerformanceMetricType.ERROR_RATE,
                     value=1.0,
                     unit="count",
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     tags=tags or {},
                 )
 
@@ -300,7 +300,7 @@ class PerformanceMonitoringService:
     async def analyze_performance(self, hours: int = 24) -> PerformanceReport:
         """Analyze performance over specified period"""
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
 
         # Get metrics for analysis period
@@ -363,7 +363,7 @@ class PerformanceMonitoringService:
         for metric_name, metrics_deque in self.metrics_buffer.items():
             if metrics_deque:
                 # Get metrics from last 5 minutes
-                five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+                five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
                 recent_metrics = [m for m in metrics_deque if m.timestamp > five_minutes_ago]
 
                 if recent_metrics:
@@ -375,7 +375,7 @@ class PerformanceMonitoringService:
                         type=recent_metrics[0].type,
                         value=statistics.mean(values),
                         unit=recent_metrics[0].unit,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         percentiles={
                             "p50": statistics.median(values),
                             "p95": self._calculate_percentile(values, 95),
@@ -391,7 +391,7 @@ class PerformanceMonitoringService:
     async def get_performance_insights(self, metric_name: str, hours: int = 24) -> Dict[str, Any]:
         """Get detailed insights for specific metric"""
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
 
         # Get historical data
@@ -437,7 +437,7 @@ class PerformanceMonitoringService:
         optimization_result = {
             "recommendation_id": recommendation_id,
             "status": "applied",
-            "applied_at": datetime.utcnow().isoformat(),
+            "applied_at": datetime.now(timezone.utc).isoformat(),
             "expected_improvements": {
                 "api_response_time": {"reduction": "15-25%"},
                 "throughput": {"increase": "10-20%"},
@@ -467,7 +467,7 @@ class PerformanceMonitoringService:
                 "sum_squares": 0.0,
                 "min": float("inf"),
                 "max": float("-inf"),
-                "last_updated": datetime.utcnow().isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
         # Update analytics
@@ -476,7 +476,7 @@ class PerformanceMonitoringService:
         analytics["sum_squares"] += metric.value * metric.value
         analytics["min"] = min(analytics["min"], metric.value)
         analytics["max"] = max(analytics["max"], metric.value)
-        analytics["last_updated"] = datetime.utcnow().isoformat()
+        analytics["last_updated"] = datetime.now(timezone.utc).isoformat()
 
         # Calculate derived metrics
         if analytics["count"] > 0:
@@ -574,7 +574,7 @@ class PerformanceMonitoringService:
                         "api_response_time_p95": 0.35,  # 35% improvement
                         "cache_hit_rate": 0.90,
                     },
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
             )
 
@@ -601,7 +601,7 @@ class PerformanceMonitoringService:
                         "db_query_time_p95": 0.50,  # 50% improvement
                         "api_response_time_p95": 0.20,  # 20% improvement
                     },
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
             )
 
@@ -628,7 +628,7 @@ class PerformanceMonitoringService:
                         "cpu_usage": 0.60,  # 60% reduction
                         "api_throughput": 2.0,  # 100% increase
                     },
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
             )
 
@@ -655,7 +655,7 @@ class PerformanceMonitoringService:
                         "reservation_processing_time": 0.70,  # 70% improvement
                         "guest_response_time": 0.30,  # 30% improvement
                     },
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
             )
 
