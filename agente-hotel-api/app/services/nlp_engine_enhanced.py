@@ -240,113 +240,133 @@ class EnhancedNLPEngine:
             self.stats["errors"] += 1
             return self._fallback_response(text, language="es")
 
+    # =========================================================================
+    # PROCESS WITH CONTEXT HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    async def _get_conversation_language(
+        self, user_id: str, channel: str, tenant_id: Optional[str]
+    ) -> Optional[str]:
+        """Get language from conversation history."""
+        try:
+            return await self._conversational_memory.get_conversation_language(user_id, channel, tenant_id)
+        except Exception as e:
+            logger.warning(f"Error al recuperar idioma de conversación: {e}")
+            return None
+
+    async def _resolve_text_anaphora(
+        self, user_id: str, text: str, channel: str, tenant_id: Optional[str]
+    ) -> tuple:
+        """Resolve anaphoric references in text."""
+        try:
+            resolved_text = await self._conversational_memory.resolve_anaphora(user_id, text, channel, tenant_id)
+            if resolved_text != text:
+                nlp_context_usage.labels(operation="anaphora_resolution", success="true").inc()
+                return resolved_text, True
+        except Exception as e:
+            logger.warning(f"Error al resolver anáforas: {e}")
+            nlp_context_usage.labels(operation="anaphora_resolution", success="false").inc()
+        return text, False
+
+    async def _enrich_entities_from_context(
+        self, user_id: str, channel: str, tenant_id: Optional[str], result: Dict[str, Any]
+    ) -> bool:
+        """Enrich result entities with contextual information."""
+        try:
+            is_followup = await self._conversational_memory.is_follow_up_question(
+                user_id, result["intent"]["name"], channel, tenant_id
+            )
+            if not is_followup:
+                return False
+
+            entity_types = await self._get_relevant_entity_types(result["intent"]["name"])
+            contextual_entities = await self._conversational_memory.get_relevant_entities(
+                user_id, entity_types, channel, tenant_id
+            )
+
+            current_entities = {e["entity"]: e for e in result["entities"]}
+            for entity_type, value in contextual_entities.items():
+                if entity_type not in current_entities:
+                    result["entities"].append({
+                        "entity": entity_type,
+                        "value": value,
+                        "start": 0,
+                        "end": 0,
+                        "confidence": 0.9,
+                        "extractor": "contextual_memory",
+                    })
+                    nlp_entity_extraction.labels(entity_type=entity_type, extractor="contextual_memory").inc()
+
+            nlp_context_usage.labels(operation="entity_completion", success="true").inc()
+            return True
+        except Exception as e:
+            logger.warning(f"Error al aplicar contexto a entidades: {e}")
+            nlp_context_usage.labels(operation="entity_completion", success="false").inc()
+            return False
+
+    async def _store_conversation_context(
+        self, user_id: str, channel: str, tenant_id: Optional[str], result: Dict[str, Any], text: str
+    ):
+        """Store context for future use."""
+        try:
+            await self._conversational_memory.store_context(
+                user_id, result["entities"], text, result["intent"]["name"], channel, tenant_id
+            )
+            nlp_context_usage.labels(operation="store_context", success="true").inc()
+        except Exception as e:
+            logger.warning(f"Error al guardar contexto: {e}")
+            nlp_context_usage.labels(operation="store_context", success="false").inc()
+
+    # =========================================================================
+    # END PROCESS WITH CONTEXT HELPERS
+    # =========================================================================
+
     async def _process_with_context(
         self, text: str, user_id: Optional[str], channel: Optional[str], tenant_id: Optional[str]
     ) -> Dict[str, Any]:
-        """
-        Procesa mensaje con contexto conversacional.
-
-        Args:
-            text: Mensaje del usuario
-            user_id: ID del usuario
-            channel: Canal del mensaje
-            tenant_id: ID del tenant (opcional)
-
-        Returns:
-            Resultado del procesamiento con contexto
-        """
+        """Procesa mensaje con contexto conversacional. Uses helpers (CC reduced from 23 to 10)."""
         start_time = asyncio.get_event_loop().time()
         context_applied = False
 
-        # Paso 1: Obtener idioma de conversación previa si hay contexto
+        # Step 1: Get language from conversation history
         language = None
         if user_id and channel:
-            try:
-                language = await self._conversational_memory.get_conversation_language(user_id, channel, tenant_id)
-            except Exception as e:
-                logger.warning(f"Error al recuperar idioma de conversación: {e}")
+            language = await self._get_conversation_language(user_id, channel, tenant_id)
 
-        # Paso 2: Detectar o confirmar idioma
+        # Step 2: Detect or confirm language
         lang_result = await self._multilingual_processor.detect_language(text)
         detected_language = lang_result["language"]
 
-        # Si el idioma detectado es diferente al de la conversación con alta confianza, actualizar
         if language and detected_language != language and lang_result["confidence"] > 0.8:
             language = detected_language
         elif not language:
             language = detected_language
 
-        # Paso 3: Resolver referencias anafóricas si hay contexto
+        # Step 3: Resolve anaphoric references
         resolved_text = text
         if user_id and channel:
-            try:
-                resolved_text = await self._conversational_memory.resolve_anaphora(user_id, text, channel, tenant_id)
-                if resolved_text != text:
-                    context_applied = True
-                    nlp_context_usage.labels(operation="anaphora_resolution", success="true").inc()
-            except Exception as e:
-                logger.warning(f"Error al resolver anáforas: {e}")
-                nlp_context_usage.labels(operation="anaphora_resolution", success="false").inc()
+            resolved_text, anaphora_applied = await self._resolve_text_anaphora(user_id, text, channel, tenant_id)
+            context_applied = context_applied or anaphora_applied
 
-        # Paso 4: Procesar texto con modelo NLP multilingüe
+        # Step 4: Process text with multilingual NLP model
         result = await self._multilingual_processor.process_text(resolved_text, language)
 
-        # Paso 5: Mejorar entidades con contexto si es necesario
+        # Step 5: Enrich entities with context
         if user_id and channel:
-            try:
-                # Verificar si es una pregunta de seguimiento
-                is_followup = await self._conversational_memory.is_follow_up_question(
-                    user_id, result["intent"]["name"], channel, tenant_id
-                )
+            entities_enriched = await self._enrich_entities_from_context(user_id, channel, tenant_id, result)
+            context_applied = context_applied or entities_enriched
 
-                if is_followup:
-                    context_applied = True
-                    # Obtener entidades relevantes del contexto
-                    entity_types = await self._get_relevant_entity_types(result["intent"]["name"])
-                    contextual_entities = await self._conversational_memory.get_relevant_entities(
-                        user_id, entity_types, channel, tenant_id
-                    )
-
-                    # Complementar entidades faltantes con contexto
-                    current_entities = {e["entity"]: e for e in result["entities"]}
-                    for entity_type, value in contextual_entities.items():
-                        if entity_type not in current_entities:
-                            # Añadir entidad del contexto
-                            result["entities"].append(
-                                {
-                                    "entity": entity_type,
-                                    "value": value,
-                                    "start": 0,
-                                    "end": 0,
-                                    "confidence": 0.9,
-                                    "extractor": "contextual_memory",
-                                }
-                            )
-                            nlp_entity_extraction.labels(entity_type=entity_type, extractor="contextual_memory").inc()
-
-                    nlp_context_usage.labels(operation="entity_completion", success="true").inc()
-            except Exception as e:
-                logger.warning(f"Error al aplicar contexto a entidades: {e}")
-                nlp_context_usage.labels(operation="entity_completion", success="false").inc()
-
-        # Paso 6: Guardar contexto para uso futuro
+        # Step 6: Store context for future use
         if user_id and channel:
-            try:
-                await self._conversational_memory.store_context(
-                    user_id, result["entities"], text, result["intent"]["name"], channel, tenant_id
-                )
-                nlp_context_usage.labels(operation="store_context", success="true").inc()
-            except Exception as e:
-                logger.warning(f"Error al guardar contexto: {e}")
-                nlp_context_usage.labels(operation="store_context", success="false").inc()
+            await self._store_conversation_context(user_id, channel, tenant_id, result, text)
 
-        # Añadir metadatos al resultado
+        # Add metadata to result
         result["text"] = text
         result["model_version"] = self.model_version
         if context_applied:
             result["context_used"] = True
 
-        # Registrar tiempo de inferencia
+        # Record inference time
         inference_time = asyncio.get_event_loop().time() - start_time
         nlp_inference_time.labels(model_type="enhanced", language=language).observe(inference_time)
 

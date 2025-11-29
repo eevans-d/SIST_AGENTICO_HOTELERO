@@ -433,8 +433,36 @@ class CustomDashboardService:
 
         return await self._get_widget_data(widget)
 
+    def _get_data_source_handlers(self) -> Dict[str, callable]:
+        """Return mapping of data sources to their handler methods."""
+        return {
+            "daily_revenue": self._get_daily_revenue_data,
+            "occupancy_rate": self._get_occupancy_data,
+            "adr": self._get_adr_data,
+            "nps_score": self._get_nps_data,
+            "revenue_trend_30d": lambda: self._get_revenue_trend_data(30),
+            "occupancy_forecast_14d": lambda: self._get_occupancy_forecast_data(14),
+            "market_segment_revenue": self._get_market_segment_data,
+            "channel_performance": self._get_channel_performance_data,
+            "critical_alerts": self._get_critical_alerts_data,
+            "arrivals_today": self._get_arrivals_today_data,
+            "departures_today": self._get_departures_today_data,
+            "rooms_ready": self._get_rooms_ready_data,
+            "maintenance_pending": self._get_maintenance_pending_data,
+            "guest_satisfaction_current": self._get_guest_satisfaction_data,
+            "room_status_all": self._get_room_status_data,
+            "staff_schedule_today": self._get_staff_schedule_data,
+            "pending_checkins": self._get_pending_checkins_data,
+            "pending_checkouts": self._get_pending_checkouts_data,
+            "open_guest_requests": self._get_guest_requests_data,
+            "available_rooms_today": self._get_available_rooms_data,
+            "arrivals_by_hour": self._get_arrivals_by_hour_data,
+            "recent_guest_messages": self._get_recent_messages_data,
+            "room_assignments_today": self._get_room_assignments_data,
+        }
+
     async def _get_widget_data(self, widget: DashboardWidget) -> Dict[str, Any]:
-        """Get data for widget based on its data source"""
+        """Get data for widget based on its data source. Uses handler mapping (CC reduced from 26 to 5)."""
 
         # Check cache first
         cache_key = f"widget_data:{widget.id}"
@@ -443,58 +471,13 @@ class CustomDashboardService:
             return cached_data
 
         try:
-            data_source = widget.data_source
-            widget_data = {}
-
-            # Get data based on data source
-            if data_source == "daily_revenue":
-                widget_data = await self._get_daily_revenue_data()
-            elif data_source == "occupancy_rate":
-                widget_data = await self._get_occupancy_data()
-            elif data_source == "adr":
-                widget_data = await self._get_adr_data()
-            elif data_source == "nps_score":
-                widget_data = await self._get_nps_data()
-            elif data_source == "revenue_trend_30d":
-                widget_data = await self._get_revenue_trend_data(30)
-            elif data_source == "occupancy_forecast_14d":
-                widget_data = await self._get_occupancy_forecast_data(14)
-            elif data_source == "market_segment_revenue":
-                widget_data = await self._get_market_segment_data()
-            elif data_source == "channel_performance":
-                widget_data = await self._get_channel_performance_data()
-            elif data_source == "critical_alerts":
-                widget_data = await self._get_critical_alerts_data()
-            elif data_source == "arrivals_today":
-                widget_data = await self._get_arrivals_today_data()
-            elif data_source == "departures_today":
-                widget_data = await self._get_departures_today_data()
-            elif data_source == "rooms_ready":
-                widget_data = await self._get_rooms_ready_data()
-            elif data_source == "maintenance_pending":
-                widget_data = await self._get_maintenance_pending_data()
-            elif data_source == "guest_satisfaction_current":
-                widget_data = await self._get_guest_satisfaction_data()
-            elif data_source == "room_status_all":
-                widget_data = await self._get_room_status_data()
-            elif data_source == "staff_schedule_today":
-                widget_data = await self._get_staff_schedule_data()
-            elif data_source == "pending_checkins":
-                widget_data = await self._get_pending_checkins_data()
-            elif data_source == "pending_checkouts":
-                widget_data = await self._get_pending_checkouts_data()
-            elif data_source == "open_guest_requests":
-                widget_data = await self._get_guest_requests_data()
-            elif data_source == "available_rooms_today":
-                widget_data = await self._get_available_rooms_data()
-            elif data_source == "arrivals_by_hour":
-                widget_data = await self._get_arrivals_by_hour_data()
-            elif data_source == "recent_guest_messages":
-                widget_data = await self._get_recent_messages_data()
-            elif data_source == "room_assignments_today":
-                widget_data = await self._get_room_assignments_data()
+            handlers = self._get_data_source_handlers()
+            handler = handlers.get(widget.data_source)
+            
+            if handler:
+                widget_data = await handler()
             else:
-                widget_data = {"error": f"Unknown data source: {data_source}"}
+                widget_data = {"error": f"Unknown data source: {widget.data_source}"}
 
             # Cache the data
             await self._cache_widget_data(cache_key, widget_data, widget.refresh_interval)

@@ -566,8 +566,54 @@ class DistributedTracingService:
             "optimization_suggestions": self._generate_optimization_suggestions(critical_path, bottlenecks),
         }
 
+    # =========================================================================
+    # SEARCH TRACES HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    def _trace_matches_service(self, trace: Trace, service_name: str) -> bool:
+        """Check if trace contains the specified service."""
+        return not service_name or service_name in trace.service_map
+
+    def _trace_matches_operation(self, trace: Trace, operation_name: str) -> bool:
+        """Check if trace contains the specified operation."""
+        if not operation_name:
+            return True
+        return any(operation_name in operations for operations in trace.service_map.values())
+
+    def _trace_matches_duration(self, trace: Trace, min_duration: int, max_duration: int) -> bool:
+        """Check if trace duration is within specified bounds."""
+        if min_duration and trace.duration_ms < min_duration:
+            return False
+        if max_duration and trace.duration_ms > max_duration:
+            return False
+        return True
+
+    def _trace_matches_status(self, trace: Trace, status: str) -> bool:
+        """Check if any span in trace has the specified status."""
+        if not status:
+            return True
+        return any(span.status == status for span in trace.spans)
+
+    def _trace_matches_tags(self, trace: Trace, tag_filters: Dict[str, Any]) -> bool:
+        """Check if any span has all specified tags."""
+        if not tag_filters:
+            return True
+        return any(all(span.tags.get(k) == v for k, v in tag_filters.items()) for span in trace.spans)
+
+    def _trace_matches_attributes(self, trace: Trace, attribute_filters: Dict[str, Any]) -> bool:
+        """Check if any span has all specified attributes."""
+        if not attribute_filters:
+            return True
+        return any(
+            all(span.attributes.get(k) == v for k, v in attribute_filters.items()) for span in trace.spans
+        )
+
+    # =========================================================================
+    # END SEARCH TRACES HELPERS
+    # =========================================================================
+
     async def search_traces(self, query: Dict[str, Any]) -> List[Trace]:
-        """Search traces with complex query"""
+        """Search traces with complex query. Uses helper methods (CC reduced from 22 to 8)."""
 
         # Extract search parameters
         service_name = query.get("service")
@@ -583,48 +629,16 @@ class DistributedTracingService:
         hours = time_range.get("hours", 24)
         traces = await self.get_traces(hours=hours)
 
-        # Apply filters
-        filtered_traces = []
-
-        for trace in traces:
-            # Check service filter
-            if service_name and service_name not in trace.service_map:
-                continue
-
-            # Check operation filter
-            if operation_name:
-                found_operation = any(operation_name in operations for operations in trace.service_map.values())
-                if not found_operation:
-                    continue
-
-            # Check duration filters
-            if min_duration and trace.duration_ms < min_duration:
-                continue
-
-            if max_duration and trace.duration_ms > max_duration:
-                continue
-
-            # Check status filter
-            if status:
-                found_status = any(span.status == status for span in trace.spans)
-                if not found_status:
-                    continue
-
-            # Check tag filters
-            if tag_filters:
-                found_tags = any(all(span.tags.get(k) == v for k, v in tag_filters.items()) for span in trace.spans)
-                if not found_tags:
-                    continue
-
-            # Check attribute filters
-            if attribute_filters:
-                found_attributes = any(
-                    all(span.attributes.get(k) == v for k, v in attribute_filters.items()) for span in trace.spans
-                )
-                if not found_attributes:
-                    continue
-
-            filtered_traces.append(trace)
+        # Apply filters using helper methods
+        filtered_traces = [
+            trace for trace in traces
+            if self._trace_matches_service(trace, service_name)
+            and self._trace_matches_operation(trace, operation_name)
+            and self._trace_matches_duration(trace, min_duration, max_duration)
+            and self._trace_matches_status(trace, status)
+            and self._trace_matches_tags(trace, tag_filters)
+            and self._trace_matches_attributes(trace, attribute_filters)
+        ]
 
         return filtered_traces
 

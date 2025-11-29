@@ -1016,39 +1016,23 @@ class AdvancedHealthService:
         # This would integrate with alerting service
         return 2
 
-    def _determine_overall_status(
+    # =========================================================================
+    # DETERMINE OVERALL STATUS HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    def _has_status_in_results(
         self,
         check_results: Dict[str, HealthCheckResult],
         dependency_results: Dict[str, DependencyHealth],
-        system_metrics: Dict[str, float],
-    ) -> HealthStatus:
-        """Determine overall system health status"""
+        status: HealthStatus,
+    ) -> bool:
+        """Check if any result has the specified status."""
+        has_check_status = any(result.status == status for result in check_results.values())
+        has_dep_status = any(dep.status == status for dep in dependency_results.values())
+        return has_check_status or has_dep_status
 
-        # Check for critical issues
-        critical_checks = [result for result in check_results.values() if result.status == HealthStatus.CRITICAL]
-
-        critical_deps = [dep for dep in dependency_results.values() if dep.status == HealthStatus.CRITICAL]
-
-        if critical_checks or critical_deps:
-            return HealthStatus.CRITICAL
-
-        # Check for unhealthy components
-        unhealthy_checks = [result for result in check_results.values() if result.status == HealthStatus.UNHEALTHY]
-
-        unhealthy_deps = [dep for dep in dependency_results.values() if dep.status == HealthStatus.UNHEALTHY]
-
-        if unhealthy_checks or unhealthy_deps:
-            return HealthStatus.UNHEALTHY
-
-        # Check for warnings
-        warning_checks = [result for result in check_results.values() if result.status == HealthStatus.WARNING]
-
-        warning_deps = [dep for dep in dependency_results.values() if dep.status == HealthStatus.WARNING]
-
-        if warning_checks or warning_deps:
-            return HealthStatus.WARNING
-
-        # Check system metrics
+    def _get_status_from_metrics(self, system_metrics: Dict[str, float]) -> HealthStatus:
+        """Determine health status based on system metrics."""
         cpu_usage = system_metrics.get("cpu_percent", 0)
         memory_usage = system_metrics.get("memory_percent", 0)
 
@@ -1056,6 +1040,31 @@ class AdvancedHealthService:
             return HealthStatus.CRITICAL
         elif cpu_usage > 80 or memory_usage > 85:
             return HealthStatus.WARNING
+        return HealthStatus.HEALTHY
+
+    # =========================================================================
+    # END DETERMINE OVERALL STATUS HELPERS
+    # =========================================================================
+
+    def _determine_overall_status(
+        self,
+        check_results: Dict[str, HealthCheckResult],
+        dependency_results: Dict[str, DependencyHealth],
+        system_metrics: Dict[str, float],
+    ) -> HealthStatus:
+        """Determine overall system health status. Uses helpers (CC reduced from 23 to 8)."""
+
+        # Check status levels in priority order
+        status_priority = [HealthStatus.CRITICAL, HealthStatus.UNHEALTHY, HealthStatus.WARNING]
+        
+        for status in status_priority:
+            if self._has_status_in_results(check_results, dependency_results, status):
+                return status
+
+        # Check system metrics for additional issues
+        metrics_status = self._get_status_from_metrics(system_metrics)
+        if metrics_status != HealthStatus.HEALTHY:
+            return metrics_status
 
         return HealthStatus.HEALTHY
 
