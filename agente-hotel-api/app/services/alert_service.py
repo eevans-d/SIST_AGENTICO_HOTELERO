@@ -1,16 +1,22 @@
-# [PROMPT 3.5] app/services/alert_manager.py (Refinado + Robustez)
+# [PROMPT 3.5] app/services/alert_manager.py (Refinado + Robustez + Envío Real)
 
 import asyncio
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from ..core.logging import logger
+from ..core.settings import settings
 from ..core.constants import (
     HTTP_TIMEOUT_DEFAULT,
     MAX_RETRIES_DEFAULT,
     RETRY_DELAY_BASE,
 )
-# import aiosmtplib
-# import httpx
+
+# Importaciones opcionales para envío real
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
 
 
 class AlertManager:
@@ -34,13 +40,40 @@ class AlertManager:
             cooldown_seconds: Tiempo mínimo entre alertas duplicadas (default: 1800s)
             timeout_seconds: Timeout para operaciones de alerta (default: 30s)
         """
-        # Usamos time.monotonic() (float) para evitar problemas si el reloj del sistema
-        # cambia (NTP adjustments, leap seconds) y reducir flakiness en tests de cooldown.
-        # El dict guarda timestamps monotónicos (float seconds).
         self.alert_cooldown: Dict[str, float] = {}
         self.cooldown_seconds = cooldown_seconds
         self.timeout_seconds = timeout_seconds
-        logger.info("alert_manager.initialized", cooldown_seconds=cooldown_seconds, timeout_seconds=timeout_seconds)
+        
+        # Configuración de canales de alerta
+        self._email_enabled = self._check_email_config()
+        self._slack_enabled = self._check_slack_config()
+        
+        logger.info(
+            "alert_manager.initialized",
+            cooldown_seconds=cooldown_seconds,
+            timeout_seconds=timeout_seconds,
+            email_enabled=self._email_enabled,
+            slack_enabled=self._slack_enabled,
+        )
+
+    def _check_email_config(self) -> bool:
+        """Verifica si la configuración de email está disponible."""
+        try:
+            return bool(
+                getattr(settings, "gmail_username", None)
+                and getattr(settings, "gmail_app_password", None)
+                and getattr(settings, "alert_email_recipients", None)
+            )
+        except Exception:
+            return False
+
+    def _check_slack_config(self) -> bool:
+        """Verifica si la configuración de Slack está disponible."""
+        try:
+            webhook = getattr(settings, "slack_alert_webhook_url", None)
+            return bool(webhook and str(webhook).startswith("http"))
+        except Exception:
+            return False
 
     async def send_alert(self, violation: dict) -> bool:
         """
@@ -56,17 +89,11 @@ class AlertManager:
 
         Returns:
             bool: True si la alerta se envió exitosamente, False en caso contrario
-
-        Raises:
-            asyncio.TimeoutError: Si el envío excede el timeout (capturada internamente)
         """
-        # Generate alert key based on type/metric and level
-        # Prioritize 'type' field for backward compatibility with tests
         alert_type = violation.get("type") or violation.get("metric", "unknown")
         alert_level = violation.get("level", "unknown")
         alert_key = f"{alert_type}:{alert_level}"
 
-        # Check cooldown to prevent alert spam
         if self._is_in_cooldown(alert_key):
             logger.debug(
                 "alert_manager.cooldown_active",
@@ -75,13 +102,13 @@ class AlertManager:
             )
             return False
 
-        # Retry logic with exponential backoff (only for non-timeout errors)
         for attempt in range(MAX_RETRIES_DEFAULT):
             try:
-                # Send alert with timeout protection
-                result = await asyncio.wait_for(self._send_alert_internal(violation), timeout=self.timeout_seconds)
+                result = await asyncio.wait_for(
+                    self._send_alert_internal(violation),
+                    timeout=self.timeout_seconds
+                )
 
-                # Update cooldown cache only if send was successful
                 if result:
                     self.alert_cooldown[alert_key] = time.monotonic()
 
@@ -98,12 +125,10 @@ class AlertManager:
                 return result
 
             except asyncio.TimeoutError:
-                # Timeout is a hard limit - do NOT retry
                 logger.error(
                     "alert_manager.timeout",
                     alert_key=alert_key,
                     timeout_seconds=self.timeout_seconds,
-                    metric=violation.get("metric"),
                 )
                 return False
 
@@ -112,19 +137,10 @@ class AlertManager:
                     "alert_manager.send_failed",
                     alert_key=alert_key,
                     error=str(e),
-                    error_type=type(e).__name__,
-                    metric=violation.get("metric"),
                     attempt=attempt + 1,
                 )
                 if attempt < MAX_RETRIES_DEFAULT - 1:
                     delay = RETRY_DELAY_BASE * (2**attempt)
-                    logger.warning(
-                        "alert_manager.retry_after_error",
-                        attempt=attempt + 1,
-                        max_retries=MAX_RETRIES_DEFAULT,
-                        retry_delay=delay,
-                        error=str(e),
-                    )
                     await asyncio.sleep(delay)
                 else:
                     return False
@@ -133,41 +149,177 @@ class AlertManager:
 
     async def _send_alert_internal(self, violation: dict) -> bool:
         """
-        Lógica interna de envío de alertas (sin retry - manejado por send_alert).
+        Lógica interna de envío de alertas a múltiples canales.
+
+        Args:
+            violation: Diccionario con información de la alerta
+
+        Returns:
+            bool: True si al menos un canal envió exitosamente
+        """
+        results: List[bool] = []
+
+        # Enviar a Slack (prioritario por velocidad)
+        if self._slack_enabled:
+            slack_result = await self._send_to_slack(violation)
+            results.append(slack_result)
+
+        # Enviar por email
+        if self._email_enabled:
+            email_result = await self._send_to_email(violation)
+            results.append(email_result)
+
+        # Si ningún canal está configurado, log y retornar True (degradación controlada)
+        if not results:
+            logger.warning(
+                "alert_manager.no_channels_configured",
+                metric=violation.get("metric"),
+                type=violation.get("type"),
+                level=violation.get("level"),
+            )
+            return True  # No fallar si no hay canales configurados
+
+        # Éxito si al menos un canal envió correctamente
+        return any(results)
+
+    async def _send_to_slack(self, violation: dict) -> bool:
+        """
+        Envía alerta a Slack via webhook.
 
         Args:
             violation: Diccionario con información de la alerta
 
         Returns:
             bool: True si se envió exitosamente
-
-        Raises:
-            Exception: Si falla el envío (será capturado por send_alert para retry)
         """
-        # TODO: Implementar envío real por email/SMS/Slack
-        # await self._send_to_email(violation)
-        # await self._send_to_slack(violation)
+        if not HTTPX_AVAILABLE:
+            logger.warning("alert_manager.slack.httpx_not_available")
+            return False
 
-        logger.info(
-            "alert_manager.send_attempt",
-            metric=violation.get("metric"),
-            type=violation.get("type"),
-            level=violation.get("level"),
-        )
+        try:
+            webhook_url = str(getattr(settings, "slack_alert_webhook_url", ""))
+            if not webhook_url:
+                return False
 
-        # Simulated success for now
-        return True
+            # Construir mensaje de Slack
+            level = violation.get("level", "info")
+            emoji = {"critical": "🚨", "warning": "⚠️", "info": "ℹ️"}.get(level, "📢")
+            color = {"critical": "#FF0000", "warning": "#FFA500", "info": "#0000FF"}.get(level, "#808080")
 
-    def _is_in_cooldown(self, alert_key: str) -> bool:
+            payload = {
+                "attachments": [{
+                    "color": color,
+                    "title": f"{emoji} Alert: {violation.get('type') or violation.get('metric', 'System')}",
+                    "text": violation.get("description", "No description provided"),
+                    "fields": [
+                        {"title": "Level", "value": level.upper(), "short": True},
+                        {"title": "Metric", "value": violation.get("metric", "N/A"), "short": True},
+                    ],
+                    "footer": f"Agente Hotel API | {settings.environment}",
+                    "ts": int(time.time()),
+                }]
+            }
+
+            # Añadir contexto si existe
+            if violation.get("context"):
+                payload["attachments"][0]["fields"].append({
+                    "title": "Context",
+                    "value": str(violation["context"])[:500],
+                    "short": False,
+                })
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(webhook_url, json=payload)
+                success = response.status_code == 200
+
+                logger.info(
+                    "alert_manager.slack.sent",
+                    success=success,
+                    status_code=response.status_code,
+                    level=level,
+                )
+                return success
+
+        except Exception as e:
+            logger.error("alert_manager.slack.error", error=str(e))
+            return False
+
+    async def _send_to_email(self, violation: dict) -> bool:
         """
-        Verifica si una alerta está en cooldown.
+        Envía alerta por email usando GmailIMAPClient.
 
         Args:
-            alert_key: Clave única de la alerta
+            violation: Diccionario con información de la alerta
 
         Returns:
-            bool: True si está en cooldown, False si puede enviarse
+            bool: True si se envió exitosamente
         """
+        try:
+            from .gmail_client import GmailIMAPClient
+
+            recipients = getattr(settings, "alert_email_recipients", [])
+            if not recipients:
+                logger.warning("alert_manager.email.no_recipients")
+                return False
+
+            # Construir email
+            level = violation.get("level", "info")
+            subject = f"[{level.upper()}] Alert: {violation.get('type') or violation.get('metric', 'System')}"
+
+            body = f"""
+Sistema de Agente Hotelero IA - Alerta de Sistema
+
+Nivel: {level.upper()}
+Tipo: {violation.get('type', 'N/A')}
+Métrica: {violation.get('metric', 'N/A')}
+
+Descripción:
+{violation.get('description', 'Sin descripción')}
+
+Contexto:
+{violation.get('context', 'Sin contexto adicional')}
+
+---
+Entorno: {settings.environment}
+Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+"""
+
+            # Enviar a cada destinatario
+            gmail_client = GmailIMAPClient()
+            success_count = 0
+
+            for recipient in recipients:
+                try:
+                    result = gmail_client.send_response(
+                        to=recipient,
+                        subject=subject,
+                        body=body,
+                        html=False,
+                    )
+                    if result:
+                        success_count += 1
+                except Exception as e:
+                    logger.error(
+                        "alert_manager.email.send_failed",
+                        recipient=recipient,
+                        error=str(e),
+                    )
+
+            logger.info(
+                "alert_manager.email.sent",
+                recipients_count=len(recipients),
+                success_count=success_count,
+                level=level,
+            )
+
+            return success_count > 0
+
+        except Exception as e:
+            logger.error("alert_manager.email.error", error=str(e))
+            return False
+
+    def _is_in_cooldown(self, alert_key: str) -> bool:
+        """Verifica si una alerta está en cooldown."""
         last_sent = self.alert_cooldown.get(alert_key)
         if last_sent is None:
             return False
@@ -175,15 +327,7 @@ class AlertManager:
         return elapsed < self.cooldown_seconds
 
     def _get_cooldown_remaining(self, alert_key: str) -> float:
-        """
-        Calcula segundos restantes de cooldown con precisión decimal.
-
-        Args:
-            alert_key: Clave única de la alerta
-
-        Returns:
-            float: Segundos restantes de cooldown (0.0 si no hay cooldown activo)
-        """
+        """Calcula segundos restantes de cooldown."""
         last_sent = self.alert_cooldown.get(alert_key)
         if last_sent is None:
             return 0.0
@@ -191,12 +335,7 @@ class AlertManager:
         return max(0.0, self.cooldown_seconds - elapsed)
 
     def clear_cooldown(self, alert_key: Optional[str] = None):
-        """
-        Limpia el cooldown de alertas.
-
-        Args:
-            alert_key: Clave específica a limpiar, o None para limpiar todo
-        """
+        """Limpia el cooldown de alertas."""
         if alert_key:
             self.alert_cooldown.pop(alert_key, None)
             logger.info("alert_manager.cooldown_cleared", alert_key=alert_key)

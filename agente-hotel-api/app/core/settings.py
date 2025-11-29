@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     gmail_username: str = "dev@example.com"
     gmail_app_password: SecretStr = SecretStr("dev-gmail-pass")
 
+    # Alert Configuration (for AlertManager)
+    alert_email_recipients: list[str] = Field(
+        default=[],
+        description="List of email addresses to receive system alerts"
+    )
+    slack_alert_webhook_url: str = Field(
+        default="",
+        description="Slack webhook URL for alert notifications"
+    )
+
     # Database & Cache
     # Si existen variables POSTGRES_* se usará para construir postgres_url automáticamente
     # Acepta DATABASE_URL (común en plataformas) o POSTGRES_URL además de postgres_url
