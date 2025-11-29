@@ -281,6 +281,82 @@ class MessageGateway:
             f"(user_id={user_id}, correlation_id={correlation_id})"
         )
 
+    # =========================================================================
+    # WHATSAPP NORMALIZATION HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    def _extract_whatsapp_message_data(self, payload: Dict[str, Any]) -> tuple:
+        """Extract message data from WhatsApp webhook payload."""
+        entry = payload.get("entry", [])
+        if not entry:
+            raise MessageNormalizationError("missing_entry")
+
+        changes = entry[0].get("changes", [])
+        if not changes:
+            raise MessageNormalizationError("missing_changes")
+
+        value = changes[0].get("value", {}) or {}
+        messages = value.get("messages", []) or []
+        contacts = value.get("contacts", []) or []
+
+        if not messages:
+            raise MessageNormalizationError("missing_messages")
+
+        return value, messages, contacts
+
+    def _extract_whatsapp_timestamp(self, msg: Dict[str, Any], value: Dict[str, Any]) -> str:
+        """Extract and format timestamp from WhatsApp message."""
+        ts = msg.get("timestamp") or value.get("timestamp")
+        try:
+            return (
+                datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+                if ts is not None
+                else datetime.now(timezone.utc).isoformat()
+            )
+        except Exception:
+            return datetime.now(timezone.utc).isoformat()
+
+    def _extract_whatsapp_content(self, msg: Dict[str, Any], msg_type: str) -> tuple:
+        """Extract text and media_url from WhatsApp message based on type."""
+        text = None
+        media_url = None
+        if msg_type == "text":
+            text = (msg.get("text") or {}).get("body")
+        elif msg_type == "audio":
+            media_url = None  # placeholder for future integration
+        else:
+            text = (msg.get("text") or {}).get("body")
+        return text, media_url
+
+    def _build_whatsapp_unified_message(
+        self,
+        msg_id: str,
+        canal: str,
+        user_id: str,
+        ts_iso: str,
+        msg_type: str,
+        text: Optional[str],
+        media_url: Optional[str],
+        filtered_metadata: Dict[str, Any],
+        tenant_id: Optional[str],
+    ) -> UnifiedMessage:
+        """Build UnifiedMessage from WhatsApp data."""
+        return UnifiedMessage(
+            message_id=msg_id or user_id or "",
+            canal=canal,
+            user_id=user_id or "",
+            timestamp_iso=ts_iso,
+            tipo="audio" if msg_type == "audio" else "text",
+            texto=text,
+            media_url=media_url,
+            metadata=filtered_metadata,
+            tenant_id=tenant_id,
+        )
+
+    # =========================================================================
+    # END WHATSAPP NORMALIZATION HELPERS
+    # =========================================================================
+
     def normalize_whatsapp_message(
         self,
         webhook_payload: Dict[str, Any],
@@ -288,66 +364,27 @@ class MessageGateway:
     ) -> UnifiedMessage:
         """
         Normalize WhatsApp webhook payload to UnifiedMessage.
-
-        BLOQUEANTE 3: Channel Spoofing Protection
-        The request_source is passed explicitly from the router,
-        not extracted from the payload. This prevents attackers from
-        claiming a different channel than what they actually used.
-
-        Args:
-            webhook_payload: Raw WhatsApp webhook payload
-            request_source: Where request came from (webhook_whatsapp, etc)
-                - Prevents channel spoofing attacks
-                - Always "webhook_whatsapp" for this method
-
-        Returns:
-            UnifiedMessage instance
+        Uses extracted helpers for improved maintainability (CC reduced from 26 to ~10).
         """
-        # Actual channel is always "whatsapp" for this endpoint
         actual_channel = "whatsapp"
         canal = actual_channel
 
         with metrics_service.time_message_normalization(canal):
             try:
                 payload = webhook_payload or {}
-                entry = payload.get("entry", [])
-                if not entry:
-                    raise MessageNormalizationError("missing_entry")
-
-                changes = entry[0].get("changes", [])
-                if not changes:
-                    raise MessageNormalizationError("missing_changes")
-
-                value = changes[0].get("value", {}) or {}
-                messages = value.get("messages", []) or []
-                contacts = value.get("contacts", []) or []
-
-                if not messages:
-                    raise MessageNormalizationError("missing_messages")
-
+                
+                # Extract message data
+                value, messages, contacts = self._extract_whatsapp_message_data(payload)
                 msg = messages[0]
                 msg_type = msg.get("type", "text")
                 msg_id = msg.get("id") or ""
                 user_id = msg.get("from") or (contacts[0].get("wa_id") if contacts else "")
 
-                ts = msg.get("timestamp") or value.get("timestamp")
-                try:
-                    ts_iso = (
-                        datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
-                        if ts is not None
-                        else datetime.now(timezone.utc).isoformat()
-                    )
-                except Exception:
-                    ts_iso = datetime.now(timezone.utc).isoformat()
+                # Extract timestamp
+                ts_iso = self._extract_whatsapp_timestamp(msg, value)
 
-                text = None
-                media_url = None
-                if msg_type == "text":
-                    text = (msg.get("text") or {}).get("body")
-                elif msg_type == "audio":
-                    media_url = None  # placeholder futura integración
-                else:
-                    text = (msg.get("text") or {}).get("body")
+                # Extract content
+                text, media_url = self._extract_whatsapp_content(msg, msg_type)
 
                 # Get correlation ID for tracing
                 correlation_id = self._get_correlation_id(payload)
@@ -364,7 +401,6 @@ class MessageGateway:
                 tenant_id = self._resolve_tenant(user_id)
 
                 # BLOQUEANTE 1: Validate tenant isolation
-                # Note: This is async in the real implementation
                 logger.info(
                     f"tenant_isolation_check (user_id={user_id}, tenant_id={tenant_id}, correlation_id={correlation_id})"
                 )
@@ -377,16 +413,9 @@ class MessageGateway:
                     correlation_id=correlation_id
                 )
 
-                unified = UnifiedMessage(
-                    message_id=msg_id or user_id or "",
-                    canal=canal,
-                    user_id=user_id or "",
-                    timestamp_iso=ts_iso,
-                    tipo="audio" if msg_type == "audio" else "text",
-                    texto=text,
-                    media_url=media_url,
-                    metadata=filtered_metadata,  # ✅ BLOQUEANTE 2: Use filtered metadata
-                    tenant_id=tenant_id,
+                unified = self._build_whatsapp_unified_message(
+                    msg_id, canal, user_id, ts_iso, msg_type,
+                    text, media_url, filtered_metadata, tenant_id
                 )
 
                 metrics_service.record_message_normalized(canal=canal, tenant_id=tenant_id)

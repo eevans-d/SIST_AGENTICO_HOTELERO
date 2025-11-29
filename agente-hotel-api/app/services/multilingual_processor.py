@@ -60,88 +60,101 @@ class MultilingualProcessor:
         # Circuit breaker para protección
         self.circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60, expected_exception=Exception)
 
+    # =========================================================================
+    # LANGUAGE DETECTION HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    def _detect_by_heuristics(self, text_lower: str) -> Optional[Dict[str, Any]]:
+        """Detect language using keyword-based heuristics."""
+        es_indicators = ["hola", "gracias", "buenos días", "habitación", "reserva"]
+        en_indicators = ["hello", "thank", "room", "booking", "reservation", "available"]
+        pt_indicators = ["olá", "obrigado", "quarto", "reserva", "disponível"]
+
+        es_score = sum(2 for word in es_indicators if word in text_lower)
+        en_score = sum(2 for word in en_indicators if word in text_lower)
+        pt_score = sum(2 for word in pt_indicators if word in text_lower)
+
+        max_score = max(es_score, en_score, pt_score)
+        if max_score < 4:
+            return None
+
+        lang_scores = [("es", es_score), ("en", en_score), ("pt", pt_score)]
+        best_lang, best_score = max(lang_scores, key=lambda x: x[1])
+        confidence = min(0.7 + (best_score - 4) * 0.05, 0.95)
+        multilingual_detection.labels(language=best_lang, confidence_level="heuristic").inc()
+        return {"language": best_lang, "confidence": confidence, "method": "heuristic"}
+
+    def _detect_by_fasttext(self, text: str) -> Optional[Dict[str, Any]]:
+        """Detect language using fastText model."""
+        if not self.language_detectors.get("fasttext"):
+            return None
+
+        try:
+            lang_pred = self.language_detectors["fasttext"].predict(text, k=3)
+            predictions = [
+                (label.replace("__label__", ""), float(prob))
+                for label, prob in zip(lang_pred[0], lang_pred[1])
+            ]
+
+            relevant_preds = [(lang, prob) for lang, prob in predictions if lang in ["es", "en", "pt"]]
+            if not relevant_preds:
+                return None
+
+            best_lang, best_prob = relevant_preds[0]
+            confidence_level = "high" if best_prob > 0.8 else "medium" if best_prob > 0.6 else "low"
+            multilingual_detection.labels(language=best_lang, confidence_level=confidence_level).inc()
+            return {"language": best_lang, "confidence": best_prob, "method": "fasttext"}
+        except Exception as e:
+            logger.warning(f"Error in fastText language detection: {e}")
+            return None
+
+    def _detect_by_grammar(self, text_lower: str) -> Optional[Dict[str, Any]]:
+        """Detect language using grammar rules (articles)."""
+        grammar_rules = [
+            ("es", [" el ", " la ", " los ", " las ", " un ", " una "]),
+            ("en", [" the ", " a ", " an ", " this ", " that "]),
+            ("pt", [" o ", " a ", " os ", " as ", " um ", " uma "]),
+        ]
+        for lang, articles in grammar_rules:
+            if any(article in text_lower for article in articles):
+                multilingual_detection.labels(language=lang, confidence_level="grammar").inc()
+                return {"language": lang, "confidence": 0.6, "method": "grammar"}
+        return None
+
+    # =========================================================================
+    # END LANGUAGE DETECTION HELPERS
+    # =========================================================================
+
     async def detect_language(self, text: str) -> Dict[str, Any]:
         """
         Detecta el idioma del texto.
-
-        Args:
-            text: Texto a analizar
-
-        Returns:
-            Diccionario con idioma detectado y confianza
+        Uses extracted helpers for improved maintainability (CC reduced from 27 to ~10).
         """
         start_time = asyncio.get_event_loop().time()
 
         try:
-            # Cargar detector de idioma
             await self._ensure_language_detector()
 
-            # Heurísticas básicas para idioma
+            # Short text fallback
             if len(text.strip()) < 5:
-                # Texto muy corto, difícil de detectar
                 return {"language": "es", "confidence": 0.5, "method": "fallback"}
 
-            # Primera pasada con heurísticas basadas en reglas
-            es_indicators = ["hola", "gracias", "buenos días", "habitación", "reserva"]
-            en_indicators = ["hello", "thank", "room", "booking", "reservation", "available"]
-            pt_indicators = ["olá", "obrigado", "quarto", "reserva", "disponível"]
-
             text_lower = text.lower()
-            es_score = sum(2 for word in es_indicators if word in text_lower)
-            en_score = sum(2 for word in en_indicators if word in text_lower)
-            pt_score = sum(2 for word in pt_indicators if word in text_lower)
 
-            # Si hay una diferencia clara en las heurísticas
-            max_score = max(es_score, en_score, pt_score)
-            if max_score >= 4:
-                if es_score == max_score:
-                    confidence = min(0.7 + (es_score - 4) * 0.05, 0.95)
-                    multilingual_detection.labels(language="es", confidence_level="heuristic").inc()
-                    return {"language": "es", "confidence": confidence, "method": "heuristic"}
-                elif en_score == max_score:
-                    confidence = min(0.7 + (en_score - 4) * 0.05, 0.95)
-                    multilingual_detection.labels(language="en", confidence_level="heuristic").inc()
-                    return {"language": "en", "confidence": confidence, "method": "heuristic"}
-                elif pt_score == max_score:
-                    confidence = min(0.7 + (pt_score - 4) * 0.05, 0.95)
-                    multilingual_detection.labels(language="pt", confidence_level="heuristic").inc()
-                    return {"language": "pt", "confidence": confidence, "method": "heuristic"}
+            # Try detection methods in order of priority
+            result = self._detect_by_heuristics(text_lower)
+            if result:
+                return result
 
-            # Si no hay resultado concluyente con heurísticas, usar fastText
-            try:
-                if self.language_detectors.get("fasttext"):
-                    lang_pred = self.language_detectors["fasttext"].predict(text, k=3)
-                    predictions = [
-                        (label.replace("__label__", ""), float(prob)) for label, prob in zip(lang_pred[0], lang_pred[1])
-                    ]
+            result = self._detect_by_fasttext(text)
+            if result:
+                return result
 
-                    # Filtrar solo idiomas que nos interesan
-                    relevant_preds = [(lang, prob) for lang, prob in predictions if lang in ["es", "en", "pt"]]
+            result = self._detect_by_grammar(text_lower)
+            if result:
+                return result
 
-                    if relevant_preds:
-                        best_lang, best_prob = relevant_preds[0]
-
-                        # Ajustar confianza para reflejar certeza
-                        confidence_level = "high" if best_prob > 0.8 else "medium" if best_prob > 0.6 else "low"
-                        multilingual_detection.labels(language=best_lang, confidence_level=confidence_level).inc()
-
-                        return {"language": best_lang, "confidence": best_prob, "method": "fasttext"}
-            except Exception as e:
-                logger.warning(f"Error in fastText language detection: {e}")
-                # Continuar con reglas de respaldo
-
-            # Usar reglas gramaticales como respaldo
-            if any(article in text_lower for article in [" el ", " la ", " los ", " las ", " un ", " una "]):
-                multilingual_detection.labels(language="es", confidence_level="grammar").inc()
-                return {"language": "es", "confidence": 0.6, "method": "grammar"}
-            elif any(article in text_lower for article in [" the ", " a ", " an ", " this ", " that "]):
-                multilingual_detection.labels(language="en", confidence_level="grammar").inc()
-                return {"language": "en", "confidence": 0.6, "method": "grammar"}
-            elif any(article in text_lower for article in [" o ", " a ", " os ", " as ", " um ", " uma "]):
-                multilingual_detection.labels(language="pt", confidence_level="grammar").inc()
-                return {"language": "pt", "confidence": 0.6, "method": "grammar"}
-
-            # Por defecto, español
+            # Default: Spanish
             multilingual_detection.labels(language="es", confidence_level="default").inc()
             return {"language": "es", "confidence": 0.5, "method": "default"}
 

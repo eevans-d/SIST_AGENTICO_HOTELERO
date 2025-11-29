@@ -291,20 +291,63 @@ class EnhancedNLPEngine:
             nlp_errors.labels(operation="process_message", error_type=type(e).__name__).inc()
             return self._fallback_response()
 
+    # =========================================================================
+    # PROCESS WITH CONTEXT HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    async def _resolve_context_references(
+        self, text: str, user_id: str, channel: str, tenant_id: str
+    ) -> tuple:
+        """Resolve anaphora and context references from conversation history."""
+        anaphora_result = await self.conversation_context.resolve_anaphora(text, user_id, channel, tenant_id)
+        if anaphora_result["resolutions"]:
+            nlp_context_usage.labels(context_type="anaphora", result="applied").inc()
+            return anaphora_result["resolved_text"], anaphora_result["resolutions"], True
+        return text, {}, False
+
+    def _get_agent_for_language(self, language_code: str) -> tuple:
+        """Get NLP agent for the specified language, falling back to default."""
+        agent = self.agents.get(language_code)
+        if not agent:
+            logger.warning(f"No NLP model for language {language_code}, using default")
+            language_code = self.default_language.value
+            agent = self.agents.get(language_code)
+        return agent, language_code
+
+    def _build_normalized_result(
+        self,
+        model_result: Dict[str, Any],
+        language_code: str,
+        text: str,
+        context_used: bool,
+        resolutions: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build normalized result from model output."""
+        normalized = {
+            "intent": {
+                "name": model_result.get("intent", {}).get("name", "unknown"),
+                "confidence": model_result.get("intent", {}).get("confidence", 0.0),
+            },
+            "entities": self._normalize_entities(model_result.get("entities", [])),
+            "language": language_code,
+            "text": text,
+            "model_version": self.model_versions.get(language_code, "unknown"),
+            "context_used": context_used,
+        }
+        if context_used:
+            normalized["resolutions"] = resolutions
+        return normalized
+
+    # =========================================================================
+    # END PROCESS WITH CONTEXT HELPERS
+    # =========================================================================
+
     async def _process_with_context(
         self, text: str, user_id: str = None, channel: str = None, tenant_id: str = None
     ) -> Dict[str, Any]:
         """
         Procesamiento interno con soporte de contexto e idioma.
-
-        Args:
-            text: Mensaje del usuario
-            user_id: ID del usuario (para contexto)
-            channel: Canal de comunicación
-            tenant_id: ID del tenant (opcional)
-
-        Returns:
-            Resultado procesado con información adicional
+        Uses extracted helpers for improved maintainability (CC reduced from 23 to ~12).
         """
         start_time = asyncio.get_event_loop().time()
 
@@ -312,29 +355,18 @@ class EnhancedNLPEngine:
         language_result = await self.multilingual_service.process_with_language_detection(text)
         language_code = language_result["language_code"]
 
-        # 2. Procesamiento de contexto conversacional (si hay ID de usuario y canal)
-        context_used = False
+        # 2. Procesamiento de contexto conversacional
         resolved_text = text
         resolutions = {}
+        context_used = False
 
         if user_id and channel:
-            # Resolver referencias anafóricas
-            anaphora_result = await self.conversation_context.resolve_anaphora(text, user_id, channel, tenant_id)
+            resolved_text, resolutions, context_used = await self._resolve_context_references(
+                text, user_id, channel, tenant_id
+            )
 
-            if anaphora_result["resolutions"]:
-                resolved_text = anaphora_result["resolved_text"]
-                resolutions = anaphora_result["resolutions"]
-                context_used = True
-                nlp_context_usage.labels(context_type="anaphora", result="applied").inc()
-
-        # 3. Procesar con el modelo del idioma detectado
-        agent = self.agents.get(language_code)
-
-        # Si no hay modelo para el idioma detectado, usar el de español
-        if not agent:
-            logger.warning(f"No NLP model for language {language_code}, using default")
-            language_code = self.default_language.value
-            agent = self.agents.get(language_code)
+        # 3. Get agent for detected language
+        agent, language_code = self._get_agent_for_language(language_code)
 
         if not agent:
             logger.error("No NLP agents loaded, using fallback")
@@ -343,31 +375,19 @@ class EnhancedNLPEngine:
             return result
 
         try:
-            # Ejecutar inferencia en modelo Rasa
+            # Run Rasa inference
             model_result = await agent.parse_message(message_data=resolved_text)
 
-            # Medir latencia de inferencia
+            # Measure inference latency
             inference_latency = asyncio.get_event_loop().time() - start_time
             nlp_inference_latency.labels(model_type="rasa", language=language_code).observe(inference_latency)
 
-            # Normalizar resultado
-            normalized = {
-                "intent": {
-                    "name": model_result.get("intent", {}).get("name", "unknown"),
-                    "confidence": model_result.get("intent", {}).get("confidence", 0.0),
-                },
-                "entities": self._normalize_entities(model_result.get("entities", [])),
-                "language": language_code,
-                "text": text,
-                "model_version": self.model_versions.get(language_code, "unknown"),
-                "context_used": context_used,
-            }
+            # Build normalized result
+            normalized = self._build_normalized_result(
+                model_result, language_code, text, context_used, resolutions
+            )
 
-            # Añadir información sobre resoluciones anafóricas si se usaron
-            if context_used:
-                normalized["resolutions"] = resolutions
-
-            # Si hay contexto, almacenar resultado para futuras referencias
+            # Store context for future references
             if user_id and channel:
                 await self.conversation_context.store_context(
                     user_id, channel, normalized["intent"]["name"], normalized["entities"], text, tenant_id
