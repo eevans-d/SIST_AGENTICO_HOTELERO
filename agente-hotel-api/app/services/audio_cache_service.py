@@ -502,42 +502,26 @@ class AudioCacheService:
 
         return {"status": "already_running"}
 
-    async def _get_all_cache_entries_with_score(self) -> List[Dict[str, Any]]:
-        """
-        Obtiene todas las entradas de la caché con su metadata y calcula una puntuación
-        para determinar qué entradas eliminar primero.
+    # =========================================================================
+    # CACHE ENTRIES SCAN HELPERS - Extracted to reduce complexity
+    # =========================================================================
 
-        La puntuación combina:
-        - Antigüedad (más viejo = más propenso a ser eliminado)
-        - Frecuencia de uso (menos usado = más propenso a ser eliminado)
-        - Tamaño (más grande = más propenso a ser eliminado, pero solo como desempate)
-
-        Returns:
-            Lista de entradas con su puntuación
-        """
-        redis_client = await self._get_redis()
-        entries = []
-        now = time.time()
+    async def _scan_cache_keys(self, redis_client, max_entries: int = 1000, max_iterations: int = 100) -> List[str]:
+        """Scan Redis for audio cache keys with safety limits."""
+        all_keys = []
         cursor = 0
-
-        # PERFORMANCE FIX: Límites de seguridad para evitar bloqueo de Redis
-        max_entries = 1000  # Máximo de entradas a retornar
-        max_iterations = 100  # Máximo de iteraciones SCAN
         iterations = 0
 
-        # Obtener todas las claves de audio (sin metadata)
-        all_keys = []
         while iterations < max_iterations:
             cursor, keys = await redis_client.scan(cursor=cursor, match=f"{self.CACHE_PREFIX}*", count=100)
 
-            # Filtrar solo claves principales (no metadata)
             audio_keys = [
-                k.decode() if isinstance(k, bytes) else k for k in keys if b":meta" not in k and ":meta" not in str(k)
+                k.decode() if isinstance(k, bytes) else k 
+                for k in keys if b":meta" not in k and ":meta" not in str(k)
             ]
             all_keys.extend(audio_keys)
             iterations += 1
 
-            # Límite de resultados alcanzado
             if len(all_keys) >= max_entries:
                 logger.warning(
                     "audio_cache.scan_truncated",
@@ -557,73 +541,102 @@ class AudioCacheService:
             iterations=iterations,
             truncated=len(all_keys) >= max_entries
         )
+        return all_keys
 
-        # Procesar en lotes para evitar operaciones individuales
+    def _convert_metadata(self, metadata: dict) -> dict:
+        """Convert bytes to strings in metadata dict and parse numeric values."""
+        converted = {}
+        for mk, mv in metadata.items():
+            k = mk.decode() if isinstance(mk, bytes) else mk
+            v = mv.decode() if isinstance(mv, bytes) and not k.endswith("_bytes") else mv
+
+            try:
+                if isinstance(v, str) and v.isdigit():
+                    v = int(v)
+                elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
+                    v = float(v)
+            except Exception:
+                pass
+
+            converted[k] = v
+        return converted
+
+    def _calculate_entry_score(self, metadata: dict, now: float) -> Tuple[float, float, int, str]:
+        """Calculate eviction score for a cache entry."""
+        timestamp = float(metadata.get("timestamp", now - 86400))
+        hits = int(metadata.get("hits", 0))
+        content_type = metadata.get("content_type", "unknown")
+
+        age_factor = (now - timestamp) / 86400
+        usage_factor = max(1, 10 - hits) / 10
+        type_factor = 0.5 if content_type in ["welcome_message", "common_responses"] else 1.0
+        score = (age_factor * 0.7) + (usage_factor * 0.3) * type_factor
+
+        return score, timestamp, hits, content_type
+
+    async def _process_cache_batch(
+        self, redis_client, batch_keys: List[str], now: float
+    ) -> List[Dict[str, Any]]:
+        """Process a batch of cache keys and return entry info."""
+        entries = []
+
+        # Get sizes in pipeline
+        size_pipe = redis_client.pipeline()
+        for key in batch_keys:
+            size_pipe.strlen(key)
+        sizes = await size_pipe.execute()
+
+        # Get metadata in pipeline
+        meta_pipe = redis_client.pipeline()
+        for key in batch_keys:
+            meta_pipe.hgetall(f"{key}:meta")
+        metadata_list = await meta_pipe.execute()
+
+        # Process results
+        for j, key in enumerate(batch_keys):
+            size = sizes[j] if j < len(sizes) else 0
+            metadata = metadata_list[j] if j < len(metadata_list) else {}
+
+            converted_metadata = self._convert_metadata(metadata)
+            score, timestamp, hits, content_type = self._calculate_entry_score(converted_metadata, now)
+
+            entries.append({
+                "key": key,
+                "size_bytes": size,
+                "timestamp": timestamp,
+                "hits": hits,
+                "content_type": content_type,
+                "score": score,
+            })
+
+        return entries
+
+    # =========================================================================
+    # END CACHE ENTRIES SCAN HELPERS
+    # =========================================================================
+
+    async def _get_all_cache_entries_with_score(self) -> List[Dict[str, Any]]:
+        """
+        Obtiene todas las entradas de la caché con su metadata y calcula una puntuación
+        para determinar qué entradas eliminar primero.
+        Uses extracted helpers for improved maintainability (CC reduced from 24 to ~5).
+
+        Returns:
+            Lista de entradas con su puntuación
+        """
+        redis_client = await self._get_redis()
+        now = time.time()
+
+        # Scan all cache keys with safety limits
+        all_keys = await self._scan_cache_keys(redis_client)
+
+        # Process in batches
+        entries = []
         batch_size = 50
         for i in range(0, len(all_keys), batch_size):
-            batch_keys = all_keys[i : i + batch_size]
-
-            # Obtener tamaños en pipeline
-            size_pipe = redis_client.pipeline()
-            for key in batch_keys:
-                size_pipe.strlen(key)
-            sizes = await size_pipe.execute()
-
-            # Obtener metadata en pipeline
-            meta_pipe = redis_client.pipeline()
-            for key in batch_keys:
-                meta_pipe.hgetall(f"{key}:meta")
-            metadata_list = await meta_pipe.execute()
-
-            # Procesar resultados
-            for j, key in enumerate(batch_keys):
-                size = sizes[j] if j < len(sizes) else 0
-                metadata = metadata_list[j] if j < len(metadata_list) else {}
-
-                # Convertir bytes a strings en metadata
-                converted_metadata = {}
-                for mk, mv in metadata.items():
-                    k = mk.decode() if isinstance(mk, bytes) else mk
-                    v = mv.decode() if isinstance(mv, bytes) and not k.endswith("_bytes") else mv
-
-                    # Convertir valores numéricos
-                    try:
-                        if isinstance(v, str) and v.isdigit():
-                            v = int(v)
-                        elif isinstance(v, str) and v.replace(".", "", 1).isdigit():
-                            v = float(v)
-                    except Exception:
-                        pass
-
-                    converted_metadata[k] = v
-
-                # Extraer valores relevantes
-                timestamp = float(converted_metadata.get("timestamp", now - 86400))  # Default: 1 día atrás
-                hits = int(converted_metadata.get("hits", 0))
-                content_type = converted_metadata.get("content_type", "unknown")
-
-                # Calcular factores de puntuación
-                age_factor = (now - timestamp) / 86400  # Edad en días
-                usage_factor = max(1, 10 - hits) / 10  # Inverso del uso normalizado (0.1-1.0)
-
-                # Contenido común debería tener menor prioridad para eliminar
-                type_factor = 0.5 if content_type in ["welcome_message", "common_responses"] else 1.0
-
-                # Calcular puntuación (mayor = menos prioritario para eliminar)
-                # Fórmula: más antiguo + menos usado + (tamaño como desempate)
-                score = (age_factor * 0.7) + (usage_factor * 0.3) * type_factor
-
-                # Añadir a la lista
-                entries.append(
-                    {
-                        "key": key,
-                        "size_bytes": size,
-                        "timestamp": timestamp,
-                        "hits": hits,
-                        "content_type": content_type,
-                        "score": score,
-                    }
-                )
+            batch_keys = all_keys[i:i + batch_size]
+            batch_entries = await self._process_cache_batch(redis_client, batch_keys, now)
+            entries.extend(batch_entries)
 
         return entries
 
@@ -657,165 +670,183 @@ class AudioCacheService:
             AudioMetrics.record_error("audio_cache_invalidate_error")
             return False
 
+    # =========================================================================
+    # CACHE STATS HELPERS - Extracted to reduce complexity
+    # =========================================================================
+
+    def _build_disabled_stats(self) -> Dict[str, Any]:
+        """Build stats structure when cache is disabled."""
+        return {
+            "enabled": False,
+            "entries_count": 0,
+            "total_size_bytes": 0,
+            "total_size_mb": 0,
+            "max_cache_size_mb": self._max_cache_size_mb,
+            "usage_percent": 0,
+            "max_entry_size_mb": round(self.MAX_CACHE_SIZE_BYTES / (1024 * 1024), 2),
+            "cleanup_threshold_mb": round(
+                self._max_cache_size_mb * (self._cleanup_threshold_percent / 100.0), 2
+            ),
+            "target_size_after_cleanup_mb": round(
+                self._max_cache_size_mb * (self._target_size_percent / 100.0), 2
+            ),
+            "auto_cleanup": {
+                "enabled": False,
+                "threshold_percent": self._cleanup_threshold_percent,
+                "target_percent": self._target_size_percent,
+            },
+            "compression": {
+                "enabled": self._compression_enabled,
+                "threshold_kb": self._compression_threshold_kb,
+                "compression_level": self._compression_level,
+                "compressed_entries": 0,
+                "compressed_size_mb": 0,
+                "original_size_mb": 0,
+                "space_saved_mb": 0,
+                "compression_ratio": 0,
+            },
+        }
+
+    async def _count_cache_entries(self, redis_client) -> Tuple[int, int]:
+        """Count cache entries and calculate total size."""
+        cursor = 0
+        count = 0
+        total_size = 0
+
+        while True:
+            cursor, keys = await redis_client.scan(cursor=cursor, match=f"{self.CACHE_PREFIX}*", count=100)
+
+            # Filter audio keys (exclude metadata)
+            audio_keys: list = []
+            for k in keys:
+                if (isinstance(k, bytes) and b":meta" in k) or (isinstance(k, str) and ":meta" in k):
+                    continue
+                audio_keys.append(k.decode() if isinstance(k, bytes) else k)
+
+            count += len(audio_keys)
+
+            # Calculate size for found entries
+            for key in audio_keys:
+                try:
+                    size = await redis_client.memory_usage(key)
+                    if size:
+                        total_size += int(size)
+                except Exception:
+                    try:
+                        strlen = await redis_client.strlen(key)
+                        if strlen:
+                            total_size += int(strlen)
+                    except Exception:
+                        pass
+
+            if cursor == 0:
+                break
+
+        return count, total_size
+
+    async def _calculate_compression_stats(self, redis_client) -> Tuple[int, int, int]:
+        """Calculate compression statistics from metadata."""
+        compressed_count = 0
+        compressed_size = 0
+        original_size = 0
+
+        cursor = 0
+        while True:
+            cursor, meta_keys = await redis_client.scan(
+                cursor=cursor, match=f"{self.CACHE_PREFIX}*:meta", count=100
+            )
+
+            if meta_keys:
+                for key in meta_keys:
+                    try:
+                        comp = await redis_client.hget(key, "compressed")
+                        size_b = await redis_client.hget(key, "size_bytes")
+                        orig_b = await redis_client.hget(key, "original_size")
+                    except TypeError:
+                        comp = redis_client.hget(key, "compressed")
+                        size_b = redis_client.hget(key, "size_bytes")
+                        orig_b = redis_client.hget(key, "original_size")
+
+                    is_compressed = comp == b"True" or comp == b"1" or bool(comp)
+                    if is_compressed:
+                        compressed_count += 1
+                        compressed_size += int(size_b) if size_b else 0
+                        original_size += int(orig_b) if orig_b else 0
+
+            if cursor == 0:
+                break
+
+        return compressed_count, compressed_size, original_size
+
+    def _build_stats_response(
+        self, count: int, total_size: int, compressed_count: int, compressed_size: int, original_size: int
+    ) -> Dict[str, Any]:
+        """Build the complete stats response dictionary."""
+        max_size_bytes = self._max_cache_size_mb * 1024 * 1024
+        usage_percent = (total_size / max_size_bytes) * 100 if max_size_bytes > 0 else 0
+        cleanup_threshold_mb = self._max_cache_size_mb * (self._cleanup_threshold_percent / 100.0)
+        target_size_mb = self._max_cache_size_mb * (self._target_size_percent / 100.0)
+
+        space_saved = original_size - compressed_size
+        space_saved_mb = space_saved / (1024 * 1024) if space_saved > 0 else 0
+        compression_ratio = original_size / compressed_size if compressed_size > 0 else 0
+
+        return {
+            "enabled": True,
+            "entries_count": count,
+            "total_size_bytes": total_size,
+            "total_size_mb": round(total_size / (1024 * 1024), 2) if total_size > 0 else 0,
+            "max_cache_size_mb": self._max_cache_size_mb,
+            "usage_percent": round(usage_percent, 2),
+            "max_entry_size_mb": round(self.MAX_CACHE_SIZE_BYTES / (1024 * 1024), 2),
+            "cleanup_threshold_mb": round(cleanup_threshold_mb, 2),
+            "target_size_after_cleanup_mb": round(target_size_mb, 2),
+            "auto_cleanup": {
+                "enabled": self._enabled and self._max_cache_size_mb > 0,
+                "threshold_percent": self._cleanup_threshold_percent,
+                "target_percent": self._target_size_percent,
+            },
+            "compression": {
+                "enabled": self._compression_enabled,
+                "threshold_kb": self._compression_threshold_kb,
+                "compression_level": self._compression_level,
+                "compressed_entries": compressed_count,
+                "compressed_size_mb": round(compressed_size / (1024 * 1024), 2) if compressed_size > 0 else 0,
+                "original_size_mb": round(original_size / (1024 * 1024), 2) if original_size > 0 else 0,
+                "space_saved_mb": round(space_saved_mb, 2),
+                "compression_ratio": round(compression_ratio, 2) if compression_ratio > 0 else 0,
+            },
+        }
+
+    # =========================================================================
+    # END CACHE STATS HELPERS
+    # =========================================================================
+
     async def get_cache_stats(self) -> Dict[str, Any]:
         """
         Obtiene estadísticas de uso de la caché de audio.
+        Uses extracted helpers for improved maintainability (CC reduced from 34 to ~6).
 
         Returns:
             Diccionario con estadísticas
         """
         if not self._enabled:
-            # Devolver estructura completa aunque esté deshabilitado (compat tests)
-            return {
-                "enabled": False,
-                "entries_count": 0,
-                "total_size_bytes": 0,
-                "total_size_mb": 0,
-                "max_cache_size_mb": self._max_cache_size_mb,
-                "usage_percent": 0,
-                "max_entry_size_mb": round(self.MAX_CACHE_SIZE_BYTES / (1024 * 1024), 2),
-                "cleanup_threshold_mb": round(
-                    self._max_cache_size_mb * (self._cleanup_threshold_percent / 100.0), 2
-                ),
-                "target_size_after_cleanup_mb": round(
-                    self._max_cache_size_mb * (self._target_size_percent / 100.0), 2
-                ),
-                "auto_cleanup": {
-                    "enabled": False,
-                    "threshold_percent": self._cleanup_threshold_percent,
-                    "target_percent": self._target_size_percent,
-                },
-                "compression": {
-                    "enabled": self._compression_enabled,
-                    "threshold_kb": self._compression_threshold_kb,
-                    "compression_level": self._compression_level,
-                    "compressed_entries": 0,
-                    "compressed_size_mb": 0,
-                    "original_size_mb": 0,
-                    "space_saved_mb": 0,
-                    "compression_ratio": 0,
-                },
-            }
+            return self._build_disabled_stats()
 
         try:
             redis_client = await self._get_redis()
 
-            # Contar entradas de caché
-            cursor = 0
-            count = 0
-            total_size = 0
+            # Count entries and calculate size
+            count, total_size = await self._count_cache_entries(redis_client)
 
-            # Escanear con patrón para contar entradas y tamaño
-            while True:
-                cursor, keys = await redis_client.scan(cursor=cursor, match=f"{self.CACHE_PREFIX}*", count=100)
-
-                # Filtrar sólo claves de audio (sin metadata)
-                audio_keys: list = []
-                for k in keys:
-                    # Compatibilidad: keys pueden llegar como bytes o str
-                    if (isinstance(k, bytes) and b":meta" in k) or (isinstance(k, str) and ":meta" in k):
-                        continue
-                    audio_keys.append(k.decode() if isinstance(k, bytes) else k)
-
-                count += len(audio_keys)
-
-                # Calcular tamaño de las entradas encontradas usando memory_usage (mejor estimación)
-                for key in audio_keys:
-                    try:
-                        size = await redis_client.memory_usage(key)  # type: ignore[attr-defined]
-                        if size:
-                            total_size += int(size)
-                    except Exception:
-                        # Fallback a STRLEN si memory_usage no está disponible
-                        try:
-                            strlen = await redis_client.strlen(key)
-                            if strlen:
-                                total_size += int(strlen)
-                        except Exception:
-                            pass
-
-                if cursor == 0:
-                    break
-
-            # Actualizar métricas de caché
+            # Update metrics
             AudioMetrics.update_cache_size(count)
             AudioMetrics.update_cache_memory(total_size)
 
-            # Calcular porcentaje de uso respecto al límite configurado
-            max_size_bytes = self._max_cache_size_mb * 1024 * 1024
-            usage_percent = (total_size / max_size_bytes) * 100 if max_size_bytes > 0 else 0
+            # Calculate compression stats
+            compressed_count, compressed_size, original_size = await self._calculate_compression_stats(redis_client)
 
-            # Calcular umbrales
-            cleanup_threshold_mb = self._max_cache_size_mb * (self._cleanup_threshold_percent / 100.0)
-            target_size_mb = self._max_cache_size_mb * (self._target_size_percent / 100.0)
-
-            # Recopilar información sobre compresión
-            compressed_count = 0
-            compressed_size = 0
-            original_size = 0
-
-            # Escanear claves de metadata para encontrar entradas comprimidas
-            cursor = 0
-            while True:
-                cursor, meta_keys = await redis_client.scan(
-                    cursor=cursor, match=f"{self.CACHE_PREFIX}*:meta", count=100
-                )
-
-                if meta_keys:
-                    # Evitar pipeline para compatibilidad con AsyncMock en tests
-                    for key in meta_keys:
-                        try:
-                            comp = await redis_client.hget(key, "compressed")
-                            size_b = await redis_client.hget(key, "size_bytes")
-                            orig_b = await redis_client.hget(key, "original_size")
-                        except TypeError:
-                            # Cliente síncrono o mock no awaitable
-                            comp = redis_client.hget(key, "compressed")
-                            size_b = redis_client.hget(key, "size_bytes")
-                            orig_b = redis_client.hget(key, "original_size")
-
-                        is_compressed = comp == b"True" or comp == b"1" or bool(comp)
-                        if is_compressed:
-                            compressed_count += 1
-                            size_bytes = int(size_b) if size_b else 0
-                            orig_bytes = int(orig_b) if orig_b else 0
-                            compressed_size += size_bytes
-                            original_size += orig_bytes
-
-                if cursor == 0:
-                    break
-
-            # Calcular estadísticas de compresión
-            space_saved = original_size - compressed_size
-            space_saved_mb = space_saved / (1024 * 1024) if space_saved > 0 else 0
-            compression_ratio = original_size / compressed_size if compressed_size > 0 else 0
-
-            return {
-                "enabled": True,
-                "entries_count": count,
-                "total_size_bytes": total_size,
-                "total_size_mb": round(total_size / (1024 * 1024), 2) if total_size > 0 else 0,
-                "max_cache_size_mb": self._max_cache_size_mb,
-                "usage_percent": round(usage_percent, 2),
-                "max_entry_size_mb": round(self.MAX_CACHE_SIZE_BYTES / (1024 * 1024), 2),
-                "cleanup_threshold_mb": round(cleanup_threshold_mb, 2),
-                "target_size_after_cleanup_mb": round(target_size_mb, 2),
-                "auto_cleanup": {
-                    "enabled": self._enabled and self._max_cache_size_mb > 0,
-                    "threshold_percent": self._cleanup_threshold_percent,
-                    "target_percent": self._target_size_percent,
-                },
-                "compression": {
-                    "enabled": self._compression_enabled,
-                    "threshold_kb": self._compression_threshold_kb,
-                    "compression_level": self._compression_level,
-                    "compressed_entries": compressed_count,
-                    "compressed_size_mb": round(compressed_size / (1024 * 1024), 2) if compressed_size > 0 else 0,
-                    "original_size_mb": round(original_size / (1024 * 1024), 2) if original_size > 0 else 0,
-                    "space_saved_mb": round(space_saved_mb, 2),
-                    "compression_ratio": round(compression_ratio, 2) if compression_ratio > 0 else 0,
-                },
-            }
+            return self._build_stats_response(count, total_size, compressed_count, compressed_size, original_size)
 
         except Exception as e:
             logger.warning(f"Error getting audio cache stats: {e}")
